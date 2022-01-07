@@ -949,7 +949,6 @@ dependencies = [
 name = "http-cache"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "async-std",
  "async-trait",
  "bincode",
@@ -958,12 +957,14 @@ dependencies = [
  "http-cache-semantics",
  "http-types",
  "httpdate",
+ "miette",
  "mockito",
  "reqwest",
  "reqwest-middleware",
  "serde",
  "surf",
  "task-local-extensions",
+ "thiserror",
  "tokio",
  "url",
 ]
@@ -1245,6 +1246,28 @@ checksum = "6585fd95e7bb50d6cc31e20d4cf9afb4e2ba16c5846fc76793f11218da9c475b"
 dependencies = [
  "libc",
  "winapi",
+]
+
+[[package]]
+name = "miette"
+version = "3.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ec47e61dc212c43f44dcd1f2841ccba79c6ec10da357cab7a7859b5f87bd27a9"
+dependencies = [
+ "miette-derive",
+ "once_cell",
+ "thiserror",
+]
+
+[[package]]
+name = "miette-derive"
+version = "3.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2c0f0b6f999b9a9f7e86322125583a437cf015054b7aaa9926dff0ff13005b7e"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]
