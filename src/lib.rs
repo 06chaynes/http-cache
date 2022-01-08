@@ -12,8 +12,11 @@ use http_cache_semantics::{AfterResponse, BeforeRequest, CachePolicy};
 use serde::{Deserialize, Serialize};
 use url::Url;
 
+pub type Result<T> = std::result::Result<T, CacheError>;
+
 // Represents an HTTP version
 #[derive(Debug, Copy, Clone, Deserialize, Serialize)]
+#[non_exhaustive]
 pub enum HttpVersion {
     #[serde(rename = "HTTP/0.9")]
     Http09,
@@ -31,7 +34,7 @@ pub enum HttpVersion {
 impl TryFrom<http::Version> for HttpVersion {
     type Error = CacheError;
 
-    fn try_from(value: http::Version) -> Result<Self, CacheError> {
+    fn try_from(value: http::Version) -> Result<Self> {
         Ok(match value {
             http::Version::HTTP_09 => HttpVersion::Http09,
             http::Version::HTTP_10 => HttpVersion::Http10,
@@ -60,7 +63,7 @@ impl From<HttpVersion> for http::Version {
 impl TryFrom<http_types::Version> for HttpVersion {
     type Error = CacheError;
 
-    fn try_from(value: http_types::Version) -> Result<Self, CacheError> {
+    fn try_from(value: http_types::Version) -> Result<Self> {
         Ok(match value {
             http_types::Version::Http0_9 => HttpVersion::Http09,
             http_types::Version::Http1_0 => HttpVersion::Http10,
@@ -99,16 +102,16 @@ pub struct HttpResponse {
 #[async_trait::async_trait]
 pub trait CacheManager {
     /// Attempts to pull a cached response and related policy from cache.
-    async fn get(&self, url: &Url) -> Result<Option<(HttpResponse, CachePolicy)>, CacheError>;
+    async fn get(&self, url: &Url) -> Result<Option<(HttpResponse, CachePolicy)>>;
     /// Attempts to cache a response and related policy.
     async fn put(
         &self,
-        req: &Url,
+        url: &Url,
         res: HttpResponse,
         policy: CachePolicy,
-    ) -> Result<HttpResponse, CacheError>;
+    ) -> Result<HttpResponse>;
     /// Attempts to remove a record from cache.
-    async fn delete(&self, req: &Url) -> Result<(), CacheError>;
+    async fn delete(&self, url: &Url) -> Result<()>;
 }
 
 /// Similar to [make-fetch-happen cache options](https://github.com/npm/make-fetch-happen#--optscache).
