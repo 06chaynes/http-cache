@@ -1,10 +1,10 @@
 use crate::{CacheError, HttpResponse, Middleware, Result};
 
 use std::convert::TryFrom;
-use std::{collections::HashMap, convert::TryInto, time::SystemTime};
+use std::{collections::HashMap, convert::TryInto};
 
 use http::{header::CACHE_CONTROL, request::Parts, HeaderValue};
-use http_cache_semantics::{AfterResponse, BeforeRequest, CachePolicy};
+use http_cache_semantics::CachePolicy;
 use url::Url;
 
 pub(crate) struct ReqwestMiddleware<'a> {
@@ -37,20 +37,6 @@ impl Middleware for ReqwestMiddleware<'_> {
     fn get_request_parts(&self) -> Result<Parts> {
         let copied_req = self.req.try_clone().ok_or(CacheError::BadRequest)?;
         Ok(http::Request::try_from(copied_req)?.into_parts().0)
-    }
-    fn before_request(&self, policy: &CachePolicy) -> Result<BeforeRequest> {
-        Ok(policy.before_request(&self.get_request_parts()?, SystemTime::now()))
-    }
-    fn after_response(
-        &self,
-        policy: &CachePolicy,
-        response: &HttpResponse,
-    ) -> Result<AfterResponse> {
-        Ok(policy.after_response(
-            &self.get_request_parts()?,
-            &response.get_parts()?,
-            SystemTime::now(),
-        ))
     }
     fn url(&self) -> Result<&Url> {
         Ok(self.req.url())

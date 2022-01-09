@@ -269,12 +269,6 @@ pub(crate) trait Middleware {
     ) -> Result<()>;
     fn set_no_cache(&mut self) -> Result<()>;
     fn get_request_parts(&self) -> Result<http::request::Parts>;
-    fn before_request(&self, policy: &CachePolicy) -> Result<BeforeRequest>;
-    fn after_response(
-        &self,
-        policy: &CachePolicy,
-        response: &HttpResponse,
-    ) -> Result<AfterResponse>;
     fn url(&self) -> Result<&Url>;
     fn method(&self) -> Result<String>;
     async fn remote_fetch(&self) -> Result<HttpResponse>;
@@ -444,7 +438,10 @@ impl<T: CacheManager + Send + Sync + 'static> Cache<T> {
         mut cached_res: HttpResponse,
         mut policy: CachePolicy,
     ) -> Result<HttpResponse> {
-        let before_req = middleware.before_request(&policy)?;
+        let before_req = policy.before_request(
+            &middleware.get_request_parts()?,
+            SystemTime::now(),
+        );
         match before_req {
             BeforeRequest::Fresh(parts) => {
                 cached_res.update_headers_from_parts(parts)?;
@@ -473,8 +470,11 @@ impl<T: CacheManager + Send + Sync + 'static> Cache<T> {
                     );
                     Ok(cached_res)
                 } else if cond_res.status == 304 {
-                    let after_res =
-                        middleware.after_response(&policy, &cond_res)?;
+                    let after_res = policy.after_response(
+                        &middleware.get_request_parts()?,
+                        &cond_res.get_parts()?,
+                        SystemTime::now(),
+                    );
                     match after_res {
                         AfterResponse::Modified(new_policy, parts) => {
                             policy = new_policy;

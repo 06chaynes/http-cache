@@ -1,11 +1,9 @@
 use crate::{CacheError, HttpResponse, Middleware, Result};
 
-use std::{
-    collections::HashMap, convert::TryInto, str::FromStr, time::SystemTime,
-};
+use std::{collections::HashMap, convert::TryInto, str::FromStr};
 
 use http::{header::CACHE_CONTROL, request::Parts};
-use http_cache_semantics::{AfterResponse, BeforeRequest, CachePolicy};
+use http_cache_semantics::CachePolicy;
 use url::Url;
 
 pub(crate) struct SurfMiddleware<'a> {
@@ -55,20 +53,6 @@ impl Middleware for SurfMiddleware<'_> {
         converted.method_mut().clone_from(&method);
         let parts = converted.into_parts();
         Ok(parts.0)
-    }
-    fn before_request(&self, policy: &CachePolicy) -> Result<BeforeRequest> {
-        Ok(policy.before_request(&self.get_request_parts()?, SystemTime::now()))
-    }
-    fn after_response(
-        &self,
-        policy: &CachePolicy,
-        response: &HttpResponse,
-    ) -> Result<AfterResponse> {
-        Ok(policy.after_response(
-            &self.get_request_parts()?,
-            &response.get_parts()?,
-            SystemTime::now(),
-        ))
     }
     fn url(&self) -> Result<&Url> {
         Ok(self.req.url())
