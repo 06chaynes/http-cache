@@ -39,6 +39,7 @@ mockito = "0.30"
 
 [features]
 default = ["manager-cacache"]
+fancy-errors = ["miette/fancy"]
 manager-cacache = ["cacache", "bincode"]
 client-reqwest = ["reqwest", "reqwest-middleware", "task-local-extensions"]
 client-surf = ["surf", "http-types"]
