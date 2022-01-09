@@ -61,7 +61,7 @@ impl CacheManager for CACacheManager {
         policy: CachePolicy,
     ) -> Result<HttpResponse> {
         let data = Store { response: response.clone(), policy };
-        let bytes = bincode::serialize(&data).unwrap();
+        let bytes = bincode::serialize(&data)?;
         cacache::write(&self.path, &req_key(method, url), bytes).await?;
         Ok(response)
     }
