@@ -554,6 +554,7 @@ impl<T: CacheManager + 'static + Send + Sync> surf::middleware::Middleware
 impl<T: CacheManager + 'static + Send + Sync> reqwest_middleware::Middleware
     for Cache<T>
 {
+    // For now we ignore the extensions because we can't clone or consume them
     async fn handle(
         &self,
         req: reqwest::Request,
