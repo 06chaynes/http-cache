@@ -171,7 +171,6 @@ mod tests {
     use mockito::mock;
     use surf::{http::Method, Client, Request, Url};
 
-    #[cfg(feature = "client-surf")]
     #[async_std::test]
     async fn default_mode() -> surf::Result<()> {
         let m = mock("GET", "/")

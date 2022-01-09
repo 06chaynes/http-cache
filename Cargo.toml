@@ -32,6 +32,8 @@ url = { version = "2.2", features = ["serde"] }
 [dev-dependencies]
 anyhow = "1.0"
 async-std = { version = "1.10", features = ["attributes"]}
+http-cache-semantics = { version = "0.9", features = ["reqwest"]}
+reqwest = "0.11"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 mockito = "0.30"
 

@@ -71,34 +71,55 @@ impl CacheManager for CACacheManager {
     }
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
-//     use crate::{get_request_parts, get_response_parts};
-//     use http_types::{Method, Response, StatusCode};
-//     use std::str::FromStr;
-//     use surf::{Request, Result};
-//
-//     #[async_std::test]
-//     async fn can_cache_response() -> Result<()> {
-//         let url = surf::http::Url::from_str("https://example.com")?;
-//         let mut res = Response::new(StatusCode::Ok);
-//         res.set_body("test");
-//         let mut res = surf::Response::from(res);
-//         let req = Request::new(Method::Get, url);
-//         let policy = CachePolicy::new(&get_request_parts(&req)?, &get_response_parts(&res)?);
-//         let manager = CACacheManager::default();
-//         manager.put(&req, &mut res, policy).await?;
-//         let data = manager.get(&req).await?;
-//         let body = match data {
-//             Some(mut d) => d.0.body_string().await?,
-//             None => String::new(),
-//         };
-//         assert_eq!(&body, "test");
-//         manager.delete(&req).await?;
-//         let data = manager.get(&req).await?;
-//         assert!(data.is_none());
-//         manager.clear().await?;
-//         Ok(())
-//     }
-// }
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::HttpVersion;
+    use anyhow::Result;
+    use mockito::mock;
+    use reqwest::{Client, Method, Request, Url};
+
+    #[tokio::test]
+    async fn can_cache_response() -> Result<()> {
+        let m = mock("GET", "/")
+            .with_status(200)
+            .with_header("cache-control", "max-age=86400, public")
+            .with_body("test")
+            .create();
+        let url = format!("{}/", &mockito::server_url());
+        let url_parsed = Url::parse(&url)?;
+        let manager = CACacheManager::default();
+
+        // We need to fake the request and get the response to build the policy
+        let request = Request::new(Method::GET, url_parsed.clone());
+        let cloned_req = request.try_clone().unwrap();
+        let client = Client::new();
+        let response = client.execute(request).await?;
+        m.assert();
+
+        // The cache accepts HttpResponse type only
+        let http_res = HttpResponse {
+            body: b"test".to_vec(),
+            headers: Default::default(),
+            status: 200,
+            url: url_parsed.clone(),
+            version: HttpVersion::Http11,
+        };
+
+        // Make sure the record doesn't already exist
+        manager.delete("GET", &url_parsed).await?;
+        let policy = CachePolicy::new(&cloned_req, &response);
+        manager.put("GET", &url_parsed, http_res, policy).await?;
+        let data = manager.get("GET", &url_parsed).await?;
+        let body = match data {
+            Some(d) => String::from_utf8(d.0.body)?,
+            None => String::new(),
+        };
+        assert_eq!(&body, "test");
+        manager.delete("GET", &url_parsed).await?;
+        let data = manager.get("GET", &url_parsed).await?;
+        assert!(data.is_none());
+        manager.clear().await?;
+        Ok(())
+    }
+}
