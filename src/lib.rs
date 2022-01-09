@@ -1,9 +1,9 @@
 //! A caching middleware that follows HTTP caching rules.
 //! By default it uses [`cacache`](https://github.com/zkat/cacache-rs) as the backend cache manager.
 //!
-//! ## Example - Surf (feature: `client-surf`)
+//! ## Example - Surf (requires feature: `client-surf`)
 //!
-//! ```no_run
+//! ```ignore
 //! use http_cache::{CACacheManager, Cache, CacheMode};
 //!
 //! #[async_std::main]
@@ -20,9 +20,9 @@
 //! }
 //!
 //! ```
-//! ## Example - Reqwest (feature: `client-reqwest`)
+//! ## Example - Reqwest (requires feature: `client-reqwest`)
 //!
-//! ```no_run
+//! ```ignore
 //! use reqwest::Client;
 //! use reqwest_middleware::{ClientBuilder, Result};
 //! use http_cache::{CACacheManager, Cache, CacheMode};
