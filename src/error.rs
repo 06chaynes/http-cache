@@ -9,23 +9,18 @@ pub enum CacheError {
     #[error(transparent)]
     #[diagnostic(code(http_cache::invalid_status_code))]
     InvalidStatusCode(#[from] http::status::InvalidStatusCode),
-    #[cfg(feature = "client-surf")]
     #[error(transparent)]
     #[diagnostic(code(http_cache::header_to_str_error))]
     HeaderToStrError(#[from] http::header::ToStrError),
-    #[cfg(feature = "client-surf")]
     #[error(transparent)]
     #[diagnostic(code(http_cache::invalid_method))]
     InvalidMethod(#[from] http::method::InvalidMethod),
-    #[cfg(feature = "client-surf")]
     #[error(transparent)]
     #[diagnostic(code(http_cache::invalid_uri))]
     InvalidUri(#[from] http::uri::InvalidUri),
-    #[cfg(feature = "client-surf")]
     #[error(transparent)]
     #[diagnostic(code(http_cache::invalid_header_value))]
     InvalidHeaderValue(#[from] http::header::InvalidHeaderValue),
-    #[cfg(feature = "client-surf")]
     #[error(transparent)]
     #[diagnostic(code(http_cache::invalid_header_name))]
     InvalidHeaderName(#[from] http::header::InvalidHeaderName),

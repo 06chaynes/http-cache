@@ -38,7 +38,7 @@ impl CACacheManager {
     }
 }
 
-#[surf::utils::async_trait]
+#[async_trait::async_trait]
 impl CacheManager for CACacheManager {
     async fn get(&self, method: &str, url: &Url) -> Result<Option<(HttpResponse, CachePolicy)>> {
         let store: Store = match cacache::read(&self.path, &req_key(method, url)).await {
