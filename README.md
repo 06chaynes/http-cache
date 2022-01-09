@@ -6,7 +6,7 @@
 
 A caching middleware that follows HTTP caching rules, thanks to [http-cache-semantics](https://github.com/kornelski/rusty-http-cache-semantics). By default it uses [cacache](https://github.com/zkat/cacache-rs) as the backend cache manager.
 
-## Default Supported Clients
+## Supported Clients
 
 - Surf
 - Reqwest **Uses [reqwest-middleware](https://github.com/TrueLayer/reqwest-middleware) for middleware support*
