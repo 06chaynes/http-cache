@@ -48,7 +48,9 @@ pub enum CacheError {
     #[error("Error parsing header value")]
     #[diagnostic(code(http_cache::bad_header))]
     BadHeader,
-    #[error("Request object is not cloneable. Are you passing a streaming body?")]
+    #[error(
+        "Request object is not cloneable. Are you passing a streaming body?"
+    )]
     #[diagnostic(code(http_cache::bad_request))]
     BadRequest,
 }

@@ -13,9 +13,7 @@ pub struct CACacheManager {
 
 impl Default for CACacheManager {
     fn default() -> Self {
-        CACacheManager {
-            path: "./http-cacache".into(),
-        }
+        CACacheManager { path: "./http-cacache".into() }
     }
 }
 
@@ -40,13 +38,18 @@ impl CACacheManager {
 
 #[async_trait::async_trait]
 impl CacheManager for CACacheManager {
-    async fn get(&self, method: &str, url: &Url) -> Result<Option<(HttpResponse, CachePolicy)>> {
-        let store: Store = match cacache::read(&self.path, &req_key(method, url)).await {
-            Ok(d) => bincode::deserialize(&d)?,
-            Err(_e) => {
-                return Ok(None);
-            }
-        };
+    async fn get(
+        &self,
+        method: &str,
+        url: &Url,
+    ) -> Result<Option<(HttpResponse, CachePolicy)>> {
+        let store: Store =
+            match cacache::read(&self.path, &req_key(method, url)).await {
+                Ok(d) => bincode::deserialize(&d)?,
+                Err(_e) => {
+                    return Ok(None);
+                }
+            };
         Ok(Some((store.response, store.policy)))
     }
 
@@ -57,10 +60,7 @@ impl CacheManager for CACacheManager {
         response: HttpResponse,
         policy: CachePolicy,
     ) -> Result<HttpResponse> {
-        let data = Store {
-            response: response.clone(),
-            policy,
-        };
+        let data = Store { response: response.clone(), policy };
         let bytes = bincode::serialize(&data).unwrap();
         cacache::write(&self.path, &req_key(method, url), bytes).await?;
         Ok(response)

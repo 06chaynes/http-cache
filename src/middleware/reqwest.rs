@@ -15,20 +15,16 @@ pub(crate) struct ReqwestMiddleware<'a> {
 #[async_trait::async_trait]
 impl Middleware for ReqwestMiddleware<'_> {
     fn is_method_get_head(&self) -> bool {
-        self.req.method() == http::Method::GET || self.req.method() == http::Method::HEAD
+        self.req.method() == http::Method::GET
+            || self.req.method() == http::Method::HEAD
     }
     fn new_policy(&self, response: &HttpResponse) -> Result<CachePolicy> {
-        Ok(CachePolicy::new(
-            &self.get_request_parts()?,
-            &response.get_parts()?,
-        ))
+        Ok(CachePolicy::new(&self.get_request_parts()?, &response.get_parts()?))
     }
     fn update_request_headers(&mut self, parts: Parts) -> Result<()> {
         let headers = parts.headers;
         for header in headers.iter() {
-            self.req
-                .headers_mut()
-                .insert(header.0.clone(), header.1.clone());
+            self.req.headers_mut().insert(header.0.clone(), header.1.clone());
         }
         Ok(())
     }
@@ -68,14 +64,14 @@ impl Middleware for ReqwestMiddleware<'_> {
         let res = self
             .next
             .clone()
-            .run(
-                copied_req,
-                &mut task_local_extensions::Extensions::default(),
-            )
+            .run(copied_req, &mut task_local_extensions::Extensions::default())
             .await?;
         let mut headers = HashMap::new();
         for header in res.headers() {
-            headers.insert(header.0.as_str().to_owned(), header.1.to_str()?.to_owned());
+            headers.insert(
+                header.0.as_str().to_owned(),
+                header.1.to_str()?.to_owned(),
+            );
         }
         let status = res.status().into();
         let version = res.version();

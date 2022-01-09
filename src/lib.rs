@@ -44,12 +44,12 @@
 //! ```
 #![forbid(unsafe_code, future_incompatible)]
 #![deny(
-missing_docs,
-missing_debug_implementations,
-missing_copy_implementations,
-nonstandard_style,
-unused_qualifications,
-rustdoc::missing_doc_code_examples
+    missing_docs,
+    missing_debug_implementations,
+    missing_copy_implementations,
+    nonstandard_style,
+    unused_qualifications,
+    rustdoc::missing_doc_code_examples
 )]
 mod error;
 mod managers;
@@ -202,12 +202,7 @@ impl HttpResponse {
     /// Returns the status code of the warning header if present
     pub fn get_warning_code(&self) -> Option<usize> {
         self.headers.get("Warning").and_then(|hdr| {
-            hdr.as_str()
-                .chars()
-                .take(3)
-                .collect::<String>()
-                .parse()
-                .ok()
+            hdr.as_str().chars().take(3).collect::<String>().parse().ok()
         })
     }
 
@@ -240,7 +235,10 @@ impl HttpResponse {
     }
 
     /// Update the headers from http::response::Parts
-    pub fn update_headers_from_parts(&mut self, parts: http::response::Parts) -> Result<()> {
+    pub fn update_headers_from_parts(
+        &mut self,
+        parts: http::response::Parts,
+    ) -> Result<()> {
         for header in parts.headers.iter() {
             self.headers.insert(
                 header.0.as_str().to_string(),
@@ -265,7 +263,10 @@ impl HttpResponse {
 pub(crate) trait Middleware {
     fn is_method_get_head(&self) -> bool;
     fn new_policy(&self, response: &HttpResponse) -> Result<CachePolicy>;
-    fn update_request_headers(&mut self, parts: http::request::Parts) -> Result<()>;
+    fn update_request_headers(
+        &mut self,
+        parts: http::request::Parts,
+    ) -> Result<()>;
     fn set_no_cache(&mut self) -> Result<()>;
     fn get_request_parts(&self) -> Result<http::request::Parts>;
     fn before_request(&self, policy: &CachePolicy) -> Result<BeforeRequest>;
@@ -283,7 +284,11 @@ pub(crate) trait Middleware {
 #[async_trait::async_trait]
 pub trait CacheManager {
     /// Attempts to pull a cached response and related policy from cache.
-    async fn get(&self, method: &str, url: &Url) -> Result<Option<(HttpResponse, CachePolicy)>>;
+    async fn get(
+        &self,
+        method: &str,
+        url: &Url,
+    ) -> Result<Option<(HttpResponse, CachePolicy)>>;
     /// Attempts to cache a response and related policy.
     async fn put(
         &self,
@@ -338,7 +343,10 @@ pub struct Cache<T: CacheManager + Send + Sync + 'static> {
 }
 
 impl<T: CacheManager + Send + Sync + 'static> Cache<T> {
-    pub(crate) async fn run(&self, mut middleware: impl Middleware) -> Result<HttpResponse> {
+    pub(crate) async fn run(
+        &self,
+        mut middleware: impl Middleware,
+    ) -> Result<HttpResponse> {
         let is_cacheable = middleware.is_method_get_head()
             && self.mode != CacheMode::NoStore
             && self.mode != CacheMode::Reload;
@@ -370,7 +378,9 @@ impl<T: CacheManager + Send + Sync + 'static> Cache<T> {
             }
 
             match self.mode {
-                CacheMode::Default => self.conditional_fetch(middleware, res, policy).await,
+                CacheMode::Default => {
+                    self.conditional_fetch(middleware, res, policy).await
+                }
                 CacheMode::NoCache => {
                     middleware.set_no_cache()?;
                     self.conditional_fetch(middleware, res, policy).await
@@ -402,7 +412,10 @@ impl<T: CacheManager + Send + Sync + 'static> Cache<T> {
         }
     }
 
-    async fn remote_fetch(&self, middleware: impl Middleware) -> Result<HttpResponse> {
+    async fn remote_fetch(
+        &self,
+        middleware: impl Middleware,
+    ) -> Result<HttpResponse> {
         let res = middleware.remote_fetch().await?;
         let policy = middleware.new_policy(&res)?;
         let is_cacheable = middleware.is_method_get_head()
@@ -437,10 +450,7 @@ impl<T: CacheManager + Send + Sync + 'static> Cache<T> {
                 cached_res.update_headers_from_parts(parts)?;
                 return Ok(cached_res);
             }
-            BeforeRequest::Stale {
-                request: parts,
-                matches,
-            } => {
+            BeforeRequest::Stale { request: parts, matches } => {
                 if matches {
                     middleware.update_request_headers(parts)?;
                 }
@@ -456,10 +466,15 @@ impl<T: CacheManager + Send + Sync + 'static> Cache<T> {
                     //   because an attempt to revalidate the response failed,
                     //   due to an inability to reach the server.
                     // (https://tools.ietf.org/html/rfc2616#section-14.46)
-                    cached_res.add_warning(res_url.clone(), 111, "Revalidation failed");
+                    cached_res.add_warning(
+                        res_url.clone(),
+                        111,
+                        "Revalidation failed",
+                    );
                     Ok(cached_res)
                 } else if cond_res.status == 304 {
-                    let after_res = middleware.after_response(&policy, &cond_res)?;
+                    let after_res =
+                        middleware.after_response(&policy, &cond_res)?;
                     match after_res {
                         AfterResponse::Modified(new_policy, parts) => {
                             policy = new_policy;
@@ -472,7 +487,12 @@ impl<T: CacheManager + Send + Sync + 'static> Cache<T> {
                     }
                     let res = self
                         .cache_manager
-                        .put(&middleware.method()?, &res_url, cached_res, policy)
+                        .put(
+                            &middleware.method()?,
+                            &res_url,
+                            cached_res,
+                            policy,
+                        )
                         .await?;
                     Ok(res)
                 } else {
@@ -488,7 +508,11 @@ impl<T: CacheManager + Send + Sync + 'static> Cache<T> {
                     //   because an attempt to revalidate the response failed,
                     //   due to an inability to reach the server.
                     // (https://tools.ietf.org/html/rfc2616#section-14.46)
-                    cached_res.add_warning(res_url.clone(), 111, "Revalidation failed");
+                    cached_res.add_warning(
+                        res_url.clone(),
+                        111,
+                        "Revalidation failed",
+                    );
                     Ok(cached_res)
                 }
             }
@@ -498,7 +522,9 @@ impl<T: CacheManager + Send + Sync + 'static> Cache<T> {
 
 #[cfg(feature = "client-surf")]
 #[surf::utils::async_trait]
-impl<T: CacheManager + 'static + Send + Sync> surf::middleware::Middleware for Cache<T> {
+impl<T: CacheManager + 'static + Send + Sync> surf::middleware::Middleware
+    for Cache<T>
+{
     async fn handle(
         &self,
         req: surf::Request,
@@ -507,10 +533,13 @@ impl<T: CacheManager + 'static + Send + Sync> surf::middleware::Middleware for C
     ) -> std::result::Result<surf::Response, http_types::Error> {
         let middleware = SurfMiddleware { req, client, next };
         let res = self.run(middleware).await?;
-        let mut converted = http_types::Response::new(http_types::StatusCode::Ok);
+        let mut converted =
+            http_types::Response::new(http_types::StatusCode::Ok);
         for header in &res.headers {
-            let val =
-                http_types::headers::HeaderValue::from_bytes(header.1.as_bytes().to_vec()).unwrap();
+            let val = http_types::headers::HeaderValue::from_bytes(
+                header.1.as_bytes().to_vec(),
+            )
+            .unwrap();
             converted.insert_header(header.0.as_str(), val);
         }
         converted.set_status(res.status.try_into()?);
@@ -522,7 +551,9 @@ impl<T: CacheManager + 'static + Send + Sync> surf::middleware::Middleware for C
 
 #[cfg(feature = "client-reqwest")]
 #[async_trait::async_trait]
-impl<T: CacheManager + 'static + Send + Sync> reqwest_middleware::Middleware for Cache<T> {
+impl<T: CacheManager + 'static + Send + Sync> reqwest_middleware::Middleware
+    for Cache<T>
+{
     async fn handle(
         &self,
         req: reqwest::Request,

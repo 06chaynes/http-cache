@@ -1,6 +1,8 @@
 use crate::{CacheError, HttpResponse, Middleware, Result};
 
-use std::{collections::HashMap, convert::TryInto, str::FromStr, time::SystemTime};
+use std::{
+    collections::HashMap, convert::TryInto, str::FromStr, time::SystemTime,
+};
 
 use http::{header::CACHE_CONTROL, request::Parts};
 use http_cache_semantics::{AfterResponse, BeforeRequest, CachePolicy};
@@ -19,14 +21,13 @@ impl Middleware for SurfMiddleware<'_> {
             || self.req.method() == http_types::Method::Head
     }
     fn new_policy(&self, response: &HttpResponse) -> Result<CachePolicy> {
-        Ok(CachePolicy::new(
-            &self.get_request_parts()?,
-            &response.get_parts()?,
-        ))
+        Ok(CachePolicy::new(&self.get_request_parts()?, &response.get_parts()?))
     }
     fn update_request_headers(&mut self, parts: Parts) -> Result<()> {
         for header in parts.headers.iter() {
-            let value = match http_types::headers::HeaderValue::from_str(header.1.to_str()?) {
+            let value = match http_types::headers::HeaderValue::from_str(
+                header.1.to_str()?,
+            ) {
                 Ok(v) => v,
                 Err(_e) => return Err(CacheError::BadHeader),
             };
@@ -77,14 +78,14 @@ impl Middleware for SurfMiddleware<'_> {
     }
     async fn remote_fetch(&self) -> Result<HttpResponse> {
         let url = self.req.url().clone();
-        let mut res = self
-            .next
-            .run(self.req.clone(), self.client.clone())
-            .await
-            .unwrap();
+        let mut res =
+            self.next.run(self.req.clone(), self.client.clone()).await.unwrap();
         let mut headers = HashMap::new();
         for header in res.iter() {
-            headers.insert(header.0.as_str().to_owned(), header.1.as_str().to_owned());
+            headers.insert(
+                header.0.as_str().to_owned(),
+                header.1.as_str().to_owned(),
+            );
         }
         let status = res.status().into();
         let version = res.version().unwrap_or(http_types::Version::Http1_1);
