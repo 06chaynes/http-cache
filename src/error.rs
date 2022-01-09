@@ -1,6 +1,8 @@
+#![allow(missing_docs)]
 use miette::Diagnostic;
 use thiserror::Error;
 
+/// A generic “error” for HTTP caches
 #[derive(Error, Diagnostic, Debug)]
 pub enum CacheError {
     #[error(transparent)]

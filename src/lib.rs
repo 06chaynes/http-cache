@@ -42,6 +42,15 @@
 //!     Ok(())
 //! }
 //! ```
+#![forbid(unsafe_code, future_incompatible)]
+#![deny(
+missing_docs,
+missing_debug_implementations,
+missing_copy_implementations,
+nonstandard_style,
+unused_qualifications,
+rustdoc::missing_doc_code_examples
+)]
 mod error;
 mod managers;
 mod middleware;
@@ -75,20 +84,26 @@ use http_cache_semantics::{AfterResponse, BeforeRequest, CachePolicy};
 use serde::{Deserialize, Serialize};
 use url::Url;
 
+/// A `Result` typedef to use with the `CacheError` type
 pub type Result<T> = std::result::Result<T, CacheError>;
 
-// Represents an HTTP version
+/// Represents an HTTP version
 #[derive(Debug, Copy, Clone, Deserialize, Serialize)]
 #[non_exhaustive]
 pub enum HttpVersion {
+    /// HTTP Version 0.9
     #[serde(rename = "HTTP/0.9")]
     Http09,
+    /// HTTP Version 1.0
     #[serde(rename = "HTTP/1.0")]
     Http10,
+    /// HTTP Version 1.1
     #[serde(rename = "HTTP/1.1")]
     Http11,
+    /// HTTP Version 2.0
     #[serde(rename = "HTTP/2.0")]
     H2,
+    /// HTTP Version 3.0
     #[serde(rename = "HTTP/3.0")]
     H3,
 }
@@ -154,14 +169,20 @@ impl From<HttpVersion> for http_types::Version {
 /// A basic generic type that represents an HTTP response
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct HttpResponse {
+    /// HTTP response body
     pub body: Vec<u8>,
+    /// HTTP response headers
     pub headers: HashMap<String, String>,
+    /// HTTP response status code
     pub status: u16,
+    /// HTTP response url
     pub url: Url,
+    /// HTTP response version
     pub version: HttpVersion,
 }
 
 impl HttpResponse {
+    /// Returns http::response::Parts
     pub fn get_parts(&self) -> Result<http::response::Parts> {
         let mut headers = http::HeaderMap::new();
         for header in self.headers.iter() {
@@ -178,6 +199,7 @@ impl HttpResponse {
         Ok(parts.0)
     }
 
+    /// Returns the status code of the warning header if present
     pub fn get_warning_code(&self) -> Option<usize> {
         self.headers.get("Warning").and_then(|hdr| {
             hdr.as_str()
@@ -189,6 +211,7 @@ impl HttpResponse {
         })
     }
 
+    /// Adds a warning header to a response
     pub fn add_warning(&mut self, url: Url, code: usize, message: &str) {
         // Warning    = "Warning" ":" 1#warning-value
         // warning-value = warn-code SP warn-agent SP warn-text [SP warn-date]
@@ -211,10 +234,12 @@ impl HttpResponse {
         );
     }
 
+    /// Removes a warning header from a response
     pub fn remove_warning(&mut self) {
         self.headers.remove("Warning");
     }
 
+    /// Update the headers from http::response::Parts
     pub fn update_headers_from_parts(&mut self, parts: http::response::Parts) -> Result<()> {
         for header in parts.headers.iter() {
             self.headers.insert(
@@ -224,6 +249,8 @@ impl HttpResponse {
         }
         Ok(())
     }
+
+    /// Checks if the Cache-Control header contains the must-revalidate directive
     pub fn must_revalidate(&self) -> bool {
         if let Some(val) = self.headers.get(CACHE_CONTROL.as_str()) {
             val.as_str().to_lowercase().contains("must-revalidate")
@@ -233,6 +260,7 @@ impl HttpResponse {
     }
 }
 
+/// Describes the functionality required for interfacing with HTTP client middleware
 #[async_trait::async_trait]
 pub(crate) trait Middleware {
     fn is_method_get_head(&self) -> bool;
