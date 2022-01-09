@@ -1,5 +1,47 @@
 //! A caching middleware that follows HTTP caching rules.
 //! By default it uses [`cacache`](https://github.com/zkat/cacache-rs) as the backend cache manager.
+//!
+//! ## Example - Surf (feature: `client-surf`)
+//!
+//! ```no_run
+//! use http_cache::{CACacheManager, Cache, CacheMode};
+//!
+//! #[async_std::main]
+//! async fn main() -> surf::Result<()> {
+//!     let req = surf::get("https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching");
+//!     surf::client()
+//!         .with(Cache {
+//!             mode: CacheMode::Default,
+//!             cache_manager: CACacheManager::default(),
+//!         })
+//!         .send(req)
+//!         .await?;
+//!     Ok(())
+//! }
+//!
+//! ```
+//! ## Example - Reqwest (feature: `client-reqwest`)
+//!
+//! ```no_run
+//! use reqwest::Client;
+//! use reqwest_middleware::{ClientBuilder, Result};
+//! use http_cache::{CACacheManager, Cache, CacheMode};
+//!
+//! #[tokio::main]
+//! async fn main() -> Result<()> {
+//!     let client = ClientBuilder::new(Client::new())
+//!         .with(Cache {
+//!             mode: CacheMode::Default,
+//!             cache_manager: CACacheManager::default(),
+//!         })
+//!         .build();
+//!     client
+//!         .get("https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching")
+//!         .send()
+//!         .await?;
+//!     Ok(())
+//! }
+//! ```
 #![forbid(unsafe_code, future_incompatible)]
 #![deny(
     missing_docs,
@@ -18,8 +60,25 @@ pub use error::CacheError;
 #[cfg(feature = "manager-cacache")]
 pub use managers::cacache::CACacheManager;
 
+#[cfg(feature = "client-surf")]
+pub(crate) use middleware::surf::SurfMiddleware;
+
+#[cfg(feature = "client-reqwest")]
+pub(crate) use middleware::reqwest::ReqwestMiddleware;
+
+#[cfg(feature = "client-reqwest")]
+use reqwest::ResponseBuilderExt;
+
+#[cfg(feature = "client-reqwest")]
+use http::{header::HeaderName, HeaderValue};
+
 use http::header::CACHE_CONTROL;
-use std::{collections::HashMap, str::FromStr, time::SystemTime};
+use std::{
+    collections::HashMap,
+    convert::{TryFrom, TryInto},
+    str::FromStr,
+    time::SystemTime,
+};
 
 use http_cache_semantics::{AfterResponse, BeforeRequest, CachePolicy};
 use serde::{Deserialize, Serialize};
@@ -47,6 +106,64 @@ pub enum HttpVersion {
     /// HTTP Version 3.0
     #[serde(rename = "HTTP/3.0")]
     H3,
+}
+
+#[cfg(feature = "client-reqwest")]
+impl TryFrom<http::Version> for HttpVersion {
+    type Error = CacheError;
+
+    fn try_from(value: http::Version) -> Result<Self> {
+        Ok(match value {
+            http::Version::HTTP_09 => HttpVersion::Http09,
+            http::Version::HTTP_10 => HttpVersion::Http10,
+            http::Version::HTTP_11 => HttpVersion::Http11,
+            http::Version::HTTP_2 => HttpVersion::H2,
+            http::Version::HTTP_3 => HttpVersion::H3,
+            _ => return Err(CacheError::BadVersion),
+        })
+    }
+}
+
+#[cfg(feature = "client-reqwest")]
+impl From<HttpVersion> for http::Version {
+    fn from(value: HttpVersion) -> Self {
+        match value {
+            HttpVersion::Http09 => http::Version::HTTP_09,
+            HttpVersion::Http10 => http::Version::HTTP_10,
+            HttpVersion::Http11 => http::Version::HTTP_11,
+            HttpVersion::H2 => http::Version::HTTP_2,
+            HttpVersion::H3 => http::Version::HTTP_3,
+        }
+    }
+}
+
+#[cfg(feature = "client-surf")]
+impl TryFrom<http_types::Version> for HttpVersion {
+    type Error = CacheError;
+
+    fn try_from(value: http_types::Version) -> Result<Self> {
+        Ok(match value {
+            http_types::Version::Http0_9 => HttpVersion::Http09,
+            http_types::Version::Http1_0 => HttpVersion::Http10,
+            http_types::Version::Http1_1 => HttpVersion::Http11,
+            http_types::Version::Http2_0 => HttpVersion::H2,
+            http_types::Version::Http3_0 => HttpVersion::H3,
+            _ => return Err(CacheError::BadVersion),
+        })
+    }
+}
+
+#[cfg(feature = "client-surf")]
+impl From<HttpVersion> for http_types::Version {
+    fn from(value: HttpVersion) -> Self {
+        match value {
+            HttpVersion::Http09 => http_types::Version::Http0_9,
+            HttpVersion::Http10 => http_types::Version::Http1_0,
+            HttpVersion::Http11 => http_types::Version::Http1_1,
+            HttpVersion::H2 => http_types::Version::Http2_0,
+            HttpVersion::H3 => http_types::Version::Http3_0,
+        }
+    }
 }
 
 /// A basic generic type that represents an HTTP response
@@ -400,5 +517,64 @@ impl<T: CacheManager + Send + Sync + 'static> Cache<T> {
                 }
             }
         }
+    }
+}
+
+#[cfg(feature = "client-surf")]
+#[surf::utils::async_trait]
+impl<T: CacheManager + 'static + Send + Sync> surf::middleware::Middleware
+    for Cache<T>
+{
+    async fn handle(
+        &self,
+        req: surf::Request,
+        client: surf::Client,
+        next: surf::middleware::Next<'_>,
+    ) -> std::result::Result<surf::Response, http_types::Error> {
+        let middleware = SurfMiddleware { req, client, next };
+        let res = self.run(middleware).await?;
+        let mut converted =
+            http_types::Response::new(http_types::StatusCode::Ok);
+        for header in &res.headers {
+            let val = http_types::headers::HeaderValue::from_bytes(
+                header.1.as_bytes().to_vec(),
+            )
+            .unwrap();
+            converted.insert_header(header.0.as_str(), val);
+        }
+        converted.set_status(res.status.try_into()?);
+        converted.set_version(Some(res.version.try_into()?));
+        converted.set_body(res.body.clone());
+        Ok(surf::Response::from(converted))
+    }
+}
+
+#[cfg(feature = "client-reqwest")]
+#[async_trait::async_trait]
+impl<T: CacheManager + 'static + Send + Sync> reqwest_middleware::Middleware
+    for Cache<T>
+{
+    // For now we ignore the extensions because we can't clone or consume them
+    async fn handle(
+        &self,
+        req: reqwest::Request,
+        _extensions: &mut task_local_extensions::Extensions,
+        next: reqwest_middleware::Next<'_>,
+    ) -> std::result::Result<reqwest::Response, reqwest_middleware::Error> {
+        let middleware = ReqwestMiddleware { req, next };
+        let res = self.run(middleware).await.unwrap();
+        let mut ret_res = http::Response::builder()
+            .status(res.status)
+            .url(res.url)
+            .version(res.version.try_into().unwrap())
+            .body(res.body)
+            .unwrap();
+        for header in res.headers {
+            ret_res.headers_mut().insert(
+                HeaderName::from_str(header.0.clone().as_str()).unwrap(),
+                HeaderValue::from_str(header.1.clone().as_str()).unwrap(),
+            );
+        }
+        Ok(reqwest::Response::from(ret_res))
     }
 }

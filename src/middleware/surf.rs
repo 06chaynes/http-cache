@@ -1,32 +1,6 @@
-//! The surf middleware implementation, requires the `client-surf` feature.
-//!
-//! ```no_run
-//! use http_cache::{CACacheManager, Cache, CacheMode};
-//!
-//! #[async_std::main]
-//! async fn main() -> surf::Result<()> {
-//!     let req = surf::get("https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching");
-//!     surf::client()
-//!         .with(Cache {
-//!             mode: CacheMode::Default,
-//!             cache_manager: CACacheManager::default(),
-//!         })
-//!         .send(req)
-//!         .await?;
-//!     Ok(())
-//! }
-//!
-//! ```
-use crate::{
-    Cache, CacheError, CacheManager, HttpResponse, HttpVersion, Middleware,
-    Result,
-};
+use crate::{CacheError, HttpResponse, Middleware, Result};
 
-use std::{
-    collections::HashMap,
-    convert::{TryFrom, TryInto},
-    str::FromStr,
-};
+use std::{collections::HashMap, convert::TryInto, str::FromStr};
 
 use http::{header::CACHE_CONTROL, request::Parts};
 use http_cache_semantics::CachePolicy;
@@ -107,61 +81,6 @@ impl Middleware for SurfMiddleware<'_> {
             url,
             version: version.try_into()?,
         })
-    }
-}
-
-impl TryFrom<http_types::Version> for HttpVersion {
-    type Error = CacheError;
-
-    fn try_from(value: http_types::Version) -> Result<Self> {
-        Ok(match value {
-            http_types::Version::Http0_9 => HttpVersion::Http09,
-            http_types::Version::Http1_0 => HttpVersion::Http10,
-            http_types::Version::Http1_1 => HttpVersion::Http11,
-            http_types::Version::Http2_0 => HttpVersion::H2,
-            http_types::Version::Http3_0 => HttpVersion::H3,
-            _ => return Err(CacheError::BadVersion),
-        })
-    }
-}
-
-impl From<HttpVersion> for http_types::Version {
-    fn from(value: HttpVersion) -> Self {
-        match value {
-            HttpVersion::Http09 => http_types::Version::Http0_9,
-            HttpVersion::Http10 => http_types::Version::Http1_0,
-            HttpVersion::Http11 => http_types::Version::Http1_1,
-            HttpVersion::H2 => http_types::Version::Http2_0,
-            HttpVersion::H3 => http_types::Version::Http3_0,
-        }
-    }
-}
-
-#[surf::utils::async_trait]
-impl<T: CacheManager + 'static + Send + Sync> surf::middleware::Middleware
-    for Cache<T>
-{
-    async fn handle(
-        &self,
-        req: surf::Request,
-        client: surf::Client,
-        next: surf::middleware::Next<'_>,
-    ) -> std::result::Result<surf::Response, http_types::Error> {
-        let middleware = SurfMiddleware { req, client, next };
-        let res = self.run(middleware).await?;
-        let mut converted =
-            http_types::Response::new(http_types::StatusCode::Ok);
-        for header in &res.headers {
-            let val = http_types::headers::HeaderValue::from_bytes(
-                header.1.as_bytes().to_vec(),
-            )
-            .unwrap();
-            converted.insert_header(header.0.as_str(), val);
-        }
-        converted.set_status(res.status.try_into()?);
-        converted.set_version(Some(res.version.try_into()?));
-        converted.set_body(res.body.clone());
-        Ok(surf::Response::from(converted))
     }
 }
 
