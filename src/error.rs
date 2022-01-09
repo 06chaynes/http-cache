@@ -24,6 +24,14 @@ pub enum CacheError {
     #[error(transparent)]
     #[diagnostic(code(http_cache::invalid_header_name))]
     InvalidHeaderName(#[from] http::header::InvalidHeaderName),
+    #[cfg(feature = "client-reqwest")]
+    #[error(transparent)]
+    #[diagnostic(code(http_cache::reqwest_error))]
+    ReqwestError(#[from] reqwest::Error),
+    #[cfg(feature = "client-reqwest")]
+    #[error(transparent)]
+    #[diagnostic(code(http_cache::reqwest_middleware_error))]
+    ReqwestMiddlewareError(#[from] reqwest_middleware::Error),
     #[cfg(feature = "manager-cacache")]
     #[error(transparent)]
     #[diagnostic(code(http_cache::cacache_error))]
@@ -38,4 +46,7 @@ pub enum CacheError {
     #[error("Error parsing header value")]
     #[diagnostic(code(http_cache::bad_header))]
     BadHeader,
+    #[error("Request object is not cloneable. Are you passing a streaming body?")]
+    #[diagnostic(code(http_cache::bad_request))]
+    BadRequest,
 }

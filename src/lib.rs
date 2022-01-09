@@ -10,6 +10,15 @@ pub use managers::cacache::CACacheManager;
 #[cfg(feature = "client-surf")]
 pub(crate) use middleware::surf::SurfMiddleware;
 
+#[cfg(feature = "client-reqwest")]
+pub(crate) use middleware::reqwest::ReqwestMiddleware;
+
+#[cfg(feature = "client-reqwest")]
+use reqwest::ResponseBuilderExt;
+
+#[cfg(feature = "client-reqwest")]
+use http::{header::HeaderName, HeaderValue};
+
 use http::header::CACHE_CONTROL;
 use std::{
     collections::HashMap,
@@ -300,7 +309,7 @@ impl<T: CacheManager + Send + Sync + 'static> Cache<T> {
                     // the rest of the network for a period of time.
                     // (https://tools.ietf.org/html/rfc2616#section-14.46)
                     res.add_warning(res_url, 112, "Disconnected operation");
-                    return Ok(res);
+                    Ok(res)
                 }
                 _ => self.remote_fetch(middleware).await,
             }
@@ -400,7 +409,7 @@ impl<T: CacheManager + Send + Sync + 'static> Cache<T> {
             }
             Err(e) => {
                 if cached_res.must_revalidate() {
-                    return Err(e);
+                    Err(e)
                 } else {
                     //   111 Revalidation failed
                     //   MUST be included if a cache returns a stale response
@@ -436,5 +445,32 @@ impl<T: CacheManager + 'static + Send + Sync> surf::middleware::Middleware for C
         converted.set_version(Some(res.version.try_into()?));
         converted.set_body(res.body.clone());
         Ok(surf::Response::from(converted))
+    }
+}
+
+#[cfg(feature = "client-reqwest")]
+#[async_trait::async_trait]
+impl<T: CacheManager + 'static + Send + Sync> reqwest_middleware::Middleware for Cache<T> {
+    async fn handle(
+        &self,
+        req: reqwest::Request,
+        _extensions: &mut task_local_extensions::Extensions,
+        next: reqwest_middleware::Next<'_>,
+    ) -> std::result::Result<reqwest::Response, reqwest_middleware::Error> {
+        let middleware = ReqwestMiddleware { req, next };
+        let res = self.run(middleware).await.unwrap();
+        let mut ret_res = http::Response::builder()
+            .status(res.status)
+            .url(res.url)
+            .version(res.version.try_into().unwrap())
+            .body(res.body)
+            .unwrap();
+        for header in res.headers {
+            ret_res.headers_mut().insert(
+                HeaderName::from_str(header.0.clone().as_str()).unwrap(),
+                HeaderValue::from_str(header.1.clone().as_str()).unwrap(),
+            );
+        }
+        Ok(reqwest::Response::from(ret_res))
     }
 }
