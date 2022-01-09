@@ -1,3 +1,47 @@
+//! A caching middleware that follows HTTP caching rules.
+//! By default it uses [`cacache`](https://github.com/zkat/cacache-rs) as the backend cache manager.
+//!
+//! ## Example - Surf (feature: `client-surf`)
+//!
+//! ```no_run
+//! use http_cache::{CACacheManager, Cache, CacheMode};
+//!
+//! #[async_std::main]
+//! async fn main() -> surf::Result<()> {
+//!     let req = surf::get("https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching");
+//!     surf::client()
+//!         .with(Cache {
+//!             mode: CacheMode::Default,
+//!             cache_manager: CACacheManager::default(),
+//!         })
+//!         .send(req)
+//!         .await?;
+//!     Ok(())
+//! }
+//!
+//! ```
+//! ## Example - Reqwest (feature: `client-reqwest`)
+//!
+//! ```no_run
+//! use reqwest::Client;
+//! use reqwest_middleware::{ClientBuilder, Result};
+//! use http_cache::{CACacheManager, Cache, CacheMode};
+//!
+//! #[tokio::main]
+//! async fn main() -> Result<()> {
+//!     let client = ClientBuilder::new(Client::new())
+//!         .with(Cache {
+//!             mode: CacheMode::Default,
+//!             cache_manager: CACacheManager::default(),
+//!         })
+//!         .build();
+//!     client
+//!         .get("https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching")
+//!         .send()
+//!         .await?;
+//!     Ok(())
+//! }
+//! ```
 mod error;
 mod managers;
 mod middleware;
