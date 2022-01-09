@@ -9,7 +9,7 @@ A caching middleware that follows HTTP caching rules, thanks to [http-cache-sema
 ## Default Supported Clients
 
 - Surf
-- Reqwest *Uses [reqwest-middleware](https://github.com/TrueLayer/reqwest-middleware) for middleware support.
+- Reqwest **Uses [reqwest-middleware](https://github.com/TrueLayer/reqwest-middleware) for middleware support*
 
 ## Install
 
@@ -19,7 +19,9 @@ With [cargo add](https://github.com/killercup/cargo-edit#Installation) installed
 cargo add http-cache
 ```
 
-## Example - Surf (feature: `client-surf`)
+## Examples
+
+### Surf (feature: `client-surf`)
 
 ```rust
 use http_cache::{CACacheManager, Cache, CacheMode};
@@ -38,7 +40,7 @@ async fn main() -> surf::Result<()> {
 }
 ```
 
-## Example - Reqwest (feature: `client-reqwest`)
+### Reqwest (feature: `client-reqwest`)
 
 ```rust
 use reqwest::Client;
