@@ -78,7 +78,6 @@ impl Middleware for ReqwestMiddleware<'_> {
         Ok(self.req.method().as_ref().to_string())
     }
     async fn remote_fetch(&self) -> Result<HttpResponse> {
-        let url = self.req.url().clone();
         let copied_req = self.req.try_clone().ok_or(CacheError::BadRequest)?;
         let res = self
             .next
@@ -92,6 +91,7 @@ impl Middleware for ReqwestMiddleware<'_> {
                 header.1.to_str()?.to_owned(),
             );
         }
+        let url = res.url().clone();
         let status = res.status().into();
         let version = res.version();
         let body: Vec<u8> = res.text().await?.into_bytes();
