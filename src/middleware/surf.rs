@@ -30,28 +30,27 @@ use std::{
 
 use http::{header::CACHE_CONTROL, request::Parts};
 use http_cache_semantics::CachePolicy;
+use http_types::{headers::HeaderValue, Method, Version};
+use surf::{middleware::Next, Client, Request, Response};
 use url::Url;
 
 pub(crate) struct SurfMiddleware<'a> {
-    pub req: surf::Request,
-    pub client: surf::Client,
-    pub next: surf::middleware::Next<'a>,
+    pub req: Request,
+    pub client: Client,
+    pub next: Next<'a>,
 }
 
 #[async_trait::async_trait]
 impl Middleware for SurfMiddleware<'_> {
     fn is_method_get_head(&self) -> bool {
-        self.req.method() == http_types::Method::Get
-            || self.req.method() == http_types::Method::Head
+        self.req.method() == Method::Get || self.req.method() == Method::Head
     }
     fn new_policy(&self, response: &HttpResponse) -> Result<CachePolicy> {
         Ok(CachePolicy::new(&self.parts()?, &response.parts()?))
     }
     fn update_headers(&mut self, parts: Parts) -> Result<()> {
         for header in parts.headers.iter() {
-            let value = match http_types::headers::HeaderValue::from_str(
-                header.1.to_str()?,
-            ) {
+            let value = match HeaderValue::from_str(header.1.to_str()?) {
                 Ok(v) => v,
                 Err(_e) => return Err(CacheError::BadHeader),
             };
@@ -98,7 +97,7 @@ impl Middleware for SurfMiddleware<'_> {
             );
         }
         let status = res.status().into();
-        let version = res.version().unwrap_or(http_types::Version::Http1_1);
+        let version = res.version().unwrap_or(Version::Http1_1);
         let body: Vec<u8> = res.body_bytes().await.unwrap();
         Ok(HttpResponse {
             body,
@@ -110,29 +109,29 @@ impl Middleware for SurfMiddleware<'_> {
     }
 }
 
-impl TryFrom<http_types::Version> for HttpVersion {
+impl TryFrom<Version> for HttpVersion {
     type Error = CacheError;
 
-    fn try_from(value: http_types::Version) -> Result<Self> {
+    fn try_from(value: Version) -> Result<Self> {
         Ok(match value {
-            http_types::Version::Http0_9 => HttpVersion::Http09,
-            http_types::Version::Http1_0 => HttpVersion::Http10,
-            http_types::Version::Http1_1 => HttpVersion::Http11,
-            http_types::Version::Http2_0 => HttpVersion::H2,
-            http_types::Version::Http3_0 => HttpVersion::H3,
+            Version::Http0_9 => HttpVersion::Http09,
+            Version::Http1_0 => HttpVersion::Http10,
+            Version::Http1_1 => HttpVersion::Http11,
+            Version::Http2_0 => HttpVersion::H2,
+            Version::Http3_0 => HttpVersion::H3,
             _ => return Err(CacheError::BadVersion),
         })
     }
 }
 
-impl From<HttpVersion> for http_types::Version {
+impl From<HttpVersion> for Version {
     fn from(value: HttpVersion) -> Self {
         match value {
-            HttpVersion::Http09 => http_types::Version::Http0_9,
-            HttpVersion::Http10 => http_types::Version::Http1_0,
-            HttpVersion::Http11 => http_types::Version::Http1_1,
-            HttpVersion::H2 => http_types::Version::Http2_0,
-            HttpVersion::H3 => http_types::Version::Http3_0,
+            HttpVersion::Http09 => Version::Http0_9,
+            HttpVersion::Http10 => Version::Http1_0,
+            HttpVersion::Http11 => Version::Http1_1,
+            HttpVersion::H2 => Version::Http2_0,
+            HttpVersion::H3 => Version::Http3_0,
         }
     }
 }
@@ -143,25 +142,23 @@ impl<T: CacheManager + 'static + Send + Sync> surf::middleware::Middleware
 {
     async fn handle(
         &self,
-        req: surf::Request,
-        client: surf::Client,
-        next: surf::middleware::Next<'_>,
-    ) -> std::result::Result<surf::Response, http_types::Error> {
+        req: Request,
+        client: Client,
+        next: Next<'_>,
+    ) -> std::result::Result<Response, http_types::Error> {
         let middleware = SurfMiddleware { req, client, next };
         let res = self.run(middleware).await?;
         let mut converted =
             http_types::Response::new(http_types::StatusCode::Ok);
         for header in &res.headers {
-            let val = http_types::headers::HeaderValue::from_bytes(
-                header.1.as_bytes().to_vec(),
-            )
-            .unwrap();
+            let val =
+                HeaderValue::from_bytes(header.1.as_bytes().to_vec()).unwrap();
             converted.insert_header(header.0.as_str(), val);
         }
         converted.set_status(res.status.try_into()?);
         converted.set_version(Some(res.version.try_into()?));
         converted.set_body(res.body.clone());
-        Ok(surf::Response::from(converted))
+        Ok(Response::from(converted))
     }
 }
 

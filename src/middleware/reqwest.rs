@@ -34,22 +34,23 @@ use std::{
 use http::{
     header::{HeaderName, CACHE_CONTROL},
     request::Parts,
-    HeaderValue,
+    HeaderValue, Method, Version,
 };
 use http_cache_semantics::CachePolicy;
-use reqwest::ResponseBuilderExt;
+use reqwest::{Request, Response, ResponseBuilderExt};
+use reqwest_middleware::Next;
+use task_local_extensions::Extensions;
 use url::Url;
 
 pub(crate) struct ReqwestMiddleware<'a> {
-    pub req: reqwest::Request,
-    pub next: reqwest_middleware::Next<'a>,
+    pub req: Request,
+    pub next: Next<'a>,
 }
 
 #[async_trait::async_trait]
 impl Middleware for ReqwestMiddleware<'_> {
     fn is_method_get_head(&self) -> bool {
-        self.req.method() == http::Method::GET
-            || self.req.method() == http::Method::HEAD
+        self.req.method() == Method::GET || self.req.method() == Method::HEAD
     }
     fn new_policy(&self, response: &HttpResponse) -> Result<CachePolicy> {
         Ok(CachePolicy::new(&self.parts()?, &response.parts()?))
@@ -82,7 +83,7 @@ impl Middleware for ReqwestMiddleware<'_> {
         let res = self
             .next
             .clone()
-            .run(copied_req, &mut task_local_extensions::Extensions::default())
+            .run(copied_req, &mut Extensions::default())
             .await?;
         let mut headers = HashMap::new();
         for header in res.headers() {
@@ -105,29 +106,29 @@ impl Middleware for ReqwestMiddleware<'_> {
     }
 }
 
-impl TryFrom<http::Version> for HttpVersion {
+impl TryFrom<Version> for HttpVersion {
     type Error = CacheError;
 
-    fn try_from(value: http::Version) -> Result<Self> {
+    fn try_from(value: Version) -> Result<Self> {
         Ok(match value {
-            http::Version::HTTP_09 => HttpVersion::Http09,
-            http::Version::HTTP_10 => HttpVersion::Http10,
-            http::Version::HTTP_11 => HttpVersion::Http11,
-            http::Version::HTTP_2 => HttpVersion::H2,
-            http::Version::HTTP_3 => HttpVersion::H3,
+            Version::HTTP_09 => HttpVersion::Http09,
+            Version::HTTP_10 => HttpVersion::Http10,
+            Version::HTTP_11 => HttpVersion::Http11,
+            Version::HTTP_2 => HttpVersion::H2,
+            Version::HTTP_3 => HttpVersion::H3,
             _ => return Err(CacheError::BadVersion),
         })
     }
 }
 
-impl From<HttpVersion> for http::Version {
+impl From<HttpVersion> for Version {
     fn from(value: HttpVersion) -> Self {
         match value {
-            HttpVersion::Http09 => http::Version::HTTP_09,
-            HttpVersion::Http10 => http::Version::HTTP_10,
-            HttpVersion::Http11 => http::Version::HTTP_11,
-            HttpVersion::H2 => http::Version::HTTP_2,
-            HttpVersion::H3 => http::Version::HTTP_3,
+            HttpVersion::Http09 => Version::HTTP_09,
+            HttpVersion::Http10 => Version::HTTP_10,
+            HttpVersion::Http11 => Version::HTTP_11,
+            HttpVersion::H2 => Version::HTTP_2,
+            HttpVersion::H3 => Version::HTTP_3,
         }
     }
 }
@@ -139,10 +140,10 @@ impl<T: CacheManager + 'static + Send + Sync> reqwest_middleware::Middleware
     // For now we ignore the extensions because we can't clone or consume them
     async fn handle(
         &self,
-        req: reqwest::Request,
-        _extensions: &mut task_local_extensions::Extensions,
-        next: reqwest_middleware::Next<'_>,
-    ) -> std::result::Result<reqwest::Response, reqwest_middleware::Error> {
+        req: Request,
+        _extensions: &mut Extensions,
+        next: Next<'_>,
+    ) -> std::result::Result<Response, reqwest_middleware::Error> {
         let middleware = ReqwestMiddleware { req, next };
         let res = self.run(middleware).await.unwrap();
         let mut ret_res = http::Response::builder()
@@ -157,7 +158,7 @@ impl<T: CacheManager + 'static + Send + Sync> reqwest_middleware::Middleware
                 HeaderValue::from_str(header.1.clone().as_str()).unwrap(),
             );
         }
-        Ok(reqwest::Response::from(ret_res))
+        Ok(Response::from(ret_res))
     }
 }
 

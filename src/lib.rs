@@ -60,7 +60,7 @@ pub use error::CacheError;
 #[cfg(feature = "manager-cacache")]
 pub use managers::cacache::CACacheManager;
 
-use http::header::CACHE_CONTROL;
+use http::{header::CACHE_CONTROL, request, response, StatusCode};
 use std::{collections::HashMap, str::FromStr, time::SystemTime};
 
 use http_cache_semantics::{AfterResponse, BeforeRequest, CachePolicy};
@@ -108,7 +108,7 @@ pub struct HttpResponse {
 
 impl HttpResponse {
     /// Returns http::response::Parts
-    pub fn parts(&self) -> Result<http::response::Parts> {
+    pub fn parts(&self) -> Result<response::Parts> {
         let mut headers = http::HeaderMap::new();
         for header in self.headers.iter() {
             headers.insert(
@@ -116,8 +116,8 @@ impl HttpResponse {
                 http::HeaderValue::from_str(header.1.as_str())?,
             );
         }
-        let status = http::StatusCode::from_u16(self.status)?;
-        let mut converted = http::response::Response::new(());
+        let status = StatusCode::from_u16(self.status)?;
+        let mut converted = response::Response::new(());
         converted.headers_mut().clone_from(&headers);
         converted.status_mut().clone_from(&status);
         let parts = converted.into_parts();
@@ -160,10 +160,7 @@ impl HttpResponse {
     }
 
     /// Update the headers from http::response::Parts
-    pub fn update_headers(
-        &mut self,
-        parts: http::response::Parts,
-    ) -> Result<()> {
+    pub fn update_headers(&mut self, parts: response::Parts) -> Result<()> {
         for header in parts.headers.iter() {
             self.headers.insert(
                 header.0.as_str().to_string(),
@@ -188,9 +185,9 @@ impl HttpResponse {
 pub(crate) trait Middleware {
     fn is_method_get_head(&self) -> bool;
     fn new_policy(&self, response: &HttpResponse) -> Result<CachePolicy>;
-    fn update_headers(&mut self, parts: http::request::Parts) -> Result<()>;
+    fn update_headers(&mut self, parts: request::Parts) -> Result<()>;
     fn set_no_cache(&mut self) -> Result<()>;
-    fn parts(&self) -> Result<http::request::Parts>;
+    fn parts(&self) -> Result<request::Parts>;
     fn url(&self) -> Result<&Url>;
     fn method(&self) -> Result<String>;
     async fn remote_fetch(&self) -> Result<HttpResponse>;
@@ -376,7 +373,7 @@ impl<T: CacheManager + Send + Sync + 'static> Cache<T> {
         let req_url = middleware.url()?.clone();
         match middleware.remote_fetch().await {
             Ok(cond_res) => {
-                let status = http::StatusCode::from_u16(cond_res.status)?;
+                let status = StatusCode::from_u16(cond_res.status)?;
                 if status.is_server_error() && cached_res.must_revalidate() {
                     //   111 Revalidation failed
                     //   MUST be included if a cache returns a stale response
