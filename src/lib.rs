@@ -378,7 +378,7 @@ impl<T: CacheManager + Send + Sync + 'static> Cache<T> {
                 }
             }
         }
-        let res_url = middleware.url()?.clone();
+        let req_url = middleware.url()?.clone();
         match middleware.remote_fetch().await {
             Ok(cond_res) => {
                 let status = http::StatusCode::from_u16(cond_res.status)?;
@@ -389,7 +389,7 @@ impl<T: CacheManager + Send + Sync + 'static> Cache<T> {
                     //   due to an inability to reach the server.
                     // (https://tools.ietf.org/html/rfc2616#section-14.46)
                     cached_res.add_warning(
-                        res_url.clone(),
+                        req_url.clone(),
                         111,
                         "Revalidation failed",
                     );
@@ -414,7 +414,7 @@ impl<T: CacheManager + Send + Sync + 'static> Cache<T> {
                         .cache_manager
                         .put(
                             &middleware.method()?,
-                            &res_url,
+                            &req_url,
                             cached_res,
                             policy,
                         )
@@ -434,7 +434,7 @@ impl<T: CacheManager + Send + Sync + 'static> Cache<T> {
                     //   due to an inability to reach the server.
                     // (https://tools.ietf.org/html/rfc2616#section-14.46)
                     cached_res.add_warning(
-                        res_url.clone(),
+                        req_url,
                         111,
                         "Revalidation failed",
                     );
