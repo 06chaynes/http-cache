@@ -45,9 +45,9 @@ impl Middleware for SurfMiddleware<'_> {
             || self.req.method() == http_types::Method::Head
     }
     fn new_policy(&self, response: &HttpResponse) -> Result<CachePolicy> {
-        Ok(CachePolicy::new(&self.get_request_parts()?, &response.get_parts()?))
+        Ok(CachePolicy::new(&self.parts()?, &response.parts()?))
     }
-    fn update_request_headers(&mut self, parts: Parts) -> Result<()> {
+    fn update_headers(&mut self, parts: Parts) -> Result<()> {
         for header in parts.headers.iter() {
             let value = match http_types::headers::HeaderValue::from_str(
                 header.1.to_str()?,
@@ -63,7 +63,7 @@ impl Middleware for SurfMiddleware<'_> {
         self.req.insert_header(CACHE_CONTROL.as_str(), "no-cache");
         Ok(())
     }
-    fn get_request_parts(&self) -> Result<Parts> {
+    fn parts(&self) -> Result<Parts> {
         let mut headers = http::HeaderMap::new();
         for header in self.req.iter() {
             headers.insert(

@@ -108,7 +108,7 @@ pub struct HttpResponse {
 
 impl HttpResponse {
     /// Returns http::response::Parts
-    pub fn get_parts(&self) -> Result<http::response::Parts> {
+    pub fn parts(&self) -> Result<http::response::Parts> {
         let mut headers = http::HeaderMap::new();
         for header in self.headers.iter() {
             headers.insert(
@@ -125,7 +125,7 @@ impl HttpResponse {
     }
 
     /// Returns the status code of the warning header if present
-    pub fn get_warning_code(&self) -> Option<usize> {
+    pub fn warning_code(&self) -> Option<usize> {
         self.headers.get("Warning").and_then(|hdr| {
             hdr.as_str().chars().take(3).collect::<String>().parse().ok()
         })
@@ -160,7 +160,7 @@ impl HttpResponse {
     }
 
     /// Update the headers from http::response::Parts
-    pub fn update_headers_from_parts(
+    pub fn update_headers(
         &mut self,
         parts: http::response::Parts,
     ) -> Result<()> {
@@ -188,12 +188,9 @@ impl HttpResponse {
 pub(crate) trait Middleware {
     fn is_method_get_head(&self) -> bool;
     fn new_policy(&self, response: &HttpResponse) -> Result<CachePolicy>;
-    fn update_request_headers(
-        &mut self,
-        parts: http::request::Parts,
-    ) -> Result<()>;
+    fn update_headers(&mut self, parts: http::request::Parts) -> Result<()>;
     fn set_no_cache(&mut self) -> Result<()>;
-    fn get_request_parts(&self) -> Result<http::request::Parts>;
+    fn parts(&self) -> Result<http::request::Parts>;
     fn url(&self) -> Result<&Url>;
     fn method(&self) -> Result<String>;
     async fn remote_fetch(&self) -> Result<HttpResponse>;
@@ -279,7 +276,7 @@ impl<T: CacheManager + Send + Sync + 'static> Cache<T> {
         {
             let (mut res, policy) = store;
             let res_url = res.url.clone();
-            if let Some(warning_code) = res.get_warning_code() {
+            if let Some(warning_code) = res.warning_code() {
                 // https://tools.ietf.org/html/rfc7234#section-4.3.4
                 //
                 // If a stored response is selected for update, the cache MUST:
@@ -363,18 +360,16 @@ impl<T: CacheManager + Send + Sync + 'static> Cache<T> {
         mut cached_res: HttpResponse,
         mut policy: CachePolicy,
     ) -> Result<HttpResponse> {
-        let before_req = policy.before_request(
-            &middleware.get_request_parts()?,
-            SystemTime::now(),
-        );
+        let before_req =
+            policy.before_request(&middleware.parts()?, SystemTime::now());
         match before_req {
             BeforeRequest::Fresh(parts) => {
-                cached_res.update_headers_from_parts(parts)?;
+                cached_res.update_headers(parts)?;
                 return Ok(cached_res);
             }
             BeforeRequest::Stale { request: parts, matches } => {
                 if matches {
-                    middleware.update_request_headers(parts)?;
+                    middleware.update_headers(parts)?;
                 }
             }
         }
@@ -396,18 +391,18 @@ impl<T: CacheManager + Send + Sync + 'static> Cache<T> {
                     Ok(cached_res)
                 } else if cond_res.status == 304 {
                     let after_res = policy.after_response(
-                        &middleware.get_request_parts()?,
-                        &cond_res.get_parts()?,
+                        &middleware.parts()?,
+                        &cond_res.parts()?,
                         SystemTime::now(),
                     );
                     match after_res {
                         AfterResponse::Modified(new_policy, parts) => {
                             policy = new_policy;
-                            cached_res.update_headers_from_parts(parts)?;
+                            cached_res.update_headers(parts)?;
                         }
                         AfterResponse::NotModified(new_policy, parts) => {
                             policy = new_policy;
-                            cached_res.update_headers_from_parts(parts)?;
+                            cached_res.update_headers(parts)?;
                         }
                     }
                     let res = self

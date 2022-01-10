@@ -52,9 +52,9 @@ impl Middleware for ReqwestMiddleware<'_> {
             || self.req.method() == http::Method::HEAD
     }
     fn new_policy(&self, response: &HttpResponse) -> Result<CachePolicy> {
-        Ok(CachePolicy::new(&self.get_request_parts()?, &response.get_parts()?))
+        Ok(CachePolicy::new(&self.parts()?, &response.parts()?))
     }
-    fn update_request_headers(&mut self, parts: Parts) -> Result<()> {
+    fn update_headers(&mut self, parts: Parts) -> Result<()> {
         let headers = parts.headers;
         for header in headers.iter() {
             self.req.headers_mut().insert(header.0.clone(), header.1.clone());
@@ -67,7 +67,7 @@ impl Middleware for ReqwestMiddleware<'_> {
             .insert(CACHE_CONTROL, HeaderValue::from_str("no-cache")?);
         Ok(())
     }
-    fn get_request_parts(&self) -> Result<Parts> {
+    fn parts(&self) -> Result<Parts> {
         let copied_req = self.req.try_clone().ok_or(CacheError::BadRequest)?;
         Ok(http::Request::try_from(copied_req)?.into_parts().0)
     }
