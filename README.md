@@ -8,7 +8,7 @@ A caching middleware that follows HTTP caching rules, thanks to [http-cache-sema
 
 ## Supported Clients
 
-- Surf **Should likely be registered after any middleware modifying the request/response*
+- Surf **Should likely be registered after any middleware modifying the request and before any modifying the response*
 - Reqwest **Uses [reqwest-middleware](https://github.com/TrueLayer/reqwest-middleware) for middleware support*
 
 ## Install
