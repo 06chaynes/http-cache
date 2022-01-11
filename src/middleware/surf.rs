@@ -77,8 +77,7 @@ impl Middleware for SurfMiddleware<'_> {
                 );
             }
         }
-        let parts = converted.into_parts();
-        Ok(parts.0)
+        Ok(converted.into_parts().0)
     }
     fn url(&self) -> Result<&Url> {
         Ok(self.req.url())

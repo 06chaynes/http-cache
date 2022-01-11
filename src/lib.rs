@@ -120,8 +120,7 @@ impl HttpResponse {
                 );
             }
         }
-        let parts = converted.into_parts();
-        Ok(parts.0)
+        Ok(converted.into_parts().0)
     }
 
     /// Returns the status code of the warning header if present
