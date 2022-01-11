@@ -109,17 +109,17 @@ pub struct HttpResponse {
 impl HttpResponse {
     /// Returns http::response::Parts
     pub fn parts(&self) -> Result<response::Parts> {
-        let mut headers = http::HeaderMap::new();
-        for header in self.headers.iter() {
-            headers.insert(
-                http::header::HeaderName::from_str(header.0.as_str())?,
-                http::HeaderValue::from_str(header.1.as_str())?,
-            );
+        let mut converted =
+            response::Builder::new().status(self.status).body(())?;
+        {
+            let headers = converted.headers_mut();
+            for header in self.headers.iter() {
+                headers.insert(
+                    http::header::HeaderName::from_str(header.0.as_str())?,
+                    http::HeaderValue::from_str(header.1.as_str())?,
+                );
+            }
         }
-        let status = StatusCode::from_u16(self.status)?;
-        let mut converted = response::Response::new(());
-        converted.headers_mut().clone_from(&headers);
-        converted.status_mut().clone_from(&status);
         let parts = converted.into_parts();
         Ok(parts.0)
     }

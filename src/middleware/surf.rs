@@ -29,7 +29,7 @@ use std::{
     str::FromStr,
 };
 
-use http::{header::CACHE_CONTROL, request::Parts};
+use http::{header::CACHE_CONTROL, request, request::Parts};
 use http_cache_semantics::CachePolicy;
 use http_types::{headers::HeaderValue, Method, Version};
 use surf::{middleware::Next, Client, Request, Response};
@@ -64,19 +64,19 @@ impl Middleware for SurfMiddleware<'_> {
         Ok(())
     }
     fn parts(&self) -> Result<Parts> {
-        let mut headers = http::HeaderMap::new();
-        for header in self.req.iter() {
-            headers.insert(
-                http::header::HeaderName::from_str(header.0.as_str())?,
-                http::HeaderValue::from_str(header.1.as_str())?,
-            );
+        let mut converted = request::Builder::new()
+            .method(self.req.method().as_ref())
+            .uri(self.req.url().as_str())
+            .body(())?;
+        {
+            let headers = converted.headers_mut();
+            for header in self.req.iter() {
+                headers.insert(
+                    http::header::HeaderName::from_str(header.0.as_str())?,
+                    http::HeaderValue::from_str(header.1.as_str())?,
+                );
+            }
         }
-        let uri = http::Uri::from_str(self.req.url().as_str())?;
-        let method = http::Method::from_str(self.req.method().as_ref())?;
-        let mut converted = http::request::Request::new(());
-        converted.headers_mut().clone_from(&headers);
-        converted.uri_mut().clone_from(&uri);
-        converted.method_mut().clone_from(&method);
         let parts = converted.into_parts();
         Ok(parts.0)
     }
@@ -155,6 +155,7 @@ impl<T: CacheManager + 'static + Send + Sync> surf::middleware::Middleware
     ) -> std::result::Result<Response, http_types::Error> {
         let middleware = SurfMiddleware { req, client, next };
         let res = self.run(middleware).await?;
+
         let mut converted =
             http_types::Response::new(http_types::StatusCode::Ok);
         for header in &res.headers {

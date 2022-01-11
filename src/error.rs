@@ -12,6 +12,9 @@ pub enum CacheError {
     #[diagnostic(code(http_cache::io_error))]
     IoError(#[from] std::io::Error),
     #[error(transparent)]
+    #[diagnostic(code(http_cache::http_error))]
+    HttpError(#[from] http::Error),
+    #[error(transparent)]
     #[diagnostic(code(http_cache::invalid_status_code))]
     InvalidStatusCode(#[from] http::status::InvalidStatusCode),
     #[error(transparent)]
