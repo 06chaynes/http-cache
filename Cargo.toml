@@ -13,7 +13,7 @@ categories = [
 edition = "2018"
 
 [dependencies]
-anyhow = { version = "1.0", optional = true }
+anyhow = "1.0"
 async-trait = "0.1"
 bincode = { version = "1.3", optional = true }
 cacache = { version = "9.0", optional = true }
@@ -31,7 +31,6 @@ thiserror = "1.0"
 url = { version = "2.2", features = ["serde"] }
 
 [dev-dependencies]
-anyhow = "1.0"
 async-std = { version = "1.10", features = ["attributes"]}
 http-cache-semantics = { version = "0.9", features = ["reqwest"]}
 reqwest = "0.11"
@@ -42,5 +41,5 @@ mockito = "0.30"
 default = ["manager-cacache"]
 fancy-errors = ["miette/fancy"]
 manager-cacache = ["cacache", "bincode"]
-client-reqwest = ["reqwest", "reqwest-middleware", "task-local-extensions", "anyhow"]
+client-reqwest = ["reqwest", "reqwest-middleware", "task-local-extensions"]
 client-surf = ["surf", "http-types"]

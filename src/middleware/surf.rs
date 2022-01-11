@@ -22,6 +22,7 @@ use crate::{
     Result,
 };
 
+use anyhow::anyhow;
 use std::{
     collections::HashMap,
     convert::{TryFrom, TryInto},
@@ -88,7 +89,10 @@ impl Middleware for SurfMiddleware<'_> {
     async fn remote_fetch(&self) -> Result<HttpResponse> {
         let url = self.req.url().clone();
         let mut res =
-            self.next.run(self.req.clone(), self.client.clone()).await.unwrap();
+            match self.next.run(self.req.clone(), self.client.clone()).await {
+                Ok(r) => r,
+                Err(e) => return Err(CacheError::General(anyhow!(e))),
+            };
         let mut headers = HashMap::new();
         for header in res.iter() {
             headers.insert(
@@ -98,7 +102,10 @@ impl Middleware for SurfMiddleware<'_> {
         }
         let status = res.status().into();
         let version = res.version().unwrap_or(Version::Http1_1);
-        let body: Vec<u8> = res.body_bytes().await.unwrap();
+        let body: Vec<u8> = match res.body_bytes().await {
+            Ok(b) => b,
+            Err(e) => return Err(CacheError::General(anyhow!(e))),
+        };
         Ok(HttpResponse {
             body,
             headers,
@@ -151,8 +158,7 @@ impl<T: CacheManager + 'static + Send + Sync> surf::middleware::Middleware
         let mut converted =
             http_types::Response::new(http_types::StatusCode::Ok);
         for header in &res.headers {
-            let val =
-                HeaderValue::from_bytes(header.1.as_bytes().to_vec()).unwrap();
+            let val = HeaderValue::from_bytes(header.1.as_bytes().to_vec())?;
             converted.insert_header(header.0.as_str(), val);
         }
         converted.set_status(res.status.try_into()?);
