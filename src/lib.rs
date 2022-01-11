@@ -392,11 +392,8 @@ impl<T: CacheManager + Send + Sync + 'static> Cache<T> {
                         SystemTime::now(),
                     );
                     match after_res {
-                        AfterResponse::Modified(new_policy, parts) => {
-                            policy = new_policy;
-                            cached_res.update_headers(parts)?;
-                        }
-                        AfterResponse::NotModified(new_policy, parts) => {
+                        AfterResponse::Modified(new_policy, parts)
+                        | AfterResponse::NotModified(new_policy, parts) => {
                             policy = new_policy;
                             cached_res.update_headers(parts)?;
                         }
