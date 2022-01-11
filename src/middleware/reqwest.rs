@@ -25,6 +25,7 @@ use crate::{
     Result,
 };
 
+use anyhow::anyhow;
 use std::{
     collections::HashMap,
     convert::{TryFrom, TryInto},
@@ -145,21 +146,30 @@ impl<T: CacheManager + 'static + Send + Sync> reqwest_middleware::Middleware
         next: Next<'_>,
     ) -> std::result::Result<Response, reqwest_middleware::Error> {
         let middleware = ReqwestMiddleware { req, next };
-        let res = self.run(middleware).await.unwrap();
-        let mut ret_res = http::Response::builder()
-            .status(res.status)
-            .url(res.url)
-            .version(res.version.try_into().unwrap())
-            .body(res.body)
-            .unwrap();
-        for header in res.headers {
-            ret_res.headers_mut().insert(
-                HeaderName::from_str(header.0.clone().as_str()).unwrap(),
-                HeaderValue::from_str(header.1.clone().as_str()).unwrap(),
-            );
-        }
-        Ok(Response::from(ret_res))
+        let res = match self.run(middleware).await {
+            Ok(r) => r,
+            Err(e) => {
+                return Err(reqwest_middleware::Error::Middleware(anyhow!(e)));
+            }
+        };
+        let converted = convert_response(res)?;
+        Ok(converted)
     }
+}
+
+fn convert_response(response: HttpResponse) -> anyhow::Result<Response> {
+    let mut ret_res = http::Response::builder()
+        .status(response.status)
+        .url(response.url)
+        .version(response.version.try_into()?)
+        .body(response.body)?;
+    for header in response.headers {
+        ret_res.headers_mut().insert(
+            HeaderName::from_str(header.0.clone().as_str())?,
+            HeaderValue::from_str(header.1.clone().as_str())?,
+        );
+    }
+    Ok(Response::from(ret_res))
 }
 
 #[cfg(test)]
