@@ -255,6 +255,7 @@ pub struct Cache<T: CacheManager + Send + Sync + 'static> {
 }
 
 impl<T: CacheManager + Send + Sync + 'static> Cache<T> {
+    #[allow(dead_code)]
     pub(crate) async fn run(
         &self,
         mut middleware: impl Middleware,
@@ -324,6 +325,7 @@ impl<T: CacheManager + Send + Sync + 'static> Cache<T> {
         }
     }
 
+    #[allow(dead_code)]
     async fn remote_fetch(
         &self,
         middleware: &mut impl Middleware,
@@ -350,6 +352,7 @@ impl<T: CacheManager + Send + Sync + 'static> Cache<T> {
         }
     }
 
+    #[allow(dead_code)]
     async fn conditional_fetch(
         &self,
         mut middleware: impl Middleware,
