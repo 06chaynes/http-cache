@@ -85,7 +85,7 @@ impl Middleware for SurfMiddleware<'_> {
     fn method(&self) -> Result<String> {
         Ok(self.req.method().as_ref().to_string())
     }
-    async fn remote_fetch(&self) -> Result<HttpResponse> {
+    async fn remote_fetch(&mut self) -> Result<HttpResponse> {
         let url = self.req.url().clone();
         let mut res =
             match self.next.run(self.req.clone(), self.client.clone()).await {

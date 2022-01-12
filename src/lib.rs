@@ -189,7 +189,7 @@ pub(crate) trait Middleware {
     fn parts(&self) -> Result<request::Parts>;
     fn url(&self) -> Result<&Url>;
     fn method(&self) -> Result<String>;
-    async fn remote_fetch(&self) -> Result<HttpResponse>;
+    async fn remote_fetch(&mut self) -> Result<HttpResponse>;
 }
 
 /// A trait providing methods for storing, reading, and removing cache records.
@@ -305,7 +305,7 @@ impl<T: CacheManager + Send + Sync + 'static> Cache<T> {
                     res.add_warning(res_url, 112, "Disconnected operation");
                     Ok(res)
                 }
-                _ => self.remote_fetch(middleware).await,
+                _ => self.remote_fetch(&mut middleware).await,
             }
         } else {
             match self.mode {
@@ -319,14 +319,14 @@ impl<T: CacheManager + Send + Sync + 'static> Cache<T> {
                         version: HttpVersion::Http11,
                     });
                 }
-                _ => self.remote_fetch(middleware).await,
+                _ => self.remote_fetch(&mut middleware).await,
             }
         }
     }
 
     async fn remote_fetch(
         &self,
-        middleware: impl Middleware,
+        middleware: &mut impl Middleware,
     ) -> Result<HttpResponse> {
         let res = middleware.remote_fetch().await?;
         let policy = middleware.new_policy(&res)?;

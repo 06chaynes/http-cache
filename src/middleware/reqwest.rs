@@ -46,6 +46,7 @@ use url::Url;
 pub(crate) struct ReqwestMiddleware<'a> {
     pub req: Request,
     pub next: Next<'a>,
+    pub extensions: &'a mut Extensions,
 }
 
 #[async_trait::async_trait]
@@ -79,13 +80,9 @@ impl Middleware for ReqwestMiddleware<'_> {
     fn method(&self) -> Result<String> {
         Ok(self.req.method().as_ref().to_string())
     }
-    async fn remote_fetch(&self) -> Result<HttpResponse> {
+    async fn remote_fetch(&mut self) -> Result<HttpResponse> {
         let copied_req = self.req.try_clone().ok_or(CacheError::BadRequest)?;
-        let res = self
-            .next
-            .clone()
-            .run(copied_req, &mut Extensions::default())
-            .await?;
+        let res = self.next.clone().run(copied_req, self.extensions).await?;
         let mut headers = HashMap::new();
         for header in res.headers() {
             headers.insert(
@@ -138,14 +135,13 @@ impl From<HttpVersion> for Version {
 impl<T: CacheManager + 'static + Send + Sync> reqwest_middleware::Middleware
     for Cache<T>
 {
-    // For now we ignore the extensions because we can't clone or consume them
     async fn handle(
         &self,
         req: Request,
-        _extensions: &mut Extensions,
+        extensions: &mut Extensions,
         next: Next<'_>,
     ) -> std::result::Result<Response, reqwest_middleware::Error> {
-        let middleware = ReqwestMiddleware { req, next };
+        let middleware = ReqwestMiddleware { req, next, extensions };
         let res = match self.run(middleware).await {
             Ok(r) => r,
             Err(e) => {
