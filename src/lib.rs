@@ -183,7 +183,7 @@ impl HttpResponse {
 #[async_trait::async_trait]
 pub(crate) trait Middleware {
     fn is_method_get_head(&self) -> bool;
-    fn new_policy(&self, response: &HttpResponse) -> Result<CachePolicy>;
+    fn policy(&self, response: &HttpResponse) -> Result<CachePolicy>;
     fn update_headers(&mut self, parts: request::Parts) -> Result<()>;
     fn set_no_cache(&mut self) -> Result<()>;
     fn parts(&self) -> Result<request::Parts>;
@@ -331,7 +331,7 @@ impl<T: CacheManager + Send + Sync + 'static> Cache<T> {
         middleware: &mut impl Middleware,
     ) -> Result<HttpResponse> {
         let res = middleware.remote_fetch().await?;
-        let policy = middleware.new_policy(&res)?;
+        let policy = middleware.policy(&res)?;
         let is_cacheable = middleware.is_method_get_head()
             && self.mode != CacheMode::NoStore
             && self.mode != CacheMode::Reload

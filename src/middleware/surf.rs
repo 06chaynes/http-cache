@@ -46,7 +46,7 @@ impl Middleware for SurfMiddleware<'_> {
     fn is_method_get_head(&self) -> bool {
         self.req.method() == Method::Get || self.req.method() == Method::Head
     }
-    fn new_policy(&self, response: &HttpResponse) -> Result<CachePolicy> {
+    fn policy(&self, response: &HttpResponse) -> Result<CachePolicy> {
         Ok(CachePolicy::new(&self.parts()?, &response.parts()?))
     }
     fn update_headers(&mut self, parts: Parts) -> Result<()> {
