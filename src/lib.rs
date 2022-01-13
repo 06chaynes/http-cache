@@ -4,7 +4,7 @@
 //! ## Example - Surf (requires feature: `client-surf`)
 //!
 //! ```ignore
-//! use http_cache::{CACacheManager, Cache, CacheMode};
+//! use http_cache::{Cache, CacheMode, CACacheManager};
 //!
 //! #[async_std::main]
 //! async fn main() -> surf::Result<()> {
@@ -25,7 +25,7 @@
 //! ```ignore
 //! use reqwest::Client;
 //! use reqwest_middleware::{ClientBuilder, Result};
-//! use http_cache::{CACacheManager, Cache, CacheMode};
+//! use http_cache::{Cache, CacheMode, CACacheManager};
 //!
 //! #[tokio::main]
 //! async fn main() -> Result<()> {

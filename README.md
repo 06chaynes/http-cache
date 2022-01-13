@@ -24,7 +24,7 @@ cargo add http-cache
 ### Surf (feature: `client-surf`)
 
 ```rust
-use http_cache::{CACacheManager, Cache, CacheMode};
+use http_cache::{Cache, CacheMode, CACacheManager};
 
 #[async_std::main]
 async fn main() -> surf::Result<()> {
@@ -45,7 +45,7 @@ async fn main() -> surf::Result<()> {
 ```rust
 use reqwest::Client;
 use reqwest_middleware::{ClientBuilder, Result};
-use http_cache::{CACacheManager, Cache, CacheMode};
+use http_cache::{Cache, CacheMode, CACacheManager};
 
 #[tokio::main]
 async fn main() -> Result<()> {

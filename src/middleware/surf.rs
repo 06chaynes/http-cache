@@ -1,7 +1,7 @@
 //! The surf middleware implementation, requires the `client-surf` feature.
 //!
 //! ```no_run
-//! use http_cache::{CACacheManager, Cache, CacheMode};
+//! use http_cache::{Cache, CacheMode, CACacheManager};
 //!
 //! #[async_std::main]
 //! async fn main() -> surf::Result<()> {

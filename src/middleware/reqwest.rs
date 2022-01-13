@@ -3,7 +3,7 @@
 //! ```no_run
 //! use reqwest::Client;
 //! use reqwest_middleware::{ClientBuilder, Result};
-//! use http_cache::{CACacheManager, Cache, CacheMode};
+//! use http_cache::{Cache, CacheMode, CACacheManager};
 //!
 //! #[tokio::main]
 //! async fn main() -> Result<()> {
