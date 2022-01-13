@@ -70,7 +70,6 @@ The following features are available. By default `manager-cacache` is enabled.
 - `manager-cacache` (default): use [cacache](https://github.com/zkat/cacache-rs), a high-performance disk cache, for the manager backend.
 - `client-surf` (disabled): enables [surf](https://github.com/http-rs/surf) client support.
 - `client-reqwest` (disabled): enables [reqwest](https://github.com/seanmonstar/reqwest) client support.
-- `fancy-errors` (disabled): enables [miette](https://github.com/zkat/miette) fancy errors.
 
 ## Documentation
 
