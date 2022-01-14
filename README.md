@@ -4,6 +4,8 @@
 ![crates.io](https://img.shields.io/crates/v/http-cache.svg)
 [![Docs.rs](https://docs.rs/http-cache/badge.svg)](https://docs.rs/http-cache)
 
+<img style="float: right" src="https://raw.githubusercontent.com/06chaynes/http-cache/latest/.assets/images/http-cache_logo_bluegreen.svg" height="150px" alt="the http-cache logo">
+
 A caching middleware that follows HTTP caching rules, thanks to [http-cache-semantics](https://github.com/kornelski/rusty-http-cache-semantics). By default it uses [cacache](https://github.com/zkat/cacache-rs) as the backend cache manager.
 
 ## Supported Clients
