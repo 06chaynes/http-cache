@@ -1,6 +1,9 @@
 use miette::Diagnostic;
 use thiserror::Error;
 
+/// A `Result` typedef to use with the [`CacheError`] type
+pub type Result<T> = std::result::Result<T, CacheError>;
+
 /// A generic “error” for HTTP caches
 #[derive(Error, Diagnostic, Debug)]
 pub enum CacheError {

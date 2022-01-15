@@ -74,206 +74,23 @@
     trivial_casts,
     trivial_numeric_casts
 )]
-mod error;
-mod managers;
-mod middleware;
 
-pub use error::CacheError;
+use std::time::SystemTime;
+
+use http::StatusCode;
+use http_cache_semantics::{AfterResponse, BeforeRequest, CachePolicy};
+
+pub use http_cache_types::{
+    CacheError, CacheManager, CacheMode, HttpResponse, HttpVersion, Middleware,
+    Result,
+};
 
 #[cfg(feature = "manager-cacache")]
-pub use managers::cacache::CACacheManager;
+pub use http_cache_manager_cacache::CACacheManager;
 
 /// Options struct provided by
 /// [`http-cache-semantics`](https://github.com/kornelski/rusty-http-cache-semantics).
 pub use http_cache_semantics::CacheOptions;
-
-use http::{header::CACHE_CONTROL, request, response, StatusCode};
-use std::{collections::HashMap, str::FromStr, time::SystemTime};
-
-use http_cache_semantics::{AfterResponse, BeforeRequest, CachePolicy};
-use serde::{Deserialize, Serialize};
-use url::Url;
-
-/// A `Result` typedef to use with the [`CacheError`] type
-pub type Result<T> = std::result::Result<T, CacheError>;
-
-/// Represents an HTTP version
-#[derive(Debug, Copy, Clone, Deserialize, Serialize)]
-#[non_exhaustive]
-pub enum HttpVersion {
-    /// HTTP Version 0.9
-    #[serde(rename = "HTTP/0.9")]
-    Http09,
-    /// HTTP Version 1.0
-    #[serde(rename = "HTTP/1.0")]
-    Http10,
-    /// HTTP Version 1.1
-    #[serde(rename = "HTTP/1.1")]
-    Http11,
-    /// HTTP Version 2.0
-    #[serde(rename = "HTTP/2.0")]
-    H2,
-    /// HTTP Version 3.0
-    #[serde(rename = "HTTP/3.0")]
-    H3,
-}
-
-/// A basic generic type that represents an HTTP response
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct HttpResponse {
-    /// HTTP response body
-    pub body: Vec<u8>,
-    /// HTTP response headers
-    pub headers: HashMap<String, String>,
-    /// HTTP response status code
-    pub status: u16,
-    /// HTTP response url
-    pub url: Url,
-    /// HTTP response version
-    pub version: HttpVersion,
-}
-
-impl HttpResponse {
-    /// Returns http::response::Parts
-    pub fn parts(&self) -> Result<response::Parts> {
-        let mut converted =
-            response::Builder::new().status(self.status).body(())?;
-        {
-            let headers = converted.headers_mut();
-            for header in self.headers.iter() {
-                headers.insert(
-                    http::header::HeaderName::from_str(header.0.as_str())?,
-                    http::HeaderValue::from_str(header.1.as_str())?,
-                );
-            }
-        }
-        Ok(converted.into_parts().0)
-    }
-
-    /// Returns the status code of the warning header if present
-    pub fn warning_code(&self) -> Option<usize> {
-        self.headers.get("Warning").and_then(|hdr| {
-            hdr.as_str().chars().take(3).collect::<String>().parse().ok()
-        })
-    }
-
-    /// Adds a warning header to a response
-    pub fn add_warning(&mut self, url: Url, code: usize, message: &str) {
-        // Warning    = "Warning" ":" 1#warning-value
-        // warning-value = warn-code SP warn-agent SP warn-text [SP warn-date]
-        // warn-code  = 3DIGIT
-        // warn-agent = ( host [ ":" port ] ) | pseudonym
-        //                 ; the name or pseudonym of the server adding
-        //                 ; the Warning header, for use in debugging
-        // warn-text  = quoted-string
-        // warn-date  = <"> HTTP-date <">
-        // (https://tools.ietf.org/html/rfc2616#section-14.46)
-        self.headers.insert(
-            "Warning".to_string(),
-            format!(
-                "{} {} {:?} \"{}\"",
-                code,
-                url.host().expect("Invalid URL"),
-                message,
-                httpdate::fmt_http_date(SystemTime::now())
-            ),
-        );
-    }
-
-    /// Removes a warning header from a response
-    pub fn remove_warning(&mut self) {
-        self.headers.remove("Warning");
-    }
-
-    /// Update the headers from http::response::Parts
-    pub fn update_headers(&mut self, parts: response::Parts) -> Result<()> {
-        for header in parts.headers.iter() {
-            self.headers.insert(
-                header.0.as_str().to_string(),
-                header.1.to_str()?.to_string(),
-            );
-        }
-        Ok(())
-    }
-
-    /// Checks if the Cache-Control header contains the must-revalidate directive
-    pub fn must_revalidate(&self) -> bool {
-        if let Some(val) = self.headers.get(CACHE_CONTROL.as_str()) {
-            val.as_str().to_lowercase().contains("must-revalidate")
-        } else {
-            false
-        }
-    }
-}
-
-/// Describes the functionality required for interfacing with HTTP client middleware
-#[async_trait::async_trait]
-pub(crate) trait Middleware {
-    fn is_method_get_head(&self) -> bool;
-    fn policy(&self, response: &HttpResponse) -> Result<CachePolicy>;
-    fn policy_with_options(
-        &self,
-        response: &HttpResponse,
-        options: CacheOptions,
-    ) -> Result<CachePolicy>;
-    fn update_headers(&mut self, parts: request::Parts) -> Result<()>;
-    fn set_no_cache(&mut self) -> Result<()>;
-    fn parts(&self) -> Result<request::Parts>;
-    fn url(&self) -> Result<&Url>;
-    fn method(&self) -> Result<String>;
-    async fn remote_fetch(&mut self) -> Result<HttpResponse>;
-}
-
-/// A trait providing methods for storing, reading, and removing cache records.
-#[async_trait::async_trait]
-pub trait CacheManager {
-    /// Attempts to pull a cached response and related policy from cache.
-    async fn get(
-        &self,
-        method: &str,
-        url: &Url,
-    ) -> Result<Option<(HttpResponse, CachePolicy)>>;
-    /// Attempts to cache a response and related policy.
-    async fn put(
-        &self,
-        method: &str,
-        url: &Url,
-        res: HttpResponse,
-        policy: CachePolicy,
-    ) -> Result<HttpResponse>;
-    /// Attempts to remove a record from cache.
-    async fn delete(&self, method: &str, url: &Url) -> Result<()>;
-}
-
-/// Similar to [make-fetch-happen cache options](https://github.com/npm/make-fetch-happen#--optscache).
-/// Passed in when the [`Cache`] struct is being built.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CacheMode {
-    /// Will inspect the HTTP cache on the way to the network.
-    /// If there is a fresh response it will be used.
-    /// If there is a stale response a conditional request will be created,
-    /// and a normal request otherwise.
-    /// It then updates the HTTP cache with the response.
-    /// If the revalidation request fails (for example, on a 500 or if you're offline),
-    /// the stale response will be returned.
-    Default,
-    /// Behaves as if there is no HTTP cache at all.
-    NoStore,
-    /// Behaves as if there is no HTTP cache on the way to the network.
-    /// Ergo, it creates a normal request and updates the HTTP cache with the response.
-    Reload,
-    /// Creates a conditional request if there is a response in the HTTP cache
-    /// and a normal request otherwise. It then updates the HTTP cache with the response.
-    NoCache,
-    /// Uses any response in the HTTP cache matching the request,
-    /// not paying attention to staleness. If there was no response,
-    /// it creates a normal request and updates the HTTP cache with the response.
-    ForceCache,
-    /// Uses any response in the HTTP cache matching the request,
-    /// not paying attention to staleness. If there was no response,
-    /// it returns a network error.
-    OnlyIfCached,
-}
 
 /// Caches requests according to http spec.
 #[derive(Debug, Clone)]
@@ -462,5 +279,207 @@ impl<T: CacheManager + Send + Sync + 'static> Cache<T> {
                 }
             }
         }
+    }
+}
+
+#[cfg(feature = "client-reqwest")]
+mod reqwest {
+    use crate::{Cache, CacheManager};
+    use http_cache_middleware_reqwest::{convert_response, ReqwestMiddleware};
+    #[async_trait::async_trait]
+    impl<T: CacheManager + 'static + Send + Sync> reqwest_middleware::Middleware
+        for Cache<T>
+    {
+        async fn handle(
+            &self,
+            req: reqwest::Request,
+            extensions: &mut task_local_extensions::Extensions,
+            next: reqwest_middleware::Next<'_>,
+        ) -> Result<reqwest::Response, reqwest_middleware::Error> {
+            let middleware = ReqwestMiddleware { req, next, extensions };
+            let res = match self.run(middleware).await {
+                Ok(r) => r,
+                Err(e) => {
+                    return Err(reqwest_middleware::Error::Middleware(
+                        anyhow::anyhow!(e),
+                    ));
+                }
+            };
+            let converted = convert_response(res)?;
+            Ok(converted)
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use crate::{CACacheManager, Cache, CacheManager, CacheMode};
+        use mockito::mock;
+        use reqwest::{Client, Url};
+        use reqwest_middleware::ClientBuilder;
+
+        #[tokio::test]
+        async fn reqwest_default_mode() -> anyhow::Result<()> {
+            let m = mock("GET", "/")
+                .with_status(200)
+                .with_header("cache-control", "max-age=86400, public")
+                .with_body("test")
+                .create();
+            let url = format!("{}/", &mockito::server_url());
+            let manager = CACacheManager::default();
+            let path = manager.path.clone();
+            let key = format!("GET:{}", &url);
+
+            // Make sure the record doesn't already exist
+            manager.delete("GET", &Url::parse(&url)?).await?;
+
+            // Construct reqwest client with cache defaults
+            let client = ClientBuilder::new(Client::new())
+                .with(Cache {
+                    mode: CacheMode::Default,
+                    manager: CACacheManager::default(),
+                    options: None,
+                })
+                .build();
+
+            // Cold pass to load cache
+            client.get(url).send().await?;
+            m.assert();
+
+            // Try to load cached object
+            let data = cacache::read(&path, &key).await;
+            assert!(data.is_ok());
+            Ok(())
+        }
+    }
+}
+
+#[cfg(feature = "client-surf")]
+mod surf {
+    use crate::{Cache, CacheManager};
+    use http_cache_middleware_surf::SurfMiddleware;
+    use http_types::headers::HeaderValue;
+    use std::convert::TryInto;
+    #[surf::utils::async_trait]
+    impl<T: CacheManager + 'static + Send + Sync> surf::middleware::Middleware
+        for Cache<T>
+    {
+        async fn handle(
+            &self,
+            req: surf::Request,
+            client: surf::Client,
+            next: surf::middleware::Next<'_>,
+        ) -> Result<surf::Response, http_types::Error> {
+            let middleware = SurfMiddleware { req, client, next };
+            let res = self.run(middleware).await?;
+
+            let mut converted =
+                http_types::Response::new(http_types::StatusCode::Ok);
+            for header in &res.headers {
+                let val =
+                    HeaderValue::from_bytes(header.1.as_bytes().to_vec())?;
+                converted.insert_header(header.0.as_str(), val);
+            }
+            converted.set_status(res.status.try_into()?);
+            converted.set_version(Some(res.version.try_into()?));
+            converted.set_body(res.body.clone());
+            Ok(surf::Response::from(converted))
+        }
+    }
+
+    #[cfg(feature = "manager-cacache")]
+    #[cfg(test)]
+    mod tests {
+        use crate::{CACacheManager, Cache, CacheManager, CacheMode};
+        use mockito::mock;
+        use surf::{http::Method, Client, Request, Url};
+
+        #[async_std::test]
+        async fn default_mode() -> surf::Result<()> {
+            let m = mock("GET", "/")
+                .with_status(200)
+                .with_header("cache-control", "max-age=86400, public")
+                .with_body("test")
+                .create();
+            let url = format!("{}/", &mockito::server_url());
+            let manager = CACacheManager::default();
+            let path = manager.path.clone();
+            let key = format!("GET:{}", &url);
+            let req = Request::new(Method::Get, Url::parse(&url)?);
+
+            // Make sure the record doesn't already exist
+            manager.delete("GET", &Url::parse(&url)?).await?;
+
+            // Construct Surf client with cache defaults
+            let client = Client::new().with(Cache {
+                mode: CacheMode::Default,
+                manager: CACacheManager::default(),
+                options: None,
+            });
+
+            // Cold pass to load cache
+            client.send(req.clone()).await?;
+            m.assert();
+
+            // Try to load cached object
+            let data = cacache::read(&path, &key).await;
+            assert!(data.is_ok());
+            Ok(())
+        }
+    }
+}
+
+#[cfg(feature = "manager-cacache")]
+#[cfg(test)]
+mod tests {
+    use crate::{HttpResponse, HttpVersion};
+    use anyhow::Result;
+    use http_cache_manager_cacache::CACacheManager;
+    use http_cache_semantics::CachePolicy;
+    use http_cache_types::CacheManager;
+    use mockito::mock;
+    use reqwest::{Client, Method, Request, Url};
+
+    #[tokio::test]
+    async fn cacache_can_cache_response() -> Result<()> {
+        let m = mock("GET", "/")
+            .with_status(200)
+            .with_header("cache-control", "max-age=86400, public")
+            .with_body("test")
+            .create();
+        let url = format!("{}/", &mockito::server_url());
+        let url_parsed = Url::parse(&url)?;
+        let manager = CACacheManager::default();
+
+        // We need to fake the request and get the response to build the policy
+        let request = Request::new(Method::GET, url_parsed.clone());
+        let cloned_req = request.try_clone().unwrap();
+        let client = Client::new();
+        let response = client.execute(request).await?;
+        m.assert();
+
+        // The cache accepts HttpResponse type only
+        let http_res = HttpResponse {
+            body: b"test".to_vec(),
+            headers: Default::default(),
+            status: 200,
+            url: url_parsed.clone(),
+            version: HttpVersion::Http11,
+        };
+
+        // Make sure the record doesn't already exist
+        manager.delete("GET", &url_parsed).await?;
+        let policy = CachePolicy::new(&cloned_req, &response);
+        manager.put("GET", &url_parsed, http_res, policy).await?;
+        let data = manager.get("GET", &url_parsed).await?;
+        let body = match data {
+            Some(d) => String::from_utf8(d.0.body)?,
+            None => String::new(),
+        };
+        assert_eq!(&body, "test");
+        manager.delete("GET", &url_parsed).await?;
+        let data = manager.get("GET", &url_parsed).await?;
+        assert!(data.is_none());
+        manager.clear().await?;
+        Ok(())
     }
 }
