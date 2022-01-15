@@ -9,13 +9,13 @@
 //!     surf::client()
 //!         .with(Cache {
 //!             mode: CacheMode::Default,
-//!             cache_manager: CACacheManager::default(),
+//!             manager: CACacheManager::default(),
+//!             options: None,
 //!         })
 //!         .send(req)
 //!         .await?;
 //!     Ok(())
 //! }
-//!
 //! ```
 use crate::{
     Cache, CacheError, CacheManager, HttpResponse, HttpVersion, Middleware,
@@ -27,10 +27,11 @@ use std::{
     collections::HashMap,
     convert::{TryFrom, TryInto},
     str::FromStr,
+    time::SystemTime,
 };
 
 use http::{header::CACHE_CONTROL, request, request::Parts};
-use http_cache_semantics::CachePolicy;
+use http_cache_semantics::{CacheOptions, CachePolicy};
 use http_types::{headers::HeaderValue, Method, Version};
 use surf::{middleware::Next, Client, Request, Response};
 use url::Url;
@@ -48,6 +49,18 @@ impl Middleware for SurfMiddleware<'_> {
     }
     fn policy(&self, response: &HttpResponse) -> Result<CachePolicy> {
         Ok(CachePolicy::new(&self.parts()?, &response.parts()?))
+    }
+    fn policy_with_options(
+        &self,
+        response: &HttpResponse,
+        options: CacheOptions,
+    ) -> Result<CachePolicy> {
+        Ok(CachePolicy::new_options(
+            &self.parts()?,
+            &response.parts()?,
+            SystemTime::now(),
+            options,
+        ))
     }
     fn update_headers(&mut self, parts: Parts) -> Result<()> {
         for header in parts.headers.iter() {
@@ -193,7 +206,8 @@ mod tests {
         // Construct Surf client with cache defaults
         let client = Client::new().with(Cache {
             mode: CacheMode::Default,
-            cache_manager: CACacheManager::default(),
+            manager: CACacheManager::default(),
+            options: None,
         });
 
         // Cold pass to load cache

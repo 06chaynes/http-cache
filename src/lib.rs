@@ -12,14 +12,15 @@
 //!     surf::client()
 //!         .with(Cache {
 //!             mode: CacheMode::Default,
-//!             cache_manager: CACacheManager::default(),
+//!             manager: CACacheManager::default(),
+//!             options: None,
 //!         })
 //!         .send(req)
 //!         .await?;
 //!     Ok(())
 //! }
-//!
 //! ```
+//!
 //! ## Example - Reqwest (requires feature: `client-reqwest`)
 //!
 //! ```ignore
@@ -32,7 +33,8 @@
 //!     let client = ClientBuilder::new(Client::new())
 //!         .with(Cache {
 //!             mode: CacheMode::Default,
-//!             cache_manager: CACacheManager::default(),
+//!             manager: CACacheManager::default(),
+//!             options: None,
 //!         })
 //!         .build();
 //!     client
@@ -59,6 +61,8 @@ pub use error::CacheError;
 
 #[cfg(feature = "manager-cacache")]
 pub use managers::cacache::CACacheManager;
+
+pub use http_cache_semantics::CacheOptions;
 
 use http::{header::CACHE_CONTROL, request, response, StatusCode};
 use std::{collections::HashMap, str::FromStr, time::SystemTime};
@@ -184,6 +188,11 @@ impl HttpResponse {
 pub(crate) trait Middleware {
     fn is_method_get_head(&self) -> bool;
     fn policy(&self, response: &HttpResponse) -> Result<CachePolicy>;
+    fn policy_with_options(
+        &self,
+        response: &HttpResponse,
+        options: CacheOptions,
+    ) -> Result<CachePolicy>;
     fn update_headers(&mut self, parts: request::Parts) -> Result<()>;
     fn set_no_cache(&mut self) -> Result<()>;
     fn parts(&self) -> Result<request::Parts>;
@@ -251,11 +260,13 @@ pub struct Cache<T: CacheManager + Send + Sync + 'static> {
     /// Determines the manager behavior
     pub mode: CacheMode,
     /// Manager instance that implements the CacheManager trait
-    pub cache_manager: T,
+    pub manager: T,
+    /// Override the default cache options
+    pub options: Option<CacheOptions>,
 }
 
+#[allow(dead_code)]
 impl<T: CacheManager + Send + Sync + 'static> Cache<T> {
-    #[allow(dead_code)]
     pub(crate) async fn run(
         &self,
         mut middleware: impl Middleware,
@@ -266,10 +277,8 @@ impl<T: CacheManager + Send + Sync + 'static> Cache<T> {
         if !is_cacheable {
             return middleware.remote_fetch().await;
         }
-        if let Some(store) = self
-            .cache_manager
-            .get(&middleware.method()?, middleware.url()?)
-            .await?
+        if let Some(store) =
+            self.manager.get(&middleware.method()?, middleware.url()?).await?
         {
             let (mut res, policy) = store;
             let res_url = res.url.clone();
@@ -325,13 +334,15 @@ impl<T: CacheManager + Send + Sync + 'static> Cache<T> {
         }
     }
 
-    #[allow(dead_code)]
     async fn remote_fetch(
         &self,
         middleware: &mut impl Middleware,
     ) -> Result<HttpResponse> {
         let res = middleware.remote_fetch().await?;
-        let policy = middleware.policy(&res)?;
+        let policy = match self.options {
+            Some(options) => middleware.policy_with_options(&res, options)?,
+            None => middleware.policy(&res)?,
+        };
         let is_cacheable = middleware.is_method_get_head()
             && self.mode != CacheMode::NoStore
             && self.mode != CacheMode::Reload
@@ -339,11 +350,11 @@ impl<T: CacheManager + Send + Sync + 'static> Cache<T> {
             && policy.is_storable();
         if is_cacheable {
             Ok(self
-                .cache_manager
+                .manager
                 .put(&middleware.method()?, middleware.url()?, res, policy)
                 .await?)
         } else if !middleware.is_method_get_head() {
-            self.cache_manager
+            self.manager
                 .delete(&middleware.method()?, middleware.url()?)
                 .await?;
             Ok(res)
@@ -352,7 +363,6 @@ impl<T: CacheManager + Send + Sync + 'static> Cache<T> {
         }
     }
 
-    #[allow(dead_code)]
     async fn conditional_fetch(
         &self,
         mut middleware: impl Middleware,
@@ -402,7 +412,7 @@ impl<T: CacheManager + Send + Sync + 'static> Cache<T> {
                         }
                     }
                     let res = self
-                        .cache_manager
+                        .manager
                         .put(
                             &middleware.method()?,
                             &req_url,
