@@ -1,5 +1,6 @@
-//! A caching middleware that follows HTTP caching rules.
-//! By default it uses [`cacache`](https://github.com/zkat/cacache-rs) as the backend cache manager.
+//! A caching middleware that follows HTTP caching rules, thanks to
+//! [`http-cache-semantics`](https://github.com/kornelski/rusty-http-cache-semantics).
+//! By default, it uses [`cacache`](https://github.com/zkat/cacache-rs) as the backend cache manager.
 //!
 //! ## Example - Surf (requires feature: `client-surf`)
 //!
@@ -62,6 +63,8 @@ pub use error::CacheError;
 #[cfg(feature = "manager-cacache")]
 pub use managers::cacache::CACacheManager;
 
+/// Options struct provided by
+/// [`http-cache-semantics`](https://github.com/kornelski/rusty-http-cache-semantics).
 pub use http_cache_semantics::CacheOptions;
 
 use http::{header::CACHE_CONTROL, request, response, StatusCode};
@@ -71,7 +74,7 @@ use http_cache_semantics::{AfterResponse, BeforeRequest, CachePolicy};
 use serde::{Deserialize, Serialize};
 use url::Url;
 
-/// A `Result` typedef to use with the `CacheError` type
+/// A `Result` typedef to use with the [`CacheError`] type
 pub type Result<T> = std::result::Result<T, CacheError>;
 
 /// Represents an HTTP version
@@ -254,14 +257,16 @@ pub enum CacheMode {
     OnlyIfCached,
 }
 
-/// Caches requests according to http spec
+/// Caches requests according to http spec.
 #[derive(Debug, Clone)]
 pub struct Cache<T: CacheManager + Send + Sync + 'static> {
-    /// Determines the manager behavior
+    /// Determines the manager behavior.
     pub mode: CacheMode,
-    /// Manager instance that implements the CacheManager trait
+    /// Manager instance that implements the [`CacheManager`] trait.
+    /// By default, a manager implementation with [`cacache`](https://github.com/zkat/cacache-rs)
+    /// as the backend has been provided, see [`CACacheManager`].
     pub manager: T,
-    /// Override the default cache options
+    /// Override the default cache options.
     pub options: Option<CacheOptions>,
 }
 
