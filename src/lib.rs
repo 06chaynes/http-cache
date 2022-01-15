@@ -8,6 +8,7 @@
 //!
 //! - `manager-cacache` (default): use [cacache](https://github.com/zkat/cacache-rs),
 //! a high-performance disk cache, for the manager backend.
+//! - `with-http-types` (disabled): enable [http-types](https://github.com/http-rs/http-types) type conversion support
 #![forbid(unsafe_code, future_incompatible)]
 #![deny(
     missing_docs,
