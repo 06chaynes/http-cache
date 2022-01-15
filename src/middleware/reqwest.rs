@@ -107,7 +107,7 @@ impl Middleware for ReqwestMiddleware<'_> {
         let url = res.url().clone();
         let status = res.status().into();
         let version = res.version();
-        let body: Vec<u8> = res.text().await?.into_bytes();
+        let body: Vec<u8> = res.bytes().await?.to_vec();
         Ok(HttpResponse {
             body,
             headers,
