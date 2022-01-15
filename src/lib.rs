@@ -68,7 +68,11 @@
     missing_copy_implementations,
     nonstandard_style,
     unused_qualifications,
-    rustdoc::missing_doc_code_examples
+    unused_import_braces,
+    unused_extern_crates,
+    rustdoc::missing_doc_code_examples,
+    trivial_casts,
+    trivial_numeric_casts
 )]
 mod error;
 mod managers;
