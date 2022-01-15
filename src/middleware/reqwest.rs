@@ -10,7 +10,8 @@
 //!     let client = ClientBuilder::new(Client::new())
 //!         .with(Cache {
 //!             mode: CacheMode::Default,
-//!             cache_manager: CACacheManager::default(),
+//!             manager: CACacheManager::default(),
+//!             options: None,
 //!         })
 //!         .build();
 //!     client
@@ -30,6 +31,7 @@ use std::{
     collections::HashMap,
     convert::{TryFrom, TryInto},
     str::FromStr,
+    time::SystemTime,
 };
 
 use http::{
@@ -37,7 +39,7 @@ use http::{
     request::Parts,
     HeaderValue, Method, Version,
 };
-use http_cache_semantics::CachePolicy;
+use http_cache_semantics::{CacheOptions, CachePolicy};
 use reqwest::{Request, Response, ResponseBuilderExt};
 use reqwest_middleware::Next;
 use task_local_extensions::Extensions;
@@ -56,6 +58,18 @@ impl Middleware for ReqwestMiddleware<'_> {
     }
     fn policy(&self, response: &HttpResponse) -> Result<CachePolicy> {
         Ok(CachePolicy::new(&self.parts()?, &response.parts()?))
+    }
+    fn policy_with_options(
+        &self,
+        response: &HttpResponse,
+        options: CacheOptions,
+    ) -> Result<CachePolicy> {
+        Ok(CachePolicy::new_options(
+            &self.parts()?,
+            &response.parts()?,
+            SystemTime::now(),
+            options,
+        ))
     }
     fn update_headers(&mut self, parts: Parts) -> Result<()> {
         let headers = parts.headers;
@@ -194,7 +208,8 @@ mod tests {
         let client = ClientBuilder::new(Client::new())
             .with(Cache {
                 mode: CacheMode::Default,
-                cache_manager: CACacheManager::default(),
+                manager: CACacheManager::default(),
+                options: None,
             })
             .build();
 

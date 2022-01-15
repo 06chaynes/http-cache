@@ -1,7 +1,15 @@
-//! A caching middleware that follows HTTP caching rules.
-//! By default it uses [`cacache`](https://github.com/zkat/cacache-rs) as the backend cache manager.
+//! A caching middleware that follows HTTP caching rules, thanks to
+//! [`http-cache-semantics`](https://github.com/kornelski/rusty-http-cache-semantics).
+//! By default, it uses [`cacache`](https://github.com/zkat/cacache-rs) as the backend cache manager.
 //!
-//! ## Example - Surf (requires feature: `client-surf`)
+//! ## Supported Clients
+//!
+//! - **Surf** **Should likely be registered after any middleware modifying the request*
+//! - **Reqwest** **Uses [reqwest-middleware](https://github.com/TrueLayer/reqwest-middleware) for middleware support*
+//!
+//! ## Examples
+//!
+//! ### Surf (requires feature: `client-surf`)
 //!
 //! ```ignore
 //! use http_cache::{Cache, CacheMode, CACacheManager};
@@ -12,15 +20,16 @@
 //!     surf::client()
 //!         .with(Cache {
 //!             mode: CacheMode::Default,
-//!             cache_manager: CACacheManager::default(),
+//!             manager: CACacheManager::default(),
+//!             options: None,
 //!         })
 //!         .send(req)
 //!         .await?;
 //!     Ok(())
 //! }
-//!
 //! ```
-//! ## Example - Reqwest (requires feature: `client-reqwest`)
+//!
+//! ### Reqwest (requires feature: `client-reqwest`)
 //!
 //! ```ignore
 //! use reqwest::Client;
@@ -32,7 +41,8 @@
 //!     let client = ClientBuilder::new(Client::new())
 //!         .with(Cache {
 //!             mode: CacheMode::Default,
-//!             cache_manager: CACacheManager::default(),
+//!             manager: CACacheManager::default(),
+//!             options: None,
 //!         })
 //!         .build();
 //!     client
@@ -42,6 +52,15 @@
 //!     Ok(())
 //! }
 //! ```
+//!
+//! ## Features
+//!
+//! The following features are available. By default `manager-cacache` is enabled.
+//!
+//! - `manager-cacache` (default): use [cacache](https://github.com/zkat/cacache-rs),
+//! a high-performance disk cache, for the manager backend.
+//! - `client-surf` (disabled): enables [surf](https://github.com/http-rs/surf) client support.
+//! - `client-reqwest` (disabled): enables [reqwest](https://github.com/seanmonstar/reqwest) client support.
 #![forbid(unsafe_code, future_incompatible)]
 #![deny(
     missing_docs,
@@ -49,7 +68,11 @@
     missing_copy_implementations,
     nonstandard_style,
     unused_qualifications,
-    rustdoc::missing_doc_code_examples
+    unused_import_braces,
+    unused_extern_crates,
+    rustdoc::missing_doc_code_examples,
+    trivial_casts,
+    trivial_numeric_casts
 )]
 mod error;
 mod managers;
@@ -60,6 +83,10 @@ pub use error::CacheError;
 #[cfg(feature = "manager-cacache")]
 pub use managers::cacache::CACacheManager;
 
+/// Options struct provided by
+/// [`http-cache-semantics`](https://github.com/kornelski/rusty-http-cache-semantics).
+pub use http_cache_semantics::CacheOptions;
+
 use http::{header::CACHE_CONTROL, request, response, StatusCode};
 use std::{collections::HashMap, str::FromStr, time::SystemTime};
 
@@ -67,7 +94,7 @@ use http_cache_semantics::{AfterResponse, BeforeRequest, CachePolicy};
 use serde::{Deserialize, Serialize};
 use url::Url;
 
-/// A `Result` typedef to use with the `CacheError` type
+/// A `Result` typedef to use with the [`CacheError`] type
 pub type Result<T> = std::result::Result<T, CacheError>;
 
 /// Represents an HTTP version
@@ -184,6 +211,11 @@ impl HttpResponse {
 pub(crate) trait Middleware {
     fn is_method_get_head(&self) -> bool;
     fn policy(&self, response: &HttpResponse) -> Result<CachePolicy>;
+    fn policy_with_options(
+        &self,
+        response: &HttpResponse,
+        options: CacheOptions,
+    ) -> Result<CachePolicy>;
     fn update_headers(&mut self, parts: request::Parts) -> Result<()>;
     fn set_no_cache(&mut self) -> Result<()>;
     fn parts(&self) -> Result<request::Parts>;
@@ -239,23 +271,25 @@ pub enum CacheMode {
     ForceCache,
     /// Uses any response in the HTTP cache matching the request,
     /// not paying attention to staleness. If there was no response,
-    /// it returns a network error. (Can only be used when request’s mode is "same-origin".
-    /// Any cached redirects will be followed assuming request’s redirect mode is "follow"
-    /// and the redirects do not violate request’s mode.)
+    /// it returns a network error.
     OnlyIfCached,
 }
 
-/// Caches requests according to http spec
+/// Caches requests according to http spec.
 #[derive(Debug, Clone)]
 pub struct Cache<T: CacheManager + Send + Sync + 'static> {
-    /// Determines the manager behavior
+    /// Determines the manager behavior.
     pub mode: CacheMode,
-    /// Manager instance that implements the CacheManager trait
-    pub cache_manager: T,
+    /// Manager instance that implements the [`CacheManager`] trait.
+    /// By default, a manager implementation with [`cacache`](https://github.com/zkat/cacache-rs)
+    /// as the backend has been provided, see [`CACacheManager`].
+    pub manager: T,
+    /// Override the default cache options.
+    pub options: Option<CacheOptions>,
 }
 
+#[allow(dead_code)]
 impl<T: CacheManager + Send + Sync + 'static> Cache<T> {
-    #[allow(dead_code)]
     pub(crate) async fn run(
         &self,
         mut middleware: impl Middleware,
@@ -266,10 +300,8 @@ impl<T: CacheManager + Send + Sync + 'static> Cache<T> {
         if !is_cacheable {
             return middleware.remote_fetch().await;
         }
-        if let Some(store) = self
-            .cache_manager
-            .get(&middleware.method()?, middleware.url()?)
-            .await?
+        if let Some(store) =
+            self.manager.get(&middleware.method()?, middleware.url()?).await?
         {
             let (mut res, policy) = store;
             let res_url = res.url.clone();
@@ -325,13 +357,15 @@ impl<T: CacheManager + Send + Sync + 'static> Cache<T> {
         }
     }
 
-    #[allow(dead_code)]
     async fn remote_fetch(
         &self,
         middleware: &mut impl Middleware,
     ) -> Result<HttpResponse> {
         let res = middleware.remote_fetch().await?;
-        let policy = middleware.policy(&res)?;
+        let policy = match self.options {
+            Some(options) => middleware.policy_with_options(&res, options)?,
+            None => middleware.policy(&res)?,
+        };
         let is_cacheable = middleware.is_method_get_head()
             && self.mode != CacheMode::NoStore
             && self.mode != CacheMode::Reload
@@ -339,11 +373,11 @@ impl<T: CacheManager + Send + Sync + 'static> Cache<T> {
             && policy.is_storable();
         if is_cacheable {
             Ok(self
-                .cache_manager
+                .manager
                 .put(&middleware.method()?, middleware.url()?, res, policy)
                 .await?)
         } else if !middleware.is_method_get_head() {
-            self.cache_manager
+            self.manager
                 .delete(&middleware.method()?, middleware.url()?)
                 .await?;
             Ok(res)
@@ -352,7 +386,6 @@ impl<T: CacheManager + Send + Sync + 'static> Cache<T> {
         }
     }
 
-    #[allow(dead_code)]
     async fn conditional_fetch(
         &self,
         mut middleware: impl Middleware,
@@ -402,7 +435,7 @@ impl<T: CacheManager + Send + Sync + 'static> Cache<T> {
                         }
                     }
                     let res = self
-                        .cache_manager
+                        .manager
                         .put(
                             &middleware.method()?,
                             &req_url,
