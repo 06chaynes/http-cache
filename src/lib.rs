@@ -267,9 +267,7 @@ pub enum CacheMode {
     ForceCache,
     /// Uses any response in the HTTP cache matching the request,
     /// not paying attention to staleness. If there was no response,
-    /// it returns a network error. (Can only be used when request’s mode is "same-origin".
-    /// Any cached redirects will be followed assuming request’s redirect mode is "follow"
-    /// and the redirects do not violate request’s mode.)
+    /// it returns a network error.
     OnlyIfCached,
 }
 
