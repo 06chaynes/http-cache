@@ -197,7 +197,7 @@ pub trait Middleware {
 }
 
 /// Similar to [make-fetch-happen cache options](https://github.com/npm/make-fetch-happen#--optscache).
-/// Passed in when the [`Cache`] struct is being built.
+/// Passed in when the [`HttpCache`] struct is being built.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CacheMode {
     /// Will inspect the HTTP cache on the way to the network.
