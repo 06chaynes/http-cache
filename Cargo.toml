@@ -28,7 +28,6 @@ thiserror = "1.0"
 url = { version = "2.2", features = ["serde"] }
 
 [dev-dependencies]
-async-std = { version = "1.10", features = ["attributes"]}
 cacache = "9.0"
 http-cache-semantics = { version = "0.9", features = ["reqwest"]}
 reqwest = "0.11"
