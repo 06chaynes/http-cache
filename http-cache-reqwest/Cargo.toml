@@ -6,7 +6,7 @@ authors = ["Christian Haynes <06chaynes@gmail.com>", "Kat Marchán <kzm@zkat.tec
 repository = "https://github.com/06chaynes/http-cache.git"
 license = "MIT OR Apache-2.0"
 readme = "README.md"
-keywords = ["cache", "http", "middleware"]
+keywords = ["cache", "http", "middleware", "reqwest"]
 categories = [
     "caching",
     "web-programming::http-client"
