@@ -6,7 +6,9 @@
 
 <img align="right" src="https://raw.githubusercontent.com/06chaynes/http-cache/latest/.assets/images/http-cache_logo_bluegreen.svg" height="150px" alt="the http-cache logo">
 
-A caching middleware that follows HTTP caching rules, thanks to [http-cache-semantics](https://github.com/kornelski/rusty-http-cache-semantics). By default, it uses [cacache](https://github.com/zkat/cacache-rs) as the backend cache manager.
+A caching middleware that follows HTTP caching rules,
+thanks to [http-cache-semantics](https://github.com/kornelski/rusty-http-cache-semantics).
+By default, it uses [cacache](https://github.com/zkat/cacache-rs) as the backend cache manager.
 
 ## Supported Clients
 
