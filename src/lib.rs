@@ -2,7 +2,14 @@
 //! [`http-cache-semantics`](https://github.com/kornelski/rusty-http-cache-semantics).
 //! By default, it uses [`cacache`](https://github.com/zkat/cacache-rs) as the backend cache manager.
 //!
-//! ## Example - Surf (requires feature: `client-surf`)
+//! ## Supported Clients
+//!
+//! - **Surf** **Should likely be registered after any middleware modifying the request*
+//! - **Reqwest** **Uses [reqwest-middleware](https://github.com/TrueLayer/reqwest-middleware) for middleware support*
+//!
+//! ## Examples
+//!
+//! ### Surf (requires feature: `client-surf`)
 //!
 //! ```ignore
 //! use http_cache::{Cache, CacheMode, CACacheManager};
@@ -22,7 +29,7 @@
 //! }
 //! ```
 //!
-//! ## Example - Reqwest (requires feature: `client-reqwest`)
+//! ### Reqwest (requires feature: `client-reqwest`)
 //!
 //! ```ignore
 //! use reqwest::Client;
@@ -45,6 +52,15 @@
 //!     Ok(())
 //! }
 //! ```
+//!
+//! ## Features
+//!
+//! The following features are available. By default `manager-cacache` is enabled.
+//!
+//! - `manager-cacache` (default): use [cacache](https://github.com/zkat/cacache-rs),
+//! a high-performance disk cache, for the manager backend.
+//! - `client-surf` (disabled): enables [surf](https://github.com/http-rs/surf) client support.
+//! - `client-reqwest` (disabled): enables [reqwest](https://github.com/seanmonstar/reqwest) client support.
 #![forbid(unsafe_code, future_incompatible)]
 #![deny(
     missing_docs,
