@@ -16,33 +16,16 @@ edition = "2018"
 [dependencies]
 anyhow = "1.0"
 async-trait = "0.1"
+bincode = { version = "1.3", optional = true }
+cacache = { version = "9.0", optional = true }
 http = "0.2"
 httpdate = "1.0"
 http-cache-semantics = "0.9"
 http-types = { version = "2.12", optional = true }
 miette = "3.3"
-reqwest = { version = "0.11", default-features = false, optional = true }
-reqwest-middleware = { version = "0.1", optional = true }
 serde = { version = "1.0", features = ["derive"] }
-surf = { version = "2.3", optional = true }
-task-local-extensions = { version = "0.1", optional = true }
 thiserror = "1.0"
 url = { version = "2.2", features = ["serde"] }
-
-[dependencies.http-cache-types]
-path = "http-cache-types"
-
-[dependencies.http-cache-manager-cacache]
-path = "http-cache-manager-cacache"
-optional = true
-
-[dependencies.http-cache-middleware-reqwest]
-path = "http-cache-middleware-reqwest"
-optional = true
-
-[dependencies.http-cache-middleware-surf]
-path = "http-cache-middleware-surf"
-optional = true
 
 [dev-dependencies]
 async-std = { version = "1.10", features = ["attributes"]}
@@ -54,19 +37,11 @@ mockito = "0.30"
 
 [features]
 default = ["manager-cacache"]
-manager-cacache = ["http-cache-manager-cacache", "http-cache-types/manager-cacache"]
-client-reqwest = [
-    "http-cache-types/client-reqwest",
-    "http-cache-middleware-reqwest",
-    "reqwest",
-    "reqwest-middleware",
-    "task-local-extensions"
-]
-client-surf = [
-    "http-cache-types/client-surf",
-    "http-cache-middleware-surf",
-    "surf",
-    "http-types",
-]
+manager-cacache = ["cacache", "bincode"]
+with-http-types = ["http-types"]
 
 [workspace]
+members = [
+    "http-cache-reqwest",
+    "http-cache-surf",
+]

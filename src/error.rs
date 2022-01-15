@@ -39,16 +39,6 @@ pub enum CacheError {
     #[error(transparent)]
     #[diagnostic(code(http_cache::invalid_header_name))]
     InvalidHeaderName(#[from] http::header::InvalidHeaderName),
-    /// Error from reqwest
-    #[cfg(feature = "client-reqwest")]
-    #[error(transparent)]
-    #[diagnostic(code(http_cache::reqwest_error))]
-    ReqwestError(#[from] reqwest::Error),
-    /// Error from reqwest_middleware
-    #[cfg(feature = "client-reqwest")]
-    #[error(transparent)]
-    #[diagnostic(code(http_cache::reqwest_middleware_error))]
-    ReqwestMiddlewareError(#[from] reqwest_middleware::Error),
     /// Error from cacache
     #[cfg(feature = "manager-cacache")]
     #[error(transparent)]
