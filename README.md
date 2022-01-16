@@ -29,6 +29,10 @@ The following features are available. By default `manager-cacache` is enabled.
 
 - [API Docs](https://docs.rs/http-cache)
 
+## Provided Client Implementations
+- **Surf**: See [README](http-cache-surf/README.md) for more details
+- **Reqwest**: See [README](http-cache-reqwest/README.md) for more details
+
 ## License
 
 Licensed under either of
