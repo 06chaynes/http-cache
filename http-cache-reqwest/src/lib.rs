@@ -46,7 +46,7 @@ pub use http_cache::{CacheMode, HttpCache, HttpResponse};
 pub use http_cache::CACacheManager;
 
 /// Wrapper for [`HttpCache`]
-pub struct Cache<T: CacheManager + Send + Sync + 'static>(HttpCache<T>);
+pub struct Cache<T: CacheManager + Send + Sync + 'static>(pub HttpCache<T>);
 
 /// Implements ['Middleware'] for reqwest
 pub(crate) struct ReqwestMiddleware<'a> {
