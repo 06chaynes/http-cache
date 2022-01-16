@@ -23,12 +23,12 @@ use std::{
 
 use http::{header::CACHE_CONTROL, request, request::Parts};
 use http_cache::{CacheError, CacheManager, Middleware, Result};
-use http_cache_semantics::{CacheOptions, CachePolicy};
+use http_cache_semantics::CachePolicy;
 use http_types::{headers::HeaderValue, Method, Version};
 use surf::{middleware::Next, Client, Request};
 use url::Url;
 
-pub use http_cache::{CacheMode, HttpCache, HttpResponse};
+pub use http_cache::{CacheMode, CacheOptions, HttpCache, HttpResponse};
 
 #[cfg(feature = "manager-cacache")]
 pub use http_cache::CACacheManager;

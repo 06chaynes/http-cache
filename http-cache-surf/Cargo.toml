@@ -1,6 +1,6 @@
 [package]
 name = "http-cache-surf"
-version = "0.1.0"
+version = "0.1.1"
 description = "http-cache middleware implementation for surf"
 authors = ["Christian Haynes <06chaynes@gmail.com>", "Kat Marchán <kzm@zkat.tech>"]
 repository = "https://github.com/06chaynes/http-cache.git"

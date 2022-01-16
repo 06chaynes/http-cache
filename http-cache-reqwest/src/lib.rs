@@ -34,13 +34,13 @@ use http::{
     HeaderValue, Method,
 };
 use http_cache::{CacheError, CacheManager, Middleware, Result};
-use http_cache_semantics::{CacheOptions, CachePolicy};
+use http_cache_semantics::CachePolicy;
 use reqwest::{Request, Response, ResponseBuilderExt};
 use reqwest_middleware::Next;
 use task_local_extensions::Extensions;
 use url::Url;
 
-pub use http_cache::{CacheMode, HttpCache, HttpResponse};
+pub use http_cache::{CacheMode, CacheOptions, HttpCache, HttpResponse};
 
 #[cfg(feature = "manager-cacache")]
 pub use http_cache::CACacheManager;
