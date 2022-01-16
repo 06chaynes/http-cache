@@ -29,7 +29,7 @@ use http_cache_reqwest::{Cache, CacheMode, CACacheManager, HttpCache};
 #[tokio::main]
 async fn main() -> Result<()> {
     let client = ClientBuilder::new(Client::new())
-        .with(Cache::new(HttpCache {
+        .with(Cache(HttpCache {
           mode: CacheMode::Default,
           manager: CACacheManager::default(),
           options: None,

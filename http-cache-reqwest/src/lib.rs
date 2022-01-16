@@ -7,7 +7,7 @@
 //! #[tokio::main]
 //! async fn main() -> Result<()> {
 //!     let client = ClientBuilder::new(Client::new())
-//!         .with(Cache::new(HttpCache {
+//!         .with(Cache(HttpCache {
 //!             mode: CacheMode::Default,
 //!             manager: CACacheManager::default(),
 //!             options: None,
@@ -46,17 +46,7 @@ pub use http_cache::{CacheMode, HttpCache, HttpResponse};
 pub use http_cache::CACacheManager;
 
 /// Wrapper for [`HttpCache`]
-pub struct Cache<T: CacheManager + Send + Sync + 'static> {
-    /// Contains the cache instance along with the cache manager implementation
-    pub inner: HttpCache<T>,
-}
-
-impl<T: CacheManager + Send + Sync + 'static> Cache<T> {
-    /// Helper for constructing a new cache instance
-    pub fn new(cache: HttpCache<T>) -> Self {
-        Cache { inner: cache }
-    }
-}
+pub struct Cache<T: CacheManager + Send + Sync + 'static>(HttpCache<T>);
 
 /// Implements ['Middleware'] for reqwest
 pub(crate) struct ReqwestMiddleware<'a> {
@@ -171,7 +161,7 @@ impl<T: CacheManager + 'static + Send + Sync> reqwest_middleware::Middleware
         next: reqwest_middleware::Next<'_>,
     ) -> std::result::Result<reqwest::Response, reqwest_middleware::Error> {
         let middleware = ReqwestMiddleware { req, next, extensions };
-        let res = match self.inner.run(middleware).await {
+        let res = match self.0.run(middleware).await {
             Ok(r) => r,
             Err(e) => {
                 return Err(reqwest_middleware::Error::Middleware(
@@ -209,7 +199,7 @@ mod tests {
 
         // Construct reqwest client with cache defaults
         let client = ClientBuilder::new(Client::new())
-            .with(Cache::new(HttpCache {
+            .with(Cache(HttpCache {
                 mode: CacheMode::Default,
                 manager: CACacheManager::default(),
                 options: None,

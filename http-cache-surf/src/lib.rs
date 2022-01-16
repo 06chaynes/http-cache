@@ -6,7 +6,7 @@
 //! async fn main() -> surf::Result<()> {
 //!     let req = surf::get("https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching");
 //!     surf::client()
-//!         .with(Cache::new(HttpCache {
+//!         .with(Cache(HttpCache {
 //!             mode: CacheMode::Default,
 //!             manager: CACacheManager::default(),
 //!             options: None,
@@ -34,17 +34,7 @@ pub use http_cache::{CacheMode, HttpCache, HttpResponse};
 pub use http_cache::CACacheManager;
 
 /// Wrapper for [`HttpCache`]
-pub struct Cache<T: CacheManager + Send + Sync + 'static> {
-    /// Contains the cache instance along with the cache manager implementation
-    pub inner: HttpCache<T>,
-}
-
-impl<T: CacheManager + Send + Sync + 'static> Cache<T> {
-    /// Helper for constructing a new cache instance
-    pub fn new(cache: HttpCache<T>) -> Self {
-        Cache { inner: cache }
-    }
-}
+pub struct Cache<T: CacheManager + Send + Sync + 'static>(HttpCache<T>);
 
 /// Implements ['Middleware'] for surf
 pub(crate) struct SurfMiddleware<'a> {
@@ -150,7 +140,7 @@ impl<T: CacheManager + 'static + Send + Sync> surf::middleware::Middleware
         next: surf::middleware::Next<'_>,
     ) -> std::result::Result<surf::Response, http_types::Error> {
         let middleware = SurfMiddleware { req, client, next };
-        let res = self.inner.run(middleware).await?;
+        let res = self.0.run(middleware).await?;
         let mut converted =
             http_types::Response::new(http_types::StatusCode::Ok);
         for header in &res.headers {
@@ -188,7 +178,7 @@ mod tests {
         manager.delete("GET", &Url::parse(&url)?).await?;
 
         // Construct Surf client with cache defaults
-        let client = Client::new().with(Cache::new(HttpCache {
+        let client = Client::new().with(Cache(HttpCache {
             mode: CacheMode::Default,
             manager: CACacheManager::default(),
             options: None,

@@ -28,7 +28,7 @@ use http_cache_surf::{Cache, CacheMode, CACacheManager, HttpCache};
 async fn main() -> surf::Result<()> {
     let req = surf::get("https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching");
     surf::client()
-        .with(Cache::new(HttpCache {
+        .with(Cache(HttpCache {
           mode: CacheMode::Default,
           manager: CACacheManager::default(),
           options: None,
