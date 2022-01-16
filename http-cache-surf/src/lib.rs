@@ -1,41 +1,42 @@
-//! The surf middleware implementation, requires the `client-surf` feature.
-//!
+//! The surf middleware implementation for http-cache.
 //! ```no_run
-//! use http_cache::{Cache, CacheMode, CACacheManager};
+//! use http_cache_surf::{Cache, CacheMode, CACacheManager, HttpCache};
 //!
 //! #[async_std::main]
 //! async fn main() -> surf::Result<()> {
 //!     let req = surf::get("https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching");
 //!     surf::client()
-//!         .with(Cache {
+//!         .with(Cache(HttpCache {
 //!             mode: CacheMode::Default,
 //!             manager: CACacheManager::default(),
 //!             options: None,
-//!         })
+//!         }))
 //!         .send(req)
 //!         .await?;
 //!     Ok(())
 //! }
 //! ```
-use crate::{
-    Cache, CacheError, CacheManager, HttpResponse, HttpVersion, Middleware,
-    Result,
-};
-
 use anyhow::anyhow;
 use std::{
-    collections::HashMap,
-    convert::{TryFrom, TryInto},
-    str::FromStr,
-    time::SystemTime,
+    collections::HashMap, convert::TryInto, str::FromStr, time::SystemTime,
 };
 
 use http::{header::CACHE_CONTROL, request, request::Parts};
+use http_cache::{CacheError, CacheManager, Middleware, Result};
 use http_cache_semantics::{CacheOptions, CachePolicy};
 use http_types::{headers::HeaderValue, Method, Version};
-use surf::{middleware::Next, Client, Request, Response};
+use surf::{middleware::Next, Client, Request};
 use url::Url;
 
+pub use http_cache::{CacheMode, HttpCache, HttpResponse};
+
+#[cfg(feature = "manager-cacache")]
+pub use http_cache::CACacheManager;
+
+/// Wrapper for [`HttpCache`]
+pub struct Cache<T: CacheManager + Send + Sync + 'static>(pub HttpCache<T>);
+
+/// Implements ['Middleware'] for surf
 pub(crate) struct SurfMiddleware<'a> {
     pub req: Request,
     pub client: Client,
@@ -128,46 +129,18 @@ impl Middleware for SurfMiddleware<'_> {
     }
 }
 
-impl TryFrom<Version> for HttpVersion {
-    type Error = CacheError;
-
-    fn try_from(value: Version) -> Result<Self> {
-        Ok(match value {
-            Version::Http0_9 => HttpVersion::Http09,
-            Version::Http1_0 => HttpVersion::Http10,
-            Version::Http1_1 => HttpVersion::Http11,
-            Version::Http2_0 => HttpVersion::H2,
-            Version::Http3_0 => HttpVersion::H3,
-            _ => return Err(CacheError::BadVersion),
-        })
-    }
-}
-
-impl From<HttpVersion> for Version {
-    fn from(value: HttpVersion) -> Self {
-        match value {
-            HttpVersion::Http09 => Version::Http0_9,
-            HttpVersion::Http10 => Version::Http1_0,
-            HttpVersion::Http11 => Version::Http1_1,
-            HttpVersion::H2 => Version::Http2_0,
-            HttpVersion::H3 => Version::Http3_0,
-        }
-    }
-}
-
 #[surf::utils::async_trait]
 impl<T: CacheManager + 'static + Send + Sync> surf::middleware::Middleware
     for Cache<T>
 {
     async fn handle(
         &self,
-        req: Request,
-        client: Client,
-        next: Next<'_>,
-    ) -> std::result::Result<Response, http_types::Error> {
+        req: surf::Request,
+        client: surf::Client,
+        next: surf::middleware::Next<'_>,
+    ) -> std::result::Result<surf::Response, http_types::Error> {
         let middleware = SurfMiddleware { req, client, next };
-        let res = self.run(middleware).await?;
-
+        let res = self.0.run(middleware).await?;
         let mut converted =
             http_types::Response::new(http_types::StatusCode::Ok);
         for header in &res.headers {
@@ -177,13 +150,14 @@ impl<T: CacheManager + 'static + Send + Sync> surf::middleware::Middleware
         converted.set_status(res.status.try_into()?);
         converted.set_version(Some(res.version.try_into()?));
         converted.set_body(res.body.clone());
-        Ok(Response::from(converted))
+        Ok(surf::Response::from(converted))
     }
 }
 
+#[cfg(feature = "manager-cacache")]
 #[cfg(test)]
 mod tests {
-    use crate::{CACacheManager, Cache, CacheManager, CacheMode};
+    use crate::{CACacheManager, Cache, CacheManager, CacheMode, HttpCache};
     use mockito::mock;
     use surf::{http::Method, Client, Request, Url};
 
@@ -204,11 +178,11 @@ mod tests {
         manager.delete("GET", &Url::parse(&url)?).await?;
 
         // Construct Surf client with cache defaults
-        let client = Client::new().with(Cache {
+        let client = Client::new().with(Cache(HttpCache {
             mode: CacheMode::Default,
             manager: CACacheManager::default(),
             options: None,
-        });
+        }));
 
         // Cold pass to load cache
         client.send(req.clone()).await?;

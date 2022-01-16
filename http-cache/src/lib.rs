@@ -2,65 +2,13 @@
 //! [`http-cache-semantics`](https://github.com/kornelski/rusty-http-cache-semantics).
 //! By default, it uses [`cacache`](https://github.com/zkat/cacache-rs) as the backend cache manager.
 //!
-//! ## Supported Clients
-//!
-//! - **Surf** **Should likely be registered after any middleware modifying the request*
-//! - **Reqwest** **Uses [reqwest-middleware](https://github.com/TrueLayer/reqwest-middleware) for middleware support*
-//!
-//! ## Examples
-//!
-//! ### Surf (requires feature: `client-surf`)
-//!
-//! ```ignore
-//! use http_cache::{Cache, CacheMode, CACacheManager};
-//!
-//! #[async_std::main]
-//! async fn main() -> surf::Result<()> {
-//!     let req = surf::get("https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching");
-//!     surf::client()
-//!         .with(Cache {
-//!             mode: CacheMode::Default,
-//!             manager: CACacheManager::default(),
-//!             options: None,
-//!         })
-//!         .send(req)
-//!         .await?;
-//!     Ok(())
-//! }
-//! ```
-//!
-//! ### Reqwest (requires feature: `client-reqwest`)
-//!
-//! ```ignore
-//! use reqwest::Client;
-//! use reqwest_middleware::{ClientBuilder, Result};
-//! use http_cache::{Cache, CacheMode, CACacheManager};
-//!
-//! #[tokio::main]
-//! async fn main() -> Result<()> {
-//!     let client = ClientBuilder::new(Client::new())
-//!         .with(Cache {
-//!             mode: CacheMode::Default,
-//!             manager: CACacheManager::default(),
-//!             options: None,
-//!         })
-//!         .build();
-//!     client
-//!         .get("https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching")
-//!         .send()
-//!         .await?;
-//!     Ok(())
-//! }
-//! ```
-//!
 //! ## Features
 //!
 //! The following features are available. By default `manager-cacache` is enabled.
 //!
 //! - `manager-cacache` (default): use [cacache](https://github.com/zkat/cacache-rs),
 //! a high-performance disk cache, for the manager backend.
-//! - `client-surf` (disabled): enables [surf](https://github.com/http-rs/surf) client support.
-//! - `client-reqwest` (disabled): enables [reqwest](https://github.com/seanmonstar/reqwest) client support.
+//! - `with-http-types` (disabled): enable [http-types](https://github.com/http-rs/http-types) type conversion support
 #![forbid(unsafe_code, future_incompatible)]
 #![deny(
     missing_docs,
@@ -76,26 +24,20 @@
 )]
 mod error;
 mod managers;
-mod middleware;
 
-pub use error::CacheError;
-
-#[cfg(feature = "manager-cacache")]
-pub use managers::cacache::CACacheManager;
-
-/// Options struct provided by
-/// [`http-cache-semantics`](https://github.com/kornelski/rusty-http-cache-semantics).
-pub use http_cache_semantics::CacheOptions;
+use std::{
+    collections::HashMap, convert::TryFrom, str::FromStr, time::SystemTime,
+};
 
 use http::{header::CACHE_CONTROL, request, response, StatusCode};
-use std::{collections::HashMap, str::FromStr, time::SystemTime};
-
 use http_cache_semantics::{AfterResponse, BeforeRequest, CachePolicy};
 use serde::{Deserialize, Serialize};
 use url::Url;
 
-/// A `Result` typedef to use with the [`CacheError`] type
-pub type Result<T> = std::result::Result<T, CacheError>;
+pub use error::{CacheError, Result};
+
+#[cfg(feature = "manager-cacache")]
+pub use managers::cacache::CACacheManager;
 
 /// Represents an HTTP version
 #[derive(Debug, Copy, Clone, Deserialize, Serialize)]
@@ -206,24 +148,6 @@ impl HttpResponse {
     }
 }
 
-/// Describes the functionality required for interfacing with HTTP client middleware
-#[async_trait::async_trait]
-pub(crate) trait Middleware {
-    fn is_method_get_head(&self) -> bool;
-    fn policy(&self, response: &HttpResponse) -> Result<CachePolicy>;
-    fn policy_with_options(
-        &self,
-        response: &HttpResponse,
-        options: CacheOptions,
-    ) -> Result<CachePolicy>;
-    fn update_headers(&mut self, parts: request::Parts) -> Result<()>;
-    fn set_no_cache(&mut self) -> Result<()>;
-    fn parts(&self) -> Result<request::Parts>;
-    fn url(&self) -> Result<&Url>;
-    fn method(&self) -> Result<String>;
-    async fn remote_fetch(&mut self) -> Result<HttpResponse>;
-}
-
 /// A trait providing methods for storing, reading, and removing cache records.
 #[async_trait::async_trait]
 pub trait CacheManager {
@@ -245,8 +169,35 @@ pub trait CacheManager {
     async fn delete(&self, method: &str, url: &Url) -> Result<()>;
 }
 
+/// Describes the functionality required for interfacing with HTTP client middleware
+#[async_trait::async_trait]
+pub trait Middleware {
+    /// Determines if the request method is either GET or HEAD
+    fn is_method_get_head(&self) -> bool;
+    /// Returns a new cache policy with default options
+    fn policy(&self, response: &HttpResponse) -> Result<CachePolicy>;
+    /// Returns a new cache policy with custom options
+    fn policy_with_options(
+        &self,
+        response: &HttpResponse,
+        options: CacheOptions,
+    ) -> Result<CachePolicy>;
+    /// Attempts to update the request headers with the passed `http::request::Parts`
+    fn update_headers(&mut self, parts: request::Parts) -> Result<()>;
+    /// Attempts to force the "no-cache" directive on the request
+    fn set_no_cache(&mut self) -> Result<()>;
+    /// Attempts to construct `http::request::Parts` from the request
+    fn parts(&self) -> Result<request::Parts>;
+    /// Attempts to determine the requested url
+    fn url(&self) -> Result<&Url>;
+    /// Attempts to determine the request method
+    fn method(&self) -> Result<String>;
+    /// Attempts to fetch an upstream resource and return an [`HttpResponse`]
+    async fn remote_fetch(&mut self) -> Result<HttpResponse>;
+}
+
 /// Similar to [make-fetch-happen cache options](https://github.com/npm/make-fetch-happen#--optscache).
-/// Passed in when the [`Cache`] struct is being built.
+/// Passed in when the [`HttpCache`] struct is being built.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CacheMode {
     /// Will inspect the HTTP cache on the way to the network.
@@ -275,9 +226,69 @@ pub enum CacheMode {
     OnlyIfCached,
 }
 
+impl TryFrom<http::Version> for HttpVersion {
+    type Error = CacheError;
+
+    fn try_from(value: http::Version) -> Result<Self> {
+        Ok(match value {
+            http::Version::HTTP_09 => HttpVersion::Http09,
+            http::Version::HTTP_10 => HttpVersion::Http10,
+            http::Version::HTTP_11 => HttpVersion::Http11,
+            http::Version::HTTP_2 => HttpVersion::H2,
+            http::Version::HTTP_3 => HttpVersion::H3,
+            _ => return Err(CacheError::BadVersion),
+        })
+    }
+}
+
+impl From<HttpVersion> for http::Version {
+    fn from(value: HttpVersion) -> Self {
+        match value {
+            HttpVersion::Http09 => http::Version::HTTP_09,
+            HttpVersion::Http10 => http::Version::HTTP_10,
+            HttpVersion::Http11 => http::Version::HTTP_11,
+            HttpVersion::H2 => http::Version::HTTP_2,
+            HttpVersion::H3 => http::Version::HTTP_3,
+        }
+    }
+}
+
+#[cfg(feature = "http-types")]
+impl TryFrom<http_types::Version> for HttpVersion {
+    type Error = CacheError;
+
+    fn try_from(value: http_types::Version) -> Result<Self> {
+        Ok(match value {
+            http_types::Version::Http0_9 => HttpVersion::Http09,
+            http_types::Version::Http1_0 => HttpVersion::Http10,
+            http_types::Version::Http1_1 => HttpVersion::Http11,
+            http_types::Version::Http2_0 => HttpVersion::H2,
+            http_types::Version::Http3_0 => HttpVersion::H3,
+            _ => return Err(CacheError::BadVersion),
+        })
+    }
+}
+
+#[cfg(feature = "http-types")]
+impl From<HttpVersion> for http_types::Version {
+    fn from(value: HttpVersion) -> Self {
+        match value {
+            HttpVersion::Http09 => http_types::Version::Http0_9,
+            HttpVersion::Http10 => http_types::Version::Http1_0,
+            HttpVersion::Http11 => http_types::Version::Http1_1,
+            HttpVersion::H2 => http_types::Version::Http2_0,
+            HttpVersion::H3 => http_types::Version::Http3_0,
+        }
+    }
+}
+
+/// Options struct provided by
+/// [`http-cache-semantics`](https://github.com/kornelski/rusty-http-cache-semantics).
+pub use http_cache_semantics::CacheOptions;
+
 /// Caches requests according to http spec.
 #[derive(Debug, Clone)]
-pub struct Cache<T: CacheManager + Send + Sync + 'static> {
+pub struct HttpCache<T: CacheManager + Send + Sync + 'static> {
     /// Determines the manager behavior.
     pub mode: CacheMode,
     /// Manager instance that implements the [`CacheManager`] trait.
@@ -289,8 +300,9 @@ pub struct Cache<T: CacheManager + Send + Sync + 'static> {
 }
 
 #[allow(dead_code)]
-impl<T: CacheManager + Send + Sync + 'static> Cache<T> {
-    pub(crate) async fn run(
+impl<T: CacheManager + Send + Sync + 'static> HttpCache<T> {
+    /// Attempts to run the passed middleware along with the cache
+    pub async fn run(
         &self,
         mut middleware: impl Middleware,
     ) -> Result<HttpResponse> {

@@ -1,21 +1,46 @@
-# http-cache
+# http-cache-reqwest
 
 [![Rust](https://github.com/06chaynes/http-cache/actions/workflows/rust.yml/badge.svg)](https://github.com/06chaynes/http-cache/actions/workflows/rust.yml)
-![crates.io](https://img.shields.io/crates/v/http-cache.svg)
-[![Docs.rs](https://docs.rs/http-cache/badge.svg)](https://docs.rs/http-cache)
+![crates.io](https://img.shields.io/crates/v/http-cache-reqwest.svg)
+[![Docs.rs](https://docs.rs/http-cache-reqwest/badge.svg)](https://docs.rs/http-cache-reqwest)
 
 <img align="right" src="https://raw.githubusercontent.com/06chaynes/http-cache/latest/.assets/images/http-cache_logo_bluegreen.svg" height="150px" alt="the http-cache logo">
 
 A caching middleware that follows HTTP caching rules,
 thanks to [http-cache-semantics](https://github.com/kornelski/rusty-http-cache-semantics).
 By default, it uses [cacache](https://github.com/zkat/cacache-rs) as the backend cache manager.
+Uses [reqwest-middleware](https://github.com/TrueLayer/reqwest-middleware) for middleware support.
 
 ## Install
 
 With [cargo add](https://github.com/killercup/cargo-edit#Installation) installed :
 
 ```sh
-cargo add http-cache
+cargo add http-cache-reqwest
+````
+
+## Example
+
+```rust
+use reqwest::Client;
+use reqwest_middleware::{ClientBuilder, Result};
+use http_cache_reqwest::{Cache, CacheMode, CACacheManager, HttpCache};
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    let client = ClientBuilder::new(Client::new())
+        .with(Cache(HttpCache {
+          mode: CacheMode::Default,
+          manager: CACacheManager::default(),
+          options: None,
+        }))
+        .build();
+    client
+        .get("https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching")
+        .send()
+        .await?;
+    Ok(())
+}
 ```
 
 ## Features
@@ -23,24 +48,19 @@ cargo add http-cache
 The following features are available. By default `manager-cacache` is enabled.
 
 - `manager-cacache` (default): use [cacache](https://github.com/zkat/cacache-rs), a high-performance disk cache, for the manager backend.
-- `with-http-types` (disabled): enable [http-types](https://github.com/http-rs/http-types) type conversion support
 
 ## Documentation
 
-- [API Docs](https://docs.rs/http-cache)
-
-## Provided Client Implementations
-- **Surf**: See [README](http-cache-surf/README.md) for more details
-- **Reqwest**: See [README](http-cache-reqwest/README.md) for more details
+- [API Docs](https://docs.rs/http-cache-reqwest)
 
 ## License
 
 Licensed under either of
 
 - Apache License, Version 2.0
-  ([LICENSE-APACHE](LICENSE-APACHE) or <http://www.apache.org/licenses/LICENSE-2.0>)
+  ([LICENSE-APACHE](../LICENSE-APACHE) or <http://www.apache.org/licenses/LICENSE-2.0>)
 - MIT license
-  ([LICENSE-MIT](LICENSE-MIT) or <http://opensource.org/licenses/MIT>)
+  ([LICENSE-MIT](../LICENSE-MIT) or <http://opensource.org/licenses/MIT>)
 
 at your option.
 

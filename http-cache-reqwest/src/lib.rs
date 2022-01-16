@@ -1,18 +1,17 @@
-//! The reqwest middleware implementation, requires the `client-reqwest` feature.
-//!
+//! The reqwest middleware implementation for http-cache.
 //! ```no_run
 //! use reqwest::Client;
 //! use reqwest_middleware::{ClientBuilder, Result};
-//! use http_cache::{Cache, CacheMode, CACacheManager};
+//! use http_cache_reqwest::{Cache, CacheMode, CACacheManager, HttpCache};
 //!
 //! #[tokio::main]
 //! async fn main() -> Result<()> {
 //!     let client = ClientBuilder::new(Client::new())
-//!         .with(Cache {
+//!         .with(Cache(HttpCache {
 //!             mode: CacheMode::Default,
 //!             manager: CACacheManager::default(),
 //!             options: None,
-//!         })
+//!         }))
 //!         .build();
 //!     client
 //!         .get("https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching")
@@ -21,11 +20,6 @@
 //!     Ok(())
 //! }
 //! ```
-use crate::{
-    Cache, CacheError, CacheManager, HttpResponse, HttpVersion, Middleware,
-    Result,
-};
-
 use anyhow::anyhow;
 use std::{
     collections::HashMap,
@@ -37,14 +31,24 @@ use std::{
 use http::{
     header::{HeaderName, CACHE_CONTROL},
     request::Parts,
-    HeaderValue, Method, Version,
+    HeaderValue, Method,
 };
+use http_cache::{CacheError, CacheManager, Middleware, Result};
 use http_cache_semantics::{CacheOptions, CachePolicy};
 use reqwest::{Request, Response, ResponseBuilderExt};
 use reqwest_middleware::Next;
 use task_local_extensions::Extensions;
 use url::Url;
 
+pub use http_cache::{CacheMode, HttpCache, HttpResponse};
+
+#[cfg(feature = "manager-cacache")]
+pub use http_cache::CACacheManager;
+
+/// Wrapper for [`HttpCache`]
+pub struct Cache<T: CacheManager + Send + Sync + 'static>(pub HttpCache<T>);
+
+/// Implements ['Middleware'] for reqwest
 pub(crate) struct ReqwestMiddleware<'a> {
     pub req: Request,
     pub next: Next<'a>,
@@ -86,7 +90,11 @@ impl Middleware for ReqwestMiddleware<'_> {
     }
     fn parts(&self) -> Result<Parts> {
         let copied_req = self.req.try_clone().ok_or(CacheError::BadRequest)?;
-        Ok(http::Request::try_from(copied_req)?.into_parts().0)
+        let converted = match http::Request::try_from(copied_req) {
+            Ok(r) => r,
+            Err(e) => return Err(CacheError::General(anyhow!(e))),
+        };
+        Ok(converted.into_parts().0)
     }
     fn url(&self) -> Result<&Url> {
         Ok(self.req.url())
@@ -96,7 +104,11 @@ impl Middleware for ReqwestMiddleware<'_> {
     }
     async fn remote_fetch(&mut self) -> Result<HttpResponse> {
         let copied_req = self.req.try_clone().ok_or(CacheError::BadRequest)?;
-        let res = self.next.clone().run(copied_req, self.extensions).await?;
+        let res = match self.next.clone().run(copied_req, self.extensions).await
+        {
+            Ok(r) => r,
+            Err(e) => return Err(CacheError::General(anyhow!(e))),
+        };
         let mut headers = HashMap::new();
         for header in res.headers() {
             headers.insert(
@@ -107,7 +119,11 @@ impl Middleware for ReqwestMiddleware<'_> {
         let url = res.url().clone();
         let status = res.status().into();
         let version = res.version();
-        let body: Vec<u8> = res.text().await?.into_bytes();
+        let body: Vec<u8> = match res.bytes().await {
+            Ok(b) => b,
+            Err(e) => return Err(CacheError::General(anyhow!(e))),
+        }
+        .to_vec();
         Ok(HttpResponse {
             body,
             headers,
@@ -118,55 +134,7 @@ impl Middleware for ReqwestMiddleware<'_> {
     }
 }
 
-impl TryFrom<Version> for HttpVersion {
-    type Error = CacheError;
-
-    fn try_from(value: Version) -> Result<Self> {
-        Ok(match value {
-            Version::HTTP_09 => HttpVersion::Http09,
-            Version::HTTP_10 => HttpVersion::Http10,
-            Version::HTTP_11 => HttpVersion::Http11,
-            Version::HTTP_2 => HttpVersion::H2,
-            Version::HTTP_3 => HttpVersion::H3,
-            _ => return Err(CacheError::BadVersion),
-        })
-    }
-}
-
-impl From<HttpVersion> for Version {
-    fn from(value: HttpVersion) -> Self {
-        match value {
-            HttpVersion::Http09 => Version::HTTP_09,
-            HttpVersion::Http10 => Version::HTTP_10,
-            HttpVersion::Http11 => Version::HTTP_11,
-            HttpVersion::H2 => Version::HTTP_2,
-            HttpVersion::H3 => Version::HTTP_3,
-        }
-    }
-}
-
-#[async_trait::async_trait]
-impl<T: CacheManager + 'static + Send + Sync> reqwest_middleware::Middleware
-    for Cache<T>
-{
-    async fn handle(
-        &self,
-        req: Request,
-        extensions: &mut Extensions,
-        next: Next<'_>,
-    ) -> std::result::Result<Response, reqwest_middleware::Error> {
-        let middleware = ReqwestMiddleware { req, next, extensions };
-        let res = match self.run(middleware).await {
-            Ok(r) => r,
-            Err(e) => {
-                return Err(reqwest_middleware::Error::Middleware(anyhow!(e)));
-            }
-        };
-        let converted = convert_response(res)?;
-        Ok(converted)
-    }
-}
-
+// Converts an [`HttpResponse`] to a reqwest [`Response`]
 fn convert_response(response: HttpResponse) -> anyhow::Result<Response> {
     let mut ret_res = http::Response::builder()
         .status(response.status)
@@ -182,9 +150,34 @@ fn convert_response(response: HttpResponse) -> anyhow::Result<Response> {
     Ok(Response::from(ret_res))
 }
 
+#[async_trait::async_trait]
+impl<T: CacheManager + 'static + Send + Sync> reqwest_middleware::Middleware
+    for Cache<T>
+{
+    async fn handle(
+        &self,
+        req: reqwest::Request,
+        extensions: &mut task_local_extensions::Extensions,
+        next: reqwest_middleware::Next<'_>,
+    ) -> std::result::Result<reqwest::Response, reqwest_middleware::Error> {
+        let middleware = ReqwestMiddleware { req, next, extensions };
+        let res = match self.0.run(middleware).await {
+            Ok(r) => r,
+            Err(e) => {
+                return Err(reqwest_middleware::Error::Middleware(
+                    anyhow::anyhow!(e),
+                ));
+            }
+        };
+        let converted = convert_response(res)?;
+        Ok(converted)
+    }
+}
+
+#[cfg(feature = "manager-cacache")]
 #[cfg(test)]
 mod tests {
-    use crate::{CACacheManager, Cache, CacheManager, CacheMode};
+    use crate::{CACacheManager, Cache, CacheManager, CacheMode, HttpCache};
     use mockito::mock;
     use reqwest::{Client, Url};
     use reqwest_middleware::ClientBuilder;
@@ -206,11 +199,11 @@ mod tests {
 
         // Construct reqwest client with cache defaults
         let client = ClientBuilder::new(Client::new())
-            .with(Cache {
+            .with(Cache(HttpCache {
                 mode: CacheMode::Default,
                 manager: CACacheManager::default(),
                 options: None,
-            })
+            }))
             .build();
 
         // Cold pass to load cache

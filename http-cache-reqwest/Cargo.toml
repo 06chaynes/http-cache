@@ -1,0 +1,43 @@
+[package]
+name = "http-cache-reqwest"
+version = "0.1.0"
+description = "http-cache middleware implementation for reqwest"
+authors = ["Christian Haynes <06chaynes@gmail.com>", "Kat Marchán <kzm@zkat.tech>"]
+repository = "https://github.com/06chaynes/http-cache.git"
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+keywords = ["cache", "http", "middleware", "reqwest"]
+categories = [
+    "caching",
+    "web-programming::http-client"
+]
+edition = "2018"
+
+[dependencies]
+anyhow = "1.0"
+async-trait = "0.1"
+http = "0.2"
+http-cache-semantics = "0.9"
+reqwest = { version = "0.11", default-features = false}
+reqwest-middleware = "0.1"
+serde = { version = "1.0", features = ["derive"] }
+task-local-extensions = "0.1"
+url = { version = "2.2", features = ["serde"] }
+
+[dependencies.http-cache]
+path = "../http-cache"
+version = "0.3"
+
+[dev-dependencies]
+cacache = "9.0"
+tokio = { version = "1.15", features = ["macros", "rt-multi-thread"] }
+mockito = "0.30"
+
+[dev-dependencies.http-cache]
+path = "../http-cache"
+version = "0.3"
+features = ["manager-cacache"]
+
+[features]
+default = ["manager-cacache"]
+manager-cacache = ["http-cache/manager-cacache"]
