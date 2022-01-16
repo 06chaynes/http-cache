@@ -1,4 +1,4 @@
-//! The surf middleware implementation.
+//! The surf middleware implementation for http-cache.
 //! ```no_run
 //! use http_cache_surf::{Cache, CacheMode, CACacheManager, HttpCache};
 //!

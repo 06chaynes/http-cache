@@ -1,4 +1,4 @@
-//! The reqwest middleware implementation.
+//! The reqwest middleware implementation for http-cache.
 //! ```no_run
 //! use reqwest::Client;
 //! use reqwest_middleware::{ClientBuilder, Result};
