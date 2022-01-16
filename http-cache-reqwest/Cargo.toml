@@ -26,6 +26,7 @@ url = { version = "2.2", features = ["serde"] }
 
 [dependencies.http-cache]
 path = "../http-cache"
+version = "0.3"
 
 [dev-dependencies]
 cacache = "9.0"
@@ -34,6 +35,7 @@ mockito = "0.30"
 
 [dev-dependencies.http-cache]
 path = "../http-cache"
+version = "0.3"
 features = ["manager-cacache"]
 
 [features]
