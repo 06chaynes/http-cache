@@ -1,6 +1,12 @@
 name: coverage
 
-on: [push]
+on:
+  push:
+    branches: [ latest ]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
 
 jobs:
   test:
