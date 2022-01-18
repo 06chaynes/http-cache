@@ -476,3 +476,37 @@ impl<T: CacheManager + Send + Sync + 'static> HttpCache<T> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn response_methods_work() -> anyhow::Result<()> {
+        let url = Url::from_str("http://example.com")?;
+        let mut res = HttpResponse {
+            body: b"test".to_vec(),
+            headers: HashMap::default(),
+            status: 200,
+            url: url.clone(),
+            version: HttpVersion::Http11,
+        };
+        res.add_warning(url, 112, "Test Warning");
+        let code = res.warning_code();
+        assert!(code.is_some());
+        assert_eq!(code.unwrap(), 112);
+        res.remove_warning();
+        let code = res.warning_code();
+        assert!(code.is_none());
+        let http_res = http::Response::builder()
+            .header(CACHE_CONTROL.as_str(), "must-revalidate")
+            .status(StatusCode::OK)
+            .body(())?;
+        let parts = http_res.into_parts().0;
+        let cloned_headers = parts.headers.clone();
+        res.update_headers(parts)?;
+        assert!(res.must_revalidate());
+        assert_eq!(res.parts()?.headers, cloned_headers);
+        Ok(())
+    }
+}
