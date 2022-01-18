@@ -507,6 +507,8 @@ mod tests {
         res.update_headers(parts)?;
         assert!(res.must_revalidate());
         assert_eq!(res.parts()?.headers, cloned_headers);
+        res.headers.remove(CACHE_CONTROL.as_str());
+        assert!(!res.must_revalidate());
         Ok(())
     }
 }
