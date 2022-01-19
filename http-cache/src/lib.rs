@@ -517,18 +517,28 @@ mod tests {
     fn can_convert_versions_from_http() -> anyhow::Result<()> {
         let v: HttpVersion = http::Version::HTTP_09.try_into()?;
         assert_eq!(v, HttpVersion::Http09);
+        let v: http::Version = HttpVersion::Http09.into();
+        assert_eq!(v, http::Version::HTTP_09);
 
         let v: HttpVersion = http::Version::HTTP_10.try_into()?;
         assert_eq!(v, HttpVersion::Http10);
+        let v: http::Version = HttpVersion::Http10.into();
+        assert_eq!(v, http::Version::HTTP_10);
 
         let v: HttpVersion = http::Version::HTTP_11.try_into()?;
         assert_eq!(v, HttpVersion::Http11);
+        let v: http::Version = HttpVersion::Http11.into();
+        assert_eq!(v, http::Version::HTTP_11);
 
         let v: HttpVersion = http::Version::HTTP_2.try_into()?;
         assert_eq!(v, HttpVersion::H2);
+        let v: http::Version = HttpVersion::H2.into();
+        assert_eq!(v, http::Version::HTTP_2);
 
         let v: HttpVersion = http::Version::HTTP_3.try_into()?;
         assert_eq!(v, HttpVersion::H3);
+        let v: http::Version = HttpVersion::H3.into();
+        assert_eq!(v, http::Version::HTTP_3);
         Ok(())
     }
 
@@ -537,18 +547,28 @@ mod tests {
     fn can_convert_versions_from_http_types() -> anyhow::Result<()> {
         let v: HttpVersion = http_types::Version::Http0_9.try_into()?;
         assert_eq!(v, HttpVersion::Http09);
+        let v: http_types::Version = HttpVersion::Http09.into();
+        assert_eq!(v, http_types::Version::Http0_9);
 
         let v: HttpVersion = http_types::Version::Http1_0.try_into()?;
         assert_eq!(v, HttpVersion::Http10);
+        let v: http_types::Version = HttpVersion::Http10.into();
+        assert_eq!(v, http_types::Version::Http1_0);
 
         let v: HttpVersion = http_types::Version::Http1_1.try_into()?;
         assert_eq!(v, HttpVersion::Http11);
+        let v: http_types::Version = HttpVersion::Http11.into();
+        assert_eq!(v, http_types::Version::Http1_1);
 
         let v: HttpVersion = http_types::Version::Http2_0.try_into()?;
         assert_eq!(v, HttpVersion::H2);
+        let v: http_types::Version = HttpVersion::H2.into();
+        assert_eq!(v, http_types::Version::Http2_0);
 
         let v: HttpVersion = http_types::Version::Http3_0.try_into()?;
         assert_eq!(v, HttpVersion::H3);
+        let v: http_types::Version = HttpVersion::H3.into();
+        assert_eq!(v, http_types::Version::Http3_0);
         Ok(())
     }
 }
