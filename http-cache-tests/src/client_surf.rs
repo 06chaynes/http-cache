@@ -6,7 +6,7 @@ use surf::{middleware::Next, Client, Request};
 
 #[async_std::test]
 async fn default_mode() -> surf::Result<()> {
-    let m = build_mock_server("max-age=86400, public", TEST_BODY, 200, 1);
+    let m = build_mock_server(CACHEABLE_PUBLIC, TEST_BODY, 200, 1);
     let url = format!("{}/", &mockito::server_url());
     let manager = CACacheManager::default();
     let path = manager.path.clone();
@@ -40,7 +40,7 @@ async fn default_mode() -> surf::Result<()> {
 
 #[async_std::test]
 async fn default_mode_with_options() -> surf::Result<()> {
-    let m = build_mock_server("max-age=86400, private", TEST_BODY, 200, 1);
+    let m = build_mock_server(CACHEABLE_PRIVATE, TEST_BODY, 200, 1);
     let url = format!("{}/", &mockito::server_url());
     let manager = CACacheManager::default();
     let path = manager.path.clone();
@@ -74,7 +74,7 @@ async fn default_mode_with_options() -> surf::Result<()> {
 
 #[async_std::test]
 async fn no_store_mode() -> surf::Result<()> {
-    let m = build_mock_server("max-age=86400, public", TEST_BODY, 200, 2);
+    let m = build_mock_server(CACHEABLE_PUBLIC, TEST_BODY, 200, 2);
     let url = format!("{}/", &mockito::server_url());
     let manager = CACacheManager::default();
     let path = manager.path.clone();
@@ -107,7 +107,7 @@ async fn no_store_mode() -> surf::Result<()> {
 
 #[async_std::test]
 async fn no_cache_mode() -> surf::Result<()> {
-    let m = build_mock_server("max-age=86400, public", TEST_BODY, 200, 2);
+    let m = build_mock_server(CACHEABLE_PUBLIC, TEST_BODY, 200, 2);
     let url = format!("{}/", &mockito::server_url());
     let manager = CACacheManager::default();
     let path = manager.path.clone();
@@ -140,7 +140,7 @@ async fn no_cache_mode() -> surf::Result<()> {
 
 #[async_std::test]
 async fn force_cache_mode() -> surf::Result<()> {
-    let m = build_mock_server("max-age=86400, public", TEST_BODY, 200, 1);
+    let m = build_mock_server(CACHEABLE_PUBLIC, TEST_BODY, 200, 1);
     let url = format!("{}/", &mockito::server_url());
     let manager = CACacheManager::default();
     let path = manager.path.clone();
@@ -179,7 +179,7 @@ mod only_if_cached_mode {
 
     #[async_std::test]
     async fn miss() -> surf::Result<()> {
-        let m = build_mock_server("max-age=86400, public", TEST_BODY, 200, 0);
+        let m = build_mock_server(CACHEABLE_PUBLIC, TEST_BODY, 200, 0);
         let url = format!("{}/", &mockito::server_url());
         let manager = CACacheManager::default();
         let path = manager.path.clone();
@@ -211,7 +211,7 @@ mod only_if_cached_mode {
 
     #[async_std::test]
     async fn hit() -> surf::Result<()> {
-        let m = build_mock_server("max-age=86400, public", TEST_BODY, 200, 1);
+        let m = build_mock_server(CACHEABLE_PUBLIC, TEST_BODY, 200, 1);
         let url = format!("{}/", &mockito::server_url());
         let manager = CACacheManager::default();
         let path = manager.path.clone();

@@ -19,7 +19,7 @@ pub fn build_mock_server(
     status: usize,
     expect: usize,
 ) -> Mock {
-    mock("GET", "/")
+    mock(GET, "/")
         .with_status(status)
         .with_header("cache-control", cache_control_val)
         .with_body(body)
@@ -30,6 +30,10 @@ pub fn build_mock_server(
 const GET: &str = "GET";
 
 const TEST_BODY: &[u8] = b"test";
+
+const CACHEABLE_PUBLIC: &str = "max-age=86400, public";
+
+const CACHEABLE_PRIVATE: &str = "max-age=86400, private";
 
 #[cfg(test)]
 mod http_cache_tests {
