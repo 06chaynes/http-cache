@@ -1,0 +1,31 @@
+[package]
+name = "http-cache-tests"
+version = "0.1.0"
+edition = "2018"
+publish = false
+
+[dependencies]
+anyhow = "1.0"
+async-std = { version = "1.10", features = ["attributes"]}
+cacache = "9.0"
+http = "0.2"
+http-types = "2.12"
+mockito = "0.30"
+reqwest = "0.11"
+reqwest-middleware = "0.1"
+surf = "2.3"
+tokio = { version = "1.15", features = ["macros", "rt-multi-thread"] }
+url = "2.2"
+
+[dependencies.http-cache]
+path = "../http-cache"
+version = "0.3"
+features = ["with-http-types"]
+
+[dependencies.http-cache-surf]
+path = "../http-cache-surf"
+version = "0.1"
+
+[dependencies.http-cache-reqwest]
+path = "../http-cache-reqwest"
+version = "0.1"
