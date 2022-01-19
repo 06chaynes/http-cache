@@ -40,7 +40,7 @@ pub use error::{CacheError, Result};
 pub use managers::cacache::CACacheManager;
 
 /// Represents an HTTP version
-#[derive(Debug, Copy, Clone, Deserialize, Serialize)]
+#[derive(Debug, Copy, Clone, PartialEq, Deserialize, Serialize)]
 #[non_exhaustive]
 pub enum HttpVersion {
     /// HTTP Version 0.9
@@ -480,6 +480,7 @@ impl<T: CacheManager + Send + Sync + 'static> HttpCache<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::convert::TryInto;
 
     #[test]
     fn response_methods_work() -> anyhow::Result<()> {
@@ -509,6 +510,45 @@ mod tests {
         assert_eq!(res.parts()?.headers, cloned_headers);
         res.headers.remove(CACHE_CONTROL.as_str());
         assert!(!res.must_revalidate());
+        Ok(())
+    }
+
+    #[test]
+    fn can_convert_versions_from_http() -> anyhow::Result<()> {
+        let v: HttpVersion = http::Version::HTTP_09.try_into()?;
+        assert_eq!(v, HttpVersion::Http09);
+
+        let v: HttpVersion = http::Version::HTTP_10.try_into()?;
+        assert_eq!(v, HttpVersion::Http10);
+
+        let v: HttpVersion = http::Version::HTTP_11.try_into()?;
+        assert_eq!(v, HttpVersion::Http11);
+
+        let v: HttpVersion = http::Version::HTTP_2.try_into()?;
+        assert_eq!(v, HttpVersion::H2);
+
+        let v: HttpVersion = http::Version::HTTP_3.try_into()?;
+        assert_eq!(v, HttpVersion::H3);
+        Ok(())
+    }
+
+    #[cfg(feature = "http-types")]
+    #[test]
+    fn can_convert_versions_from_http_types() -> anyhow::Result<()> {
+        let v: HttpVersion = http_types::Version::Http0_9.try_into()?;
+        assert_eq!(v, HttpVersion::Http09);
+
+        let v: HttpVersion = http_types::Version::Http1_0.try_into()?;
+        assert_eq!(v, HttpVersion::Http10);
+
+        let v: HttpVersion = http_types::Version::Http1_1.try_into()?;
+        assert_eq!(v, HttpVersion::Http11);
+
+        let v: HttpVersion = http_types::Version::Http2_0.try_into()?;
+        assert_eq!(v, HttpVersion::H2);
+
+        let v: HttpVersion = http_types::Version::Http3_0.try_into()?;
+        assert_eq!(v, HttpVersion::H3);
         Ok(())
     }
 }
