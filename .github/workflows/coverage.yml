@@ -1,9 +1,6 @@
 name: coverage
 
-on:
-  push:
-    branches: [ latest ]
-  pull_request:
+on: [push]
 
 env:
   CARGO_TERM_COLOR: always
