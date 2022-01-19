@@ -191,6 +191,10 @@ mod tests {
         // Try to load cached object
         let data = cacache::read(&path, &key).await;
         assert!(data.is_ok());
+
+        // Hot pass to make sure the expect response was returned
+        let mut res = client.send(req).await?;
+        assert_eq!(res.body_bytes().await?, b"test");
         Ok(())
     }
 }
