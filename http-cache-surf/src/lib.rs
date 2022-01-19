@@ -281,8 +281,7 @@ mod tests {
 
     #[async_std::test]
     async fn force_cache_mode() -> surf::Result<()> {
-        let m =
-            build_mock_server("max-age=86400, public", TEST_BODY, 200, 1);
+        let m = build_mock_server("max-age=86400, public", TEST_BODY, 200, 1);
         let url = format!("{}/", &mockito::server_url());
         let manager = CACacheManager::default();
         let path = manager.path.clone();
