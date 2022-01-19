@@ -9,23 +9,22 @@ mod client_reqwest;
 use http::{header::CACHE_CONTROL, StatusCode};
 use http_cache::*;
 use http_types::{headers::HeaderValue, Method, Version};
+use mockito::{mock, Mock};
 use std::{collections::HashMap, convert::TryInto, str::FromStr};
 use url::Url;
-use wiremock::{matchers::method, Mock, MockServer, ResponseTemplate};
 
-pub(crate) fn build_mock(
+pub fn build_mock_server(
     cache_control_val: &str,
     body: &[u8],
-    status: u16,
-    expect: u64,
+    status: usize,
+    expect: usize,
 ) -> Mock {
-    Mock::given(method(GET))
-        .respond_with(
-            ResponseTemplate::new(status)
-                .insert_header("cache-control", cache_control_val)
-                .set_body_bytes(body),
-        )
+    mock(GET, "/")
+        .with_status(status)
+        .with_header("cache-control", cache_control_val)
+        .with_body(body)
         .expect(expect)
+        .create()
 }
 
 const GET: &str = "GET";

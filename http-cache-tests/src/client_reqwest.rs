@@ -6,10 +6,8 @@ use reqwest_middleware::ClientBuilder;
 
 #[tokio::test]
 async fn default_mode() -> anyhow::Result<()> {
-    let mock_server = MockServer::start().await;
-    let m = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 1);
-    let _mock_guard = mock_server.register_as_scoped(m).await;
-    let url = format!("{}/", &mock_server.uri());
+    let m = build_mock_server(CACHEABLE_PUBLIC, TEST_BODY, 200, 1);
+    let url = format!("{}/", &mockito::server_url());
     let manager = CACacheManager::default();
     let path = manager.path.clone();
     let key = format!("{}:{}", GET, &url);
@@ -28,6 +26,7 @@ async fn default_mode() -> anyhow::Result<()> {
 
     // Cold pass to load cache
     client.get(url.clone()).send().await?;
+    m.assert();
 
     // Try to load cached object
     let data = cacache::read(&path, &key).await;
@@ -36,15 +35,15 @@ async fn default_mode() -> anyhow::Result<()> {
     // Hot pass to make sure the expect response was returned
     let res = client.get(url).send().await?;
     assert_eq!(res.bytes().await?, TEST_BODY);
+    m.assert();
+    manager.clear().await?;
     Ok(())
 }
 
 #[tokio::test]
 async fn default_mode_with_options() -> anyhow::Result<()> {
-    let mock_server = MockServer::start().await;
-    let m = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 1);
-    let _mock_guard = mock_server.register_as_scoped(m).await;
-    let url = format!("{}/", &mock_server.uri());
+    let m = build_mock_server(CACHEABLE_PUBLIC, TEST_BODY, 200, 1);
+    let url = format!("{}/", &mockito::server_url());
     let manager = CACacheManager::default();
     let path = manager.path.clone();
     let key = format!("{}:{}", GET, &url);
@@ -63,6 +62,7 @@ async fn default_mode_with_options() -> anyhow::Result<()> {
 
     // Cold pass to load cache
     client.get(url).send().await?;
+    m.assert();
 
     // Try to load cached object
     let data = cacache::read(&path, &key).await;
@@ -72,10 +72,8 @@ async fn default_mode_with_options() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn no_cache_mode() -> anyhow::Result<()> {
-    let mock_server = MockServer::start().await;
-    let m = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 2);
-    let _mock_guard = mock_server.register_as_scoped(m).await;
-    let url = format!("{}/", &mock_server.uri());
+    let m = build_mock_server(CACHEABLE_PUBLIC, TEST_BODY, 200, 2);
+    let url = format!("{}/", &mockito::server_url());
     let manager = CACacheManager::default();
     let path = manager.path.clone();
     let key = format!("{}:{}", GET, &url);
@@ -101,8 +99,7 @@ async fn no_cache_mode() -> anyhow::Result<()> {
 
     // To verify our endpoint receives the request rather than a cache hit
     client.get(url).send().await?;
-
-    // Added to test clearing the cache
+    m.assert();
     manager.clear().await?;
     Ok(())
 }
