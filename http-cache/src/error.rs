@@ -31,6 +31,10 @@ pub enum CacheError {
     #[error(transparent)]
     #[diagnostic(code(http_cache::invalid_uri))]
     InvalidUri(#[from] http::uri::InvalidUri),
+    /// There was an error parsing the URL
+    #[error(transparent)]
+    #[diagnostic(code(http_cache::invalid_url))]
+    InvalidUrl(#[from] url::ParseError),
     /// There was an error parsing an HTTP header value
     #[error(transparent)]
     #[diagnostic(code(http_cache::invalid_header_value))]
