@@ -39,6 +39,9 @@ pub use error::{CacheError, Result};
 #[cfg(feature = "manager-cacache")]
 pub use managers::cacache::CACacheManager;
 
+#[cfg(feature = "manager-moka")]
+pub use managers::moka::MokaManager;
+
 /// Represents an HTTP version
 #[derive(Debug, Copy, Clone, PartialEq, Deserialize, Serialize)]
 #[non_exhaustive]

@@ -1,4 +1,5 @@
 use crate::*;
+use std::sync::Arc;
 
 use http_cache_surf::Cache;
 
@@ -63,6 +64,39 @@ async fn default_mode_with_options() -> surf::Result<()> {
     // Try to load cached object
     let data = cacache::read(&path, &key).await;
     assert!(data.is_ok());
+
+    // Hot pass to make sure the expect response was returned
+    let mut res = client.send(req).await?;
+    assert_eq!(res.body_bytes().await?, TEST_BODY);
+    m.assert();
+    manager.clear().await?;
+    Ok(())
+}
+
+#[async_std::test]
+async fn default_mode_moka() -> surf::Result<()> {
+    let m = build_mock_server(CACHEABLE_PUBLIC, TEST_BODY, 200, 1);
+    let url = format!("{}/", &mockito::server_url());
+    let manager = Arc::new(MokaManager::default());
+    let req = Request::new(Method::Get, Url::parse(&url)?);
+
+    // Make sure the record doesn't already exist
+    manager.delete(GET, &Url::parse(&url)?).await?;
+
+    // Construct Surf client with cache defaults
+    let client = Client::new().with(Cache(HttpCache {
+        mode: CacheMode::Default,
+        manager: Arc::clone(&manager),
+        options: None,
+    }));
+
+    // Cold pass to load cache
+    client.send(req.clone()).await?;
+
+    // Try to load cached object
+    let data = manager.get(GET, &Url::parse(&url)?).await;
+    assert!(data.is_ok());
+    assert!(data.unwrap().is_some());
 
     // Hot pass to make sure the expect response was returned
     let mut res = client.send(req).await?;
