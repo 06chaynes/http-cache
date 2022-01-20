@@ -26,7 +26,6 @@ async fn default_mode() -> anyhow::Result<()> {
 
     // Cold pass to load cache
     client.get(url.clone()).send().await?;
-    m.assert();
 
     // Try to load cached object
     let data = cacache::read(&path, &key).await;
