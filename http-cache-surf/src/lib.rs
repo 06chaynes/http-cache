@@ -93,8 +93,8 @@ impl Middleware for SurfMiddleware<'_> {
         }
         Ok(converted.into_parts().0)
     }
-    fn url(&self) -> Result<&Url> {
-        Ok(self.req.url())
+    fn url(&self) -> Result<Url> {
+        Ok(self.req.url().clone())
     }
     fn method(&self) -> Result<String> {
         Ok(self.req.method().as_ref().to_string())

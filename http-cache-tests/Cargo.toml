@@ -19,7 +19,7 @@ url = "2.2"
 
 [dependencies.http-cache]
 path = "../http-cache"
-version = "0.3"
+version = "0.4"
 features = ["with-http-types"]
 
 [dependencies.http-cache-surf]
