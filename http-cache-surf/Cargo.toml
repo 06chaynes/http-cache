@@ -30,13 +30,6 @@ features = ["with-http-types"]
 
 [dev-dependencies]
 async-std = { version = "1.10", features = ["attributes"]}
-cacache = "9.0"
-mockito = "0.30"
-
-[dev-dependencies.http-cache]
-path = "../http-cache"
-version = "0.3"
-features = ["manager-cacache"]
 
 [features]
 default = ["manager-cacache"]
