@@ -189,7 +189,7 @@ pub trait Middleware {
     /// Attempts to construct `http::request::Parts` from the request
     fn parts(&self) -> Result<request::Parts>;
     /// Attempts to determine the requested url
-    fn url(&self) -> Result<&Url>;
+    fn url(&self) -> Result<Url>;
     /// Attempts to determine the request method
     fn method(&self) -> Result<String>;
     /// Attempts to fetch an upstream resource and return an [`HttpResponse`]
@@ -313,7 +313,7 @@ impl<T: CacheManager + Send + Sync + 'static> HttpCache<T> {
             return middleware.remote_fetch().await;
         }
         if let Some(store) =
-            self.manager.get(&middleware.method()?, middleware.url()?).await?
+            self.manager.get(&middleware.method()?, &middleware.url()?).await?
         {
             let (mut res, policy) = store;
             let res_url = res.url.clone();
@@ -356,13 +356,13 @@ impl<T: CacheManager + Send + Sync + 'static> HttpCache<T> {
             match self.mode {
                 CacheMode::OnlyIfCached => {
                     // ENOTCACHED
-                    return Ok(HttpResponse {
+                    Ok(HttpResponse {
                         body: b"GatewayTimeout".to_vec(),
                         headers: Default::default(),
                         status: 504,
-                        url: middleware.url()?.clone(),
+                        url: middleware.url()?,
                         version: HttpVersion::Http11,
-                    });
+                    })
                 }
                 _ => self.remote_fetch(&mut middleware).await,
             }
@@ -386,11 +386,11 @@ impl<T: CacheManager + Send + Sync + 'static> HttpCache<T> {
         if is_cacheable {
             Ok(self
                 .manager
-                .put(&middleware.method()?, middleware.url()?, res, policy)
+                .put(&middleware.method()?, &middleware.url()?, res, policy)
                 .await?)
         } else if !middleware.is_method_get_head() {
             self.manager
-                .delete(&middleware.method()?, middleware.url()?)
+                .delete(&middleware.method()?, &middleware.url()?)
                 .await?;
             Ok(res)
         } else {
