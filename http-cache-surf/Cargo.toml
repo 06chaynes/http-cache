@@ -34,3 +34,4 @@ async-std = { version = "1.10", features = ["attributes"]}
 [features]
 default = ["manager-cacache"]
 manager-cacache = ["http-cache/manager-cacache"]
+manager-moka = ["http-cache/manager-moka"]

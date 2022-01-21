@@ -45,6 +45,9 @@ pub use http_cache::{CacheMode, CacheOptions, HttpCache, HttpResponse};
 #[cfg(feature = "manager-cacache")]
 pub use http_cache::CACacheManager;
 
+#[cfg(feature = "manager-moka")]
+pub use http_cache::MokaManager;
+
 /// Wrapper for [`HttpCache`]
 pub struct Cache<T: CacheManager + Send + Sync + 'static>(pub HttpCache<T>);
 
