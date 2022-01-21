@@ -80,9 +80,6 @@ async fn default_mode_moka() -> surf::Result<()> {
     let manager = Arc::new(MokaManager::default());
     let req = Request::new(Method::Get, Url::parse(&url)?);
 
-    // Make sure the record doesn't already exist
-    manager.delete(GET, &Url::parse(&url)?).await?;
-
     // Construct Surf client with cache defaults
     let client = Client::new().with(Cache(HttpCache {
         mode: CacheMode::Default,

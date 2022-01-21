@@ -10,7 +10,7 @@ use url::Url;
 /// Implements [`CacheManager`] with [`moka`](https://github.com/moka-rs/moka) as the backend.
 #[derive(Clone)]
 pub struct MokaManager {
-    /// The instance of `moka::future::Cache` inside an Arc
+    /// The instance of `moka::future::Cache`
     pub cache: Cache<String, Arc<Vec<u8>>>,
 }
 
@@ -37,7 +37,6 @@ fn req_key(method: &str, url: &Url) -> String {
     format!("{}:{}", method, url)
 }
 
-#[allow(dead_code)]
 impl MokaManager {
     /// Clears out the entire cache.
     pub async fn clear(&self) -> Result<()> {
@@ -114,8 +113,6 @@ mod tests {
             version: HttpVersion::Http11,
         };
 
-        // Make sure the record doesn't already exist
-        manager.delete("GET", &url_parsed).await?;
         let policy = CachePolicy::new(&cloned_req, &response);
         manager.put("GET", &url_parsed, http_res, policy).await?;
         let data = manager.get("GET", &url_parsed).await?;
