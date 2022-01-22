@@ -9,22 +9,23 @@ mod client_reqwest;
 use http::{header::CACHE_CONTROL, StatusCode};
 use http_cache::*;
 use http_types::{headers::HeaderValue, Method, Version};
-use mockito::{mock, Mock};
 use std::{collections::HashMap, convert::TryInto, str::FromStr};
 use url::Url;
+use wiremock::{matchers::method, Mock, MockServer, ResponseTemplate};
 
-pub fn build_mock_server(
+pub(crate) fn build_mock(
     cache_control_val: &str,
     body: &[u8],
-    status: usize,
-    expect: usize,
+    status: u16,
+    expect: u64,
 ) -> Mock {
-    mock(GET, "/")
-        .with_status(status)
-        .with_header("cache-control", cache_control_val)
-        .with_body(body)
+    Mock::given(method(GET))
+        .respond_with(
+            ResponseTemplate::new(status)
+                .insert_header("cache-control", cache_control_val)
+                .set_body_bytes(body),
+        )
         .expect(expect)
-        .create()
 }
 
 const GET: &str = "GET";
@@ -126,5 +127,80 @@ mod http_cache_tests {
         let v: http_types::Version = HttpVersion::H3.into();
         assert_eq!(v, http_types::Version::Http3_0);
         Ok(())
+    }
+
+    #[cfg(test)]
+    mod managers {
+        use crate::*;
+        use http_cache_semantics::CachePolicy;
+        use std::sync::Arc;
+
+        #[async_std::test]
+        async fn cacache() -> anyhow::Result<()> {
+            let url = Url::parse("http://example.com")?;
+            let manager = CACacheManager::default();
+            let http_res = HttpResponse {
+                body: TEST_BODY.to_vec(),
+                headers: Default::default(),
+                status: 200,
+                url: url.clone(),
+                version: HttpVersion::Http11,
+            };
+            let req = http::Request::get("http://example.com").body(())?;
+            let res = http::Response::builder()
+                .status(200)
+                .body(TEST_BODY.to_vec())?;
+            let policy = CachePolicy::new(&req, &res);
+            manager.put(GET, &url, http_res.clone(), policy.clone()).await?;
+            let data = manager.get(GET, &url).await?;
+            let body = match data {
+                Some(d) => String::from_utf8(d.0.body)?,
+                None => String::new(),
+            };
+            assert_eq!(&body, "test");
+            manager.delete(GET, &url).await?;
+            let data = manager.get(GET, &url).await?;
+            assert!(data.is_none());
+
+            manager.put(GET, &url, http_res, policy).await?;
+            manager.clear().await?;
+            let data = manager.get(GET, &url).await?;
+            assert!(data.is_none());
+            Ok(())
+        }
+
+        #[async_std::test]
+        async fn moka() -> anyhow::Result<()> {
+            let url = Url::parse("http://example.com")?;
+            let manager = Arc::new(MokaManager::default());
+            let http_res = HttpResponse {
+                body: TEST_BODY.to_vec(),
+                headers: Default::default(),
+                status: 200,
+                url: url.clone(),
+                version: HttpVersion::Http11,
+            };
+            let req = http::Request::get("http://example.com").body(())?;
+            let res = http::Response::builder()
+                .status(200)
+                .body(TEST_BODY.to_vec())?;
+            let policy = CachePolicy::new(&req, &res);
+            manager.put(GET, &url, http_res.clone(), policy.clone()).await?;
+            let data = manager.get(GET, &url).await?;
+            let body = match data {
+                Some(d) => String::from_utf8(d.0.body)?,
+                None => String::new(),
+            };
+            assert_eq!(&body, "test");
+            manager.delete(GET, &url).await?;
+            let data = manager.get(GET, &url).await?;
+            assert!(data.is_none());
+
+            manager.put(GET, &url, http_res, policy).await?;
+            manager.clear().await?;
+            let data = manager.get(GET, &url).await?;
+            assert!(data.is_none());
+            Ok(())
+        }
     }
 }

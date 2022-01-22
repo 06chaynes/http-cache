@@ -7,76 +7,10 @@ use surf::{middleware::Next, Client, Request};
 
 #[async_std::test]
 async fn default_mode() -> surf::Result<()> {
-    let m = build_mock_server(CACHEABLE_PUBLIC, TEST_BODY, 200, 1);
-    let url = format!("{}/", &mockito::server_url());
-    let manager = CACacheManager::default();
-    let path = manager.path.clone();
-    let key = format!("{}:{}", GET, &url);
-    let req = Request::new(Method::Get, Url::parse(&url)?);
-
-    // Make sure the record doesn't already exist
-    manager.delete(GET, &Url::parse(&url)?).await?;
-
-    // Construct Surf client with cache defaults
-    let client = Client::new().with(Cache(HttpCache {
-        mode: CacheMode::Default,
-        manager: CACacheManager::default(),
-        options: None,
-    }));
-
-    // Cold pass to load cache
-    client.send(req.clone()).await?;
-
-    // Try to load cached object
-    let data = cacache::read(&path, &key).await;
-    assert!(data.is_ok());
-
-    // Hot pass to make sure the expect response was returned
-    let mut res = client.send(req).await?;
-    assert_eq!(res.body_bytes().await?, TEST_BODY);
-    m.assert();
-    manager.clear().await?;
-    Ok(())
-}
-
-#[async_std::test]
-async fn default_mode_with_options() -> surf::Result<()> {
-    let m = build_mock_server(CACHEABLE_PRIVATE, TEST_BODY, 200, 1);
-    let url = format!("{}/", &mockito::server_url());
-    let manager = CACacheManager::default();
-    let path = manager.path.clone();
-    let key = format!("{}:{}", GET, &url);
-    let req = Request::new(Method::Get, Url::parse(&url)?);
-
-    // Make sure the record doesn't already exist
-    manager.delete(GET, &Url::parse(&url)?).await?;
-
-    // Construct Surf client with cache options override
-    let client = Client::new().with(Cache(HttpCache {
-        mode: CacheMode::Default,
-        manager: CACacheManager::default(),
-        options: Some(CacheOptions { shared: false, ..Default::default() }),
-    }));
-
-    // Cold pass to load cache
-    client.send(req.clone()).await?;
-
-    // Try to load cached object
-    let data = cacache::read(&path, &key).await;
-    assert!(data.is_ok());
-
-    // Hot pass to make sure the expect response was returned
-    let mut res = client.send(req).await?;
-    assert_eq!(res.body_bytes().await?, TEST_BODY);
-    m.assert();
-    manager.clear().await?;
-    Ok(())
-}
-
-#[async_std::test]
-async fn default_mode_moka() -> surf::Result<()> {
-    let m = build_mock_server(CACHEABLE_PUBLIC, TEST_BODY, 200, 1);
-    let url = format!("{}/", &mockito::server_url());
+    let mock_server = MockServer::start().await;
+    let m = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 1);
+    let _mock_guard = mock_server.register_as_scoped(m).await;
+    let url = format!("{}/", &mock_server.uri());
     let manager = Arc::new(MokaManager::default());
     let req = Request::new(Method::Get, Url::parse(&url)?);
 
@@ -91,34 +25,57 @@ async fn default_mode_moka() -> surf::Result<()> {
     client.send(req.clone()).await?;
 
     // Try to load cached object
-    let data = manager.get(GET, &Url::parse(&url)?).await;
-    assert!(data.is_ok());
-    assert!(data.unwrap().is_some());
+    let data = manager.get(GET, &Url::parse(&url)?).await?;
+    assert!(data.is_some());
 
     // Hot pass to make sure the expect response was returned
     let mut res = client.send(req).await?;
     assert_eq!(res.body_bytes().await?, TEST_BODY);
-    m.assert();
-    manager.clear().await?;
+    Ok(())
+}
+
+#[async_std::test]
+async fn default_mode_with_options() -> surf::Result<()> {
+    let mock_server = MockServer::start().await;
+    let m = build_mock(CACHEABLE_PRIVATE, TEST_BODY, 200, 1);
+    let _mock_guard = mock_server.register_as_scoped(m).await;
+    let url = format!("{}/", &mock_server.uri());
+    let manager = Arc::new(MokaManager::default());
+    let req = Request::new(Method::Get, Url::parse(&url)?);
+
+    // Construct Surf client with cache options override
+    let client = Client::new().with(Cache(HttpCache {
+        mode: CacheMode::Default,
+        manager: Arc::clone(&manager),
+        options: Some(CacheOptions { shared: false, ..Default::default() }),
+    }));
+
+    // Cold pass to load cache
+    client.send(req.clone()).await?;
+
+    // Try to load cached object
+    let data = manager.get(GET, &Url::parse(&url)?).await?;
+    assert!(data.is_some());
+
+    // Hot pass to make sure the expect response was returned
+    let mut res = client.send(req).await?;
+    assert_eq!(res.body_bytes().await?, TEST_BODY);
     Ok(())
 }
 
 #[async_std::test]
 async fn no_store_mode() -> surf::Result<()> {
-    let m = build_mock_server(CACHEABLE_PUBLIC, TEST_BODY, 200, 2);
-    let url = format!("{}/", &mockito::server_url());
-    let manager = CACacheManager::default();
-    let path = manager.path.clone();
-    let key = format!("{}:{}", GET, &url);
+    let mock_server = MockServer::start().await;
+    let m = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 2);
+    let _mock_guard = mock_server.register_as_scoped(m).await;
+    let url = format!("{}/", &mock_server.uri());
+    let manager = Arc::new(MokaManager::default());
     let req = Request::new(Method::Get, Url::parse(&url)?);
-
-    // Make sure the record doesn't already exist
-    manager.delete(GET, &Url::parse(&url)?).await?;
 
     // Construct Surf client with cache defaults
     let client = Client::new().with(Cache(HttpCache {
         mode: CacheMode::NoStore,
-        manager: CACacheManager::default(),
+        manager: Arc::clone(&manager),
         options: None,
     }));
 
@@ -126,32 +83,27 @@ async fn no_store_mode() -> surf::Result<()> {
     client.send(req.clone()).await?;
 
     // Try to load cached object
-    let data = cacache::read(&path, &key).await;
-    assert!(data.is_err());
+    let data = manager.get(GET, &Url::parse(&url)?).await?;
+    assert!(data.is_none());
 
     // To verify our endpoint receives the request rather than a cache hit
     client.send(req.clone()).await?;
-    m.assert();
-    manager.clear().await?;
     Ok(())
 }
 
 #[async_std::test]
 async fn no_cache_mode() -> surf::Result<()> {
-    let m = build_mock_server(CACHEABLE_PUBLIC, TEST_BODY, 200, 2);
-    let url = format!("{}/", &mockito::server_url());
-    let manager = CACacheManager::default();
-    let path = manager.path.clone();
-    let key = format!("{}:{}", GET, &url);
+    let mock_server = MockServer::start().await;
+    let m = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 2);
+    let _mock_guard = mock_server.register_as_scoped(m).await;
+    let url = format!("{}/", &mock_server.uri());
+    let manager = Arc::new(MokaManager::default());
     let req = Request::new(Method::Get, Url::parse(&url)?);
-
-    // Make sure the record doesn't already exist
-    manager.delete(GET, &Url::parse(&url)?).await?;
 
     // Construct Surf client with cache defaults
     let client = Client::new().with(Cache(HttpCache {
         mode: CacheMode::NoCache,
-        manager: CACacheManager::default(),
+        manager: Arc::clone(&manager),
         options: None,
     }));
 
@@ -159,32 +111,27 @@ async fn no_cache_mode() -> surf::Result<()> {
     client.send(req.clone()).await?;
 
     // Try to load cached object
-    let data = cacache::read(&path, &key).await;
-    assert!(data.is_ok());
+    let data = manager.get(GET, &Url::parse(&url)?).await?;
+    assert!(data.is_some());
 
     // To verify our endpoint receives the request rather than a cache hit
     client.send(req.clone()).await?;
-    m.assert();
-    manager.clear().await?;
     Ok(())
 }
 
 #[async_std::test]
 async fn force_cache_mode() -> surf::Result<()> {
-    let m = build_mock_server(CACHEABLE_PUBLIC, TEST_BODY, 200, 1);
-    let url = format!("{}/", &mockito::server_url());
-    let manager = CACacheManager::default();
-    let path = manager.path.clone();
-    let key = format!("{}:{}", GET, &url);
+    let mock_server = MockServer::start().await;
+    let m = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 1);
+    let _mock_guard = mock_server.register_as_scoped(m).await;
+    let url = format!("{}/", &mock_server.uri());
+    let manager = Arc::new(MokaManager::default());
     let req = Request::new(Method::Get, Url::parse(&url)?);
-
-    // Make sure the record doesn't already exist
-    manager.delete(GET, &Url::parse(&url)?).await?;
 
     // Construct Surf client with cache defaults
     let client = Client::new().with(Cache(HttpCache {
         mode: CacheMode::ForceCache,
-        manager: CACacheManager::default(),
+        manager: Arc::clone(&manager),
         options: None,
     }));
 
@@ -192,15 +139,11 @@ async fn force_cache_mode() -> surf::Result<()> {
     client.send(req.clone()).await?;
 
     // Try to load cached object
-    let data = cacache::read(&path, &key).await;
-    assert!(data.is_ok());
+    let data = manager.get(GET, &Url::parse(&url)?).await?;
+    assert!(data.is_some());
 
     // Should result in a cache hit and no remote request
     client.send(req.clone()).await?;
-
-    // Verify endpoint did receive the request
-    m.assert();
-    manager.clear().await?;
     Ok(())
 }
 
@@ -210,20 +153,17 @@ mod only_if_cached_mode {
 
     #[async_std::test]
     async fn miss() -> surf::Result<()> {
-        let m = build_mock_server(CACHEABLE_PUBLIC, TEST_BODY, 200, 0);
-        let url = format!("{}/", &mockito::server_url());
-        let manager = CACacheManager::default();
-        let path = manager.path.clone();
-        let key = format!("{}:{}", GET, &url);
+        let mock_server = MockServer::start().await;
+        let m = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 0);
+        let _mock_guard = mock_server.register_as_scoped(m).await;
+        let url = format!("{}/", &mock_server.uri());
+        let manager = Arc::new(MokaManager::default());
         let req = Request::new(Method::Get, Url::parse(&url)?);
-
-        // Make sure the record doesn't already exist
-        manager.delete(GET, &Url::parse(&url)?).await?;
 
         // Construct Surf client with cache defaults
         let client = Client::new().with(Cache(HttpCache {
             mode: CacheMode::OnlyIfCached,
-            manager: CACacheManager::default(),
+            manager: Arc::clone(&manager),
             options: None,
         }));
 
@@ -231,31 +171,24 @@ mod only_if_cached_mode {
         client.send(req.clone()).await?;
 
         // Try to load cached object
-        let data = cacache::read(&path, &key).await;
-        assert!(data.is_err());
-
-        // Verify endpoint did not receive the request
-        m.assert();
-        manager.clear().await?;
+        let data = manager.get(GET, &Url::parse(&url)?).await?;
+        assert!(data.is_none());
         Ok(())
     }
 
     #[async_std::test]
     async fn hit() -> surf::Result<()> {
-        let m = build_mock_server(CACHEABLE_PUBLIC, TEST_BODY, 200, 1);
-        let url = format!("{}/", &mockito::server_url());
-        let manager = CACacheManager::default();
-        let path = manager.path.clone();
-        let key = format!("{}:{}", GET, &url);
+        let mock_server = MockServer::start().await;
+        let m = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 1);
+        let _mock_guard = mock_server.register_as_scoped(m).await;
+        let url = format!("{}/", &mock_server.uri());
+        let manager = Arc::new(MokaManager::default());
         let req = Request::new(Method::Get, Url::parse(&url)?);
-
-        // Make sure the record doesn't already exist
-        manager.delete(GET, &Url::parse(&url)?).await?;
 
         // Construct Surf client with cache defaults
         let client = Client::new().with(Cache(HttpCache {
             mode: CacheMode::Default,
-            manager: CACacheManager::default(),
+            manager: Arc::clone(&manager),
             options: None,
         }));
 
@@ -263,25 +196,19 @@ mod only_if_cached_mode {
         client.send(req.clone()).await?;
 
         // Try to load cached object
-        let data = cacache::read(&path, &key).await;
-        assert!(data.is_ok());
+        let data = manager.get(GET, &Url::parse(&url)?).await?;
+        assert!(data.is_some());
 
         // Construct Surf client with cache defaults
         let client = Client::new().with(Cache(HttpCache {
             mode: CacheMode::OnlyIfCached,
-            manager: CACacheManager::default(),
+            manager: Arc::clone(&manager),
             options: None,
         }));
 
         // Should result in a cache hit and no remote request
         let mut res = client.send(req.clone()).await?;
-
-        // Check the body
         assert_eq!(res.body_bytes().await?, TEST_BODY);
-
-        // Verify endpoint received only one request
-        m.assert();
-        manager.clear().await?;
         Ok(())
     }
 }
