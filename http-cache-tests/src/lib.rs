@@ -189,11 +189,8 @@ mod http_cache_tests {
             let policy = CachePolicy::new(&req, &res);
             manager.put(GET, &url, http_res.clone(), policy.clone()).await?;
             let data = manager.get(GET, &url).await?;
-            let body = match data {
-                Some(d) => String::from_utf8(d.0.body)?,
-                None => String::new(),
-            };
-            assert_eq!(&body, "test");
+            assert!(data.is_some());
+            assert_eq!(data.unwrap().0.body, TEST_BODY);
             manager.delete(GET, &url).await?;
             let data = manager.get(GET, &url).await?;
             assert!(data.is_none());
