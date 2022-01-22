@@ -171,6 +171,11 @@ mod http_cache_tests {
 
         #[async_std::test]
         async fn moka() -> anyhow::Result<()> {
+            // Added to test custom Debug impl
+            assert_eq!(
+                format!("{:?}", MokaManager::default()),
+                "MokaManager { .. }",
+            );
             let url = Url::parse("http://example.com")?;
             let manager = Arc::new(MokaManager::default());
             let http_res = HttpResponse {
