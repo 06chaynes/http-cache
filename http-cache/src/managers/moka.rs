@@ -17,7 +17,7 @@ pub struct MokaManager {
 impl fmt::Debug for MokaManager {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         // need to add more data, anything helpful
-        f.debug_struct("MokaManager").finish()
+        f.debug_struct("MokaManager").finish_non_exhaustive()
     }
 }
 
