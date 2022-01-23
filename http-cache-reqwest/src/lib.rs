@@ -36,7 +36,7 @@ use http::{
 use http_cache::{CacheError, CacheManager, Middleware, Result};
 use http_cache_semantics::CachePolicy;
 use reqwest::{Request, Response, ResponseBuilderExt};
-use reqwest_middleware::Next;
+use reqwest_middleware::{Error, Next};
 use task_local_extensions::Extensions;
 use url::Url;
 
@@ -44,6 +44,9 @@ pub use http_cache::{CacheMode, CacheOptions, HttpCache, HttpResponse};
 
 #[cfg(feature = "manager-cacache")]
 pub use http_cache::CACacheManager;
+
+#[cfg(feature = "manager-moka")]
+pub use http_cache::MokaManager;
 
 /// Wrapper for [`HttpCache`]
 pub struct Cache<T: CacheManager + Send + Sync + 'static>(pub HttpCache<T>);
@@ -159,15 +162,11 @@ impl<T: CacheManager + 'static + Send + Sync> reqwest_middleware::Middleware
         req: reqwest::Request,
         extensions: &mut task_local_extensions::Extensions,
         next: reqwest_middleware::Next<'_>,
-    ) -> std::result::Result<reqwest::Response, reqwest_middleware::Error> {
+    ) -> std::result::Result<reqwest::Response, Error> {
         let middleware = ReqwestMiddleware { req, next, extensions };
         let res = match self.0.run(middleware).await {
             Ok(r) => r,
-            Err(e) => {
-                return Err(reqwest_middleware::Error::Middleware(
-                    anyhow::anyhow!(e),
-                ));
-            }
+            Err(e) => return Err(Error::Middleware(anyhow::anyhow!(e))),
         };
         let converted = convert_response(res)?;
         Ok(converted)

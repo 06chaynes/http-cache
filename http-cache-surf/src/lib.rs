@@ -24,7 +24,7 @@ use std::{
 use http::{header::CACHE_CONTROL, request, request::Parts};
 use http_cache::{CacheError, CacheManager, Middleware, Result};
 use http_cache_semantics::CachePolicy;
-use http_types::{headers::HeaderValue, Method, Version};
+use http_types::{headers::HeaderValue, Method, Response, StatusCode, Version};
 use surf::{middleware::Next, Client, Request};
 use url::Url;
 
@@ -32,6 +32,9 @@ pub use http_cache::{CacheMode, CacheOptions, HttpCache, HttpResponse};
 
 #[cfg(feature = "manager-cacache")]
 pub use http_cache::CACacheManager;
+
+#[cfg(feature = "manager-moka")]
+pub use http_cache::MokaManager;
 
 /// Wrapper for [`HttpCache`]
 pub struct Cache<T: CacheManager + Send + Sync + 'static>(pub HttpCache<T>);
@@ -141,8 +144,7 @@ impl<T: CacheManager + 'static + Send + Sync> surf::middleware::Middleware
     ) -> std::result::Result<surf::Response, http_types::Error> {
         let middleware = SurfMiddleware { req, client, next };
         let res = self.0.run(middleware).await?;
-        let mut converted =
-            http_types::Response::new(http_types::StatusCode::Ok);
+        let mut converted = Response::new(StatusCode::Ok);
         for header in &res.headers {
             let val = HeaderValue::from_bytes(header.1.as_bytes().to_vec())?;
             converted.insert_header(header.0.as_str(), val);

@@ -8,7 +8,10 @@
 //!
 //! - `manager-cacache` (default): use [cacache](https://github.com/zkat/cacache-rs),
 //! a high-performance disk cache, for the manager backend.
-//! - `with-http-types` (disabled): enable [http-types](https://github.com/http-rs/http-types) type conversion support
+//! - `manager-moka` (disabled): use [moka](https://github.com/moka-rs/moka),
+//! a high-performance in-memory cache, for the manager backend.
+//! - `with-http-types` (disabled): enable [http-types](https://github.com/http-rs/http-types)
+//! type conversion support
 #![forbid(unsafe_code, future_incompatible)]
 #![deny(
     missing_docs,
@@ -38,6 +41,9 @@ pub use error::{CacheError, Result};
 
 #[cfg(feature = "manager-cacache")]
 pub use managers::cacache::CACacheManager;
+
+#[cfg(feature = "manager-moka")]
+pub use managers::moka::MokaManager;
 
 /// Represents an HTTP version
 #[derive(Debug, Copy, Clone, PartialEq, Deserialize, Serialize)]

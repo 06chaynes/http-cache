@@ -49,7 +49,7 @@ pub enum CacheError {
     #[diagnostic(code(http_cache::cacache_error))]
     CaCacheError(#[from] cacache::Error),
     /// Error from bincode
-    #[cfg(feature = "manager-cacache")]
+    #[cfg(any(feature = "manager-cacache", feature = "manager-moka"))]
     #[error(transparent)]
     #[diagnostic(code(http_cache::bincode_error))]
     BincodeError(#[from] Box<bincode::ErrorKind>),

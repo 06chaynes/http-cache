@@ -47,6 +47,7 @@ async fn main() -> surf::Result<()> {
 The following features are available. By default `manager-cacache` is enabled.
 
 - `manager-cacache` (default): use [cacache](https://github.com/zkat/cacache-rs), a high-performance disk cache, for the manager backend.
+- `manager-moka` (disabled): use [moka](https://github.com/moka-rs/moka), a high-performance in-memory cache, for the manager backend.
 
 ## Documentation
 
