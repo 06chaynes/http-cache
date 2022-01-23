@@ -12,6 +12,12 @@ A caching middleware that follows HTTP caching rules,
 thanks to [http-cache-semantics](https://github.com/kornelski/rusty-http-cache-semantics).
 By default, it uses [cacache](https://github.com/zkat/cacache-rs) as the backend cache manager.
 
+## How do I use this?
+
+Likely you won't! At least not directly. Unless you are looking to implement a custom backend cache manager
+or client middleware you'll probably want to pull in one of the existing client implementations instead.
+See the [Provided Client Implementations](#provided-client-implementations) section below.
+
 ## Install
 
 With [cargo add](https://github.com/killercup/cargo-edit#Installation) installed :
@@ -33,6 +39,7 @@ The following features are available. By default `manager-cacache` is enabled.
 - [API Docs](https://docs.rs/http-cache)
 
 ## Provided Client Implementations
+
 - **Surf**: See [README](http-cache-surf/README.md) for more details
 - **Reqwest**: See [README](http-cache-reqwest/README.md) for more details
 
