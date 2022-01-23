@@ -29,7 +29,7 @@ version = "0.4"
 features = ["with-http-types"]
 
 [dev-dependencies]
-async-std = { version = "1.10", features = ["attributes"]}
+async-std = { version = "1.10", features = ["attributes"] }
 
 [features]
 default = ["manager-cacache"]

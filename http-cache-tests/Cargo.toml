@@ -6,7 +6,7 @@ publish = false
 
 [dependencies]
 anyhow = "1.0"
-async-std = { version = "1.10", features = ["attributes"]}
+async-std = { version = "1.10", features = ["attributes"] }
 cacache = "9.0"
 http = "0.2"
 http-cache-semantics = "0.9"
@@ -23,10 +23,10 @@ path = "../http-cache"
 version = "0.4"
 features = ["with-http-types", "manager-moka"]
 
-[dependencies.http-cache-surf]
-path = "../http-cache-surf"
-version = "0.2"
-
 [dependencies.http-cache-reqwest]
 path = "../http-cache-reqwest"
+version = "0.2"
+
+[dependencies.http-cache-surf]
+path = "../http-cache-surf"
 version = "0.2"
