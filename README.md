@@ -18,6 +18,10 @@ Likely you won't! At least not directly. Unless you are looking to implement a c
 or client middleware you'll probably want to pull in one of the existing client implementations instead.
 See the [Provided Client Implementations](#provided-client-implementations) section below.
 
+## Minimum Supported Rust Version (MSRV)
+
+1.54.0
+
 ## Install
 
 With [cargo add](https://github.com/killercup/cargo-edit#Installation) installed :

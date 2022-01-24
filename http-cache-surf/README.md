@@ -14,6 +14,10 @@ thanks to [http-cache-semantics](https://github.com/kornelski/rusty-http-cache-s
 By default, it uses [cacache](https://github.com/zkat/cacache-rs) as the backend cache manager.
 Should likely be registered after any middleware modifying the request.
 
+## Minimum Supported Rust Version (MSRV)
+
+1.54.0
+
 ## Install
 
 With [cargo add](https://github.com/killercup/cargo-edit#Installation) installed :
