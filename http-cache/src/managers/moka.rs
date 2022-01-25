@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use url::Url;
 
 /// Implements [`CacheManager`] with [`moka`](https://github.com/moka-rs/moka) as the backend.
+#[cfg_attr(docsrs, doc(cfg(feature = "manager-moka")))]
 #[derive(Clone)]
 pub struct MokaManager {
     /// The instance of `moka::future::Cache`

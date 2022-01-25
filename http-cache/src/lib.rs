@@ -1,3 +1,16 @@
+#![forbid(unsafe_code, future_incompatible)]
+#![deny(
+    missing_docs,
+    missing_debug_implementations,
+    missing_copy_implementations,
+    nonstandard_style,
+    unused_qualifications,
+    unused_import_braces,
+    unused_extern_crates,
+    trivial_casts,
+    trivial_numeric_casts
+)]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 //! A caching middleware that follows HTTP caching rules, thanks to
 //! [`http-cache-semantics`](https://github.com/kornelski/rusty-http-cache-semantics).
 //! By default, it uses [`cacache`](https://github.com/zkat/cacache-rs) as the backend cache manager.
@@ -12,19 +25,6 @@
 //! a high-performance in-memory cache, for the manager backend.
 //! - `with-http-types` (disabled): enable [http-types](https://github.com/http-rs/http-types)
 //! type conversion support
-#![forbid(unsafe_code, future_incompatible)]
-#![deny(
-    missing_docs,
-    missing_debug_implementations,
-    missing_copy_implementations,
-    nonstandard_style,
-    unused_qualifications,
-    unused_import_braces,
-    unused_extern_crates,
-    rustdoc::missing_doc_code_examples,
-    trivial_casts,
-    trivial_numeric_casts
-)]
 mod error;
 mod managers;
 
@@ -44,6 +44,11 @@ pub use managers::cacache::CACacheManager;
 
 #[cfg(feature = "manager-moka")]
 pub use managers::moka::MokaManager;
+
+// Exposing the moka cache for convenience, renaming to avoid naming conflicts
+#[cfg(feature = "manager-moka")]
+#[cfg_attr(docsrs, doc(cfg(feature = "manager-moka")))]
+pub use moka::future::{Cache as MokaCache, CacheBuilder as MokaCacheBuilder};
 
 /// Represents an HTTP version
 #[derive(Debug, Copy, Clone, PartialEq, Deserialize, Serialize)]

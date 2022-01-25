@@ -1,3 +1,16 @@
+#![forbid(unsafe_code, future_incompatible)]
+#![deny(
+    missing_docs,
+    missing_debug_implementations,
+    missing_copy_implementations,
+    nonstandard_style,
+    unused_qualifications,
+    unused_import_braces,
+    unused_extern_crates,
+    trivial_casts,
+    trivial_numeric_casts
+)]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 //! The reqwest middleware implementation for http-cache.
 //! ```no_run
 //! use reqwest::Client;
@@ -43,12 +56,15 @@ use url::Url;
 pub use http_cache::{CacheMode, CacheOptions, HttpCache, HttpResponse};
 
 #[cfg(feature = "manager-cacache")]
+#[cfg_attr(docsrs, doc(cfg(feature = "manager-cacache")))]
 pub use http_cache::CACacheManager;
 
 #[cfg(feature = "manager-moka")]
-pub use http_cache::MokaManager;
+#[cfg_attr(docsrs, doc(cfg(feature = "manager-moka")))]
+pub use http_cache::{MokaCache, MokaCacheBuilder, MokaManager};
 
 /// Wrapper for [`HttpCache`]
+#[derive(Debug)]
 pub struct Cache<T: CacheManager + Send + Sync + 'static>(pub HttpCache<T>);
 
 /// Implements ['Middleware'] for reqwest
@@ -159,10 +175,10 @@ impl<T: CacheManager + 'static + Send + Sync> reqwest_middleware::Middleware
 {
     async fn handle(
         &self,
-        req: reqwest::Request,
-        extensions: &mut task_local_extensions::Extensions,
-        next: reqwest_middleware::Next<'_>,
-    ) -> std::result::Result<reqwest::Response, Error> {
+        req: Request,
+        extensions: &mut Extensions,
+        next: Next<'_>,
+    ) -> std::result::Result<Response, Error> {
         let middleware = ReqwestMiddleware { req, next, extensions };
         let res = match self.0.run(middleware).await {
             Ok(r) => r,

@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use url::Url;
 
 /// Implements [`CacheManager`] with [`cacache`](https://github.com/zkat/cacache-rs) as the backend.
+#[cfg_attr(docsrs, doc(cfg(feature = "manager-cacache")))]
 #[derive(Debug, Clone)]
 pub struct CACacheManager {
     /// Directory where the cache will be stored.
