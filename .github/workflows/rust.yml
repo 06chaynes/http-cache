@@ -74,12 +74,12 @@ jobs:
       - name: Install Rust
         uses: actions-rs/toolchain@v1
         with:
-          toolchain: stable
-          profile: minimal
+          toolchain: ${{ env.nightly }}
           override: true
       - name: Check documentation
         env:
-          RUSTDOCFLAGS: -D warnings
+          RUSTFLAGS: --cfg docsrs
+          RUSTDOCFLAGS: --cfg docsrs -Dwarnings
         uses: actions-rs/cargo@v1
         with:
           command: doc
