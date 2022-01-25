@@ -74,13 +74,13 @@ jobs:
       - name: Install Rust
         uses: actions-rs/toolchain@v1
         with:
-          toolchain: ${{ env.nightly }}
+          toolchain: nightly
           override: true
       - name: Check documentation
+        uses: actions-rs/cargo@v1
         env:
           RUSTFLAGS: --cfg docsrs
           RUSTDOCFLAGS: --cfg docsrs -Dwarnings
-        uses: actions-rs/cargo@v1
         with:
           command: doc
           args: --no-deps --document-private-items --workspace
