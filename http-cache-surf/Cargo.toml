@@ -25,7 +25,7 @@ url = { version = "2.2.2", features = ["serde"] }
 
 [dependencies.http-cache]
 path = "../http-cache"
-version = "0.4.2"
+version = "0.4.3"
 features = ["with-http-types"]
 
 [dev-dependencies]
