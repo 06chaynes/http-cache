@@ -44,17 +44,17 @@ The following features are available. By default `manager-cacache` is enabled.
 
 ## Provided Client Implementations
 
-- **Surf**: See [README](http-cache-surf/README.md) for more details
-- **Reqwest**: See [README](http-cache-reqwest/README.md) for more details
+- **Surf**: See [README](https://github.com/06chaynes/http-cache/blob/latest/http-cache-surf/README.md) for more details
+- **Reqwest**: See [README](https://github.com/06chaynes/http-cache/blob/latest/http-cache-reqwest/README.md) for more details
 
 ## License
 
 Licensed under either of
 
 - Apache License, Version 2.0
-  ([LICENSE-APACHE](LICENSE-APACHE) or <http://www.apache.org/licenses/LICENSE-2.0>)
+  ([LICENSE-APACHE](https://github.com/06chaynes/http-cache/blob/latest/LICENSE-APACHE) or <http://www.apache.org/licenses/LICENSE-2.0>)
 - MIT license
-  ([LICENSE-MIT](LICENSE-MIT) or <http://opensource.org/licenses/MIT>)
+  ([LICENSE-MIT](https://github.com/06chaynes/http-cache/blob/latest/LICENSE-MIT) or <http://opensource.org/licenses/MIT>)
 
 at your option.
 
