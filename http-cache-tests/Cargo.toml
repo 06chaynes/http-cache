@@ -5,28 +5,28 @@ edition = "2018"
 publish = false
 
 [dependencies]
-anyhow = "1.0"
-async-std = { version = "1.10", features = ["attributes"] }
-cacache = "10.0"
-http = "0.2"
-http-cache-semantics = "0.9"
-http-types = "2.12"
-reqwest = "0.11"
-reqwest-middleware = "0.1"
-surf = "2.3"
-tokio = { version = "1.15", features = ["macros", "rt-multi-thread"] }
-url = "2.2"
-wiremock = "0.5"
+anyhow = "1.0.53"
+async-std = { version = "1.10.0", features = ["attributes"] }
+cacache = "10.0.0"
+http = "0.2.6"
+http-cache-semantics = "0.9.14"
+http-types = "2.12.0"
+reqwest = "0.11.9"
+reqwest-middleware = "0.1.4"
+surf = "2.3.2"
+tokio = { version = "1.16.1", features = ["macros", "rt-multi-thread"] }
+url = "2.2.2"
+wiremock = "0.5.10"
 
 [dependencies.http-cache]
 path = "../http-cache"
-version = "0.4"
+version = "0.4.1"
 features = ["with-http-types", "manager-moka"]
 
 [dependencies.http-cache-reqwest]
 path = "../http-cache-reqwest"
-version = "0.2"
+version = "0.2.1"
 
 [dependencies.http-cache-surf]
 path = "../http-cache-surf"
-version = "0.2"
+version = "0.2.1"
