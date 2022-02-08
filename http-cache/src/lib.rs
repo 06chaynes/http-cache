@@ -399,7 +399,10 @@ impl<T: CacheManager + Send + Sync + 'static> HttpCache<T> {
                 }
                 CacheMode::NoCache => {
                     middleware.set_no_cache()?;
-                    self.conditional_fetch(middleware, res, policy).await
+                    let mut res = self.remote_fetch(&mut middleware).await?;
+                    res.set_cache_status_header(HitOrMiss::MISS)?;
+                    res.set_cache_lookup_status_header(HitOrMiss::HIT)?;
+                    Ok(res)
                 }
                 CacheMode::ForceCache | CacheMode::OnlyIfCached => {
                     //   112 Disconnected operation

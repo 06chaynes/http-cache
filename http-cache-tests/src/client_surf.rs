@@ -22,7 +22,10 @@ async fn default_mode() -> surf::Result<()> {
     }));
 
     // Cold pass to load cache
-    client.send(req.clone()).await?;
+    let res = client.send(req.clone()).await?;
+    let header = res.header("x-cache");
+    assert!(header.is_some());
+    assert_eq!(header.unwrap(), "MISS");
 
     // Try to load cached object
     let data = manager.get(GET, &Url::parse(&url)?).await?;
@@ -90,7 +93,10 @@ async fn no_store_mode() -> surf::Result<()> {
     assert!(data.is_none());
 
     // To verify our endpoint receives the request rather than a cache hit
-    client.send(req.clone()).await?;
+    let res = client.send(req.clone()).await?;
+    let header = res.header("x-cache");
+    assert!(header.is_some());
+    assert_eq!(header.unwrap(), "MISS");
     Ok(())
 }
 
@@ -111,14 +117,26 @@ async fn no_cache_mode() -> surf::Result<()> {
     }));
 
     // Remote request and should cache
-    client.send(req.clone()).await?;
+    let res = client.send(req.clone()).await?;
+    let header = res.header("x-cache-lookup");
+    assert!(header.is_some());
+    assert_eq!(header.unwrap(), "MISS");
+    let header = res.header("x-cache");
+    assert!(header.is_some());
+    assert_eq!(header.unwrap(), "MISS");
 
     // Try to load cached object
     let data = manager.get(GET, &Url::parse(&url)?).await?;
     assert!(data.is_some());
 
     // To verify our endpoint receives the request rather than a cache hit
-    client.send(req.clone()).await?;
+    let res = client.send(req.clone()).await?;
+    let header = res.header("x-cache-lookup");
+    assert!(header.is_some());
+    assert_eq!(header.unwrap(), "HIT");
+    let header = res.header("x-cache");
+    assert!(header.is_some());
+    assert_eq!(header.unwrap(), "MISS");
     Ok(())
 }
 
