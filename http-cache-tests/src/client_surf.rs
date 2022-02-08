@@ -31,6 +31,9 @@ async fn default_mode() -> surf::Result<()> {
     // Hot pass to make sure the expect response was returned
     let mut res = client.send(req).await?;
     assert_eq!(res.body_bytes().await?, TEST_BODY);
+    let header = res.header("x-cache");
+    assert!(header.is_some());
+    assert_eq!(header.unwrap(), "HIT");
     Ok(())
 }
 

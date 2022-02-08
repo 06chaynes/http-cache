@@ -51,13 +51,13 @@ pub use managers::moka::MokaManager;
 pub use moka::future::{Cache as MokaCache, CacheBuilder as MokaCacheBuilder};
 
 // Custom headers used to indicate cache status (hit or miss)
-/// `X-Cache` header: Did this proxy serve the result from cache (HIT for yes, MISS for no)
-pub const XCACHE: &str = "X-Cache";
-/// `X-Cache-Lookup` header: Did the proxy have a cacheable response to the request (HIT for yes, MISS for no)
-pub const XCACHELOOKUP: &str = "X-Cache-Lookup";
+/// `x-cache` header: Did this proxy serve the result from cache (HIT for yes, MISS for no)
+pub const XCACHE: &str = "x-cache";
+/// `x-cache-lookup` header: Did the proxy have a cacheable response to the request (HIT for yes, MISS for no)
+pub const XCACHELOOKUP: &str = "x-cache-lookup";
 
 /// Represents a basic cache status
-/// Used in the custom headers `X-Cache` and `X-Cache-Lookup`
+/// Used in the custom headers `x-cache` and `x-cache-lookup`
 #[derive(Debug, Copy, Clone)]
 pub enum HitOrMiss {
     /// Yes, there was a hit
@@ -183,7 +183,7 @@ impl HttpResponse {
         }
     }
 
-    /// Adds the custom `X-Cache` header to the response
+    /// Adds the custom `x-cache` header to the response
     pub fn set_cache_status_header(
         &mut self,
         cache_status: HitOrMiss,
@@ -192,7 +192,7 @@ impl HttpResponse {
         Ok(())
     }
 
-    /// Adds the custom `X-Cache-Lookup` header to the response
+    /// Adds the custom `x-cache-lookup` header to the response
     pub fn set_cache_lookup_status_header(
         &mut self,
         lookup_status: HitOrMiss,
