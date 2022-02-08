@@ -365,13 +365,12 @@ impl<T: CacheManager + Send + Sync + 'static> HttpCache<T> {
             && self.mode != CacheMode::NoStore
             && self.mode != CacheMode::Reload;
         if !is_cacheable {
-            let mut res = middleware.remote_fetch().await?;
-            res.set_cache_status_header(HitOrMiss::MISS)?;
-            res.set_cache_lookup_status_header(HitOrMiss::MISS)?;
-            return Ok(res);
+            return self.remote_fetch(&mut middleware).await;
         }
-        if let Some(store) =
-            self.manager.get(&middleware.method()?, &middleware.url()?).await?
+        if let Some(store) = self
+            .manager
+            .get(&middleware.method()?.to_uppercase(), &middleware.url()?)
+            .await?
         {
             let (mut res, policy) = store;
             res.set_cache_lookup_status_header(HitOrMiss::HIT)?;
@@ -400,7 +399,6 @@ impl<T: CacheManager + Send + Sync + 'static> HttpCache<T> {
                 CacheMode::NoCache => {
                     middleware.set_no_cache()?;
                     let mut res = self.remote_fetch(&mut middleware).await?;
-                    res.set_cache_status_header(HitOrMiss::MISS)?;
                     res.set_cache_lookup_status_header(HitOrMiss::HIT)?;
                     Ok(res)
                 }
@@ -430,12 +428,7 @@ impl<T: CacheManager + Send + Sync + 'static> HttpCache<T> {
                     res.set_cache_lookup_status_header(HitOrMiss::MISS)?;
                     Ok(res)
                 }
-                _ => {
-                    let mut res = self.remote_fetch(&mut middleware).await?;
-                    res.set_cache_status_header(HitOrMiss::MISS)?;
-                    res.set_cache_lookup_status_header(HitOrMiss::MISS)?;
-                    Ok(res)
-                }
+                _ => self.remote_fetch(&mut middleware).await,
             }
         }
     }
@@ -459,12 +452,15 @@ impl<T: CacheManager + Send + Sync + 'static> HttpCache<T> {
         if is_cacheable {
             Ok(self
                 .manager
-                .put(&middleware.method()?, &middleware.url()?, res, policy)
+                .put(
+                    &middleware.method()?.to_uppercase(),
+                    &middleware.url()?,
+                    res,
+                    policy,
+                )
                 .await?)
         } else if !middleware.is_method_get_head() {
-            self.manager
-                .delete(&middleware.method()?, &middleware.url()?)
-                .await?;
+            self.manager.delete("GET", &middleware.url()?).await?;
             Ok(res)
         } else {
             Ok(res)
@@ -524,7 +520,7 @@ impl<T: CacheManager + Send + Sync + 'static> HttpCache<T> {
                     let mut res = self
                         .manager
                         .put(
-                            &middleware.method()?,
+                            &middleware.method()?.to_uppercase(),
                             &req_url,
                             cached_res,
                             policy,

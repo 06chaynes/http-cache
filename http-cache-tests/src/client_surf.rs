@@ -168,6 +168,43 @@ async fn force_cache_mode() -> surf::Result<()> {
     Ok(())
 }
 
+#[async_std::test]
+async fn delete_after_non_get_head_method_request() -> surf::Result<()> {
+    let mock_server = MockServer::start().await;
+    let m_get = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 1);
+    let m_post = Mock::given(method("POST"))
+        .respond_with(ResponseTemplate::new(201).set_body_bytes("created"))
+        .expect(1);
+    let _mock_guard_get = mock_server.register_as_scoped(m_get).await;
+    let _mock_guard_post = mock_server.register_as_scoped(m_post).await;
+    let url = format!("{}/", &mock_server.uri());
+    let manager = Arc::new(MokaManager::default());
+    let req_get = Request::new(Method::Get, Url::parse(&url)?);
+    let req_post = Request::new(Method::Post, Url::parse(&url)?);
+
+    // Construct Surf client with cache defaults
+    let client = Client::new().with(Cache(HttpCache {
+        mode: CacheMode::Default,
+        manager: Arc::clone(&manager),
+        options: None,
+    }));
+
+    // Cold pass to load cache
+    client.send(req_get).await?;
+
+    // Try to load cached object
+    let data = manager.get(GET, &Url::parse(&url)?).await?;
+    assert!(data.is_some());
+
+    // Post request to make sure the cache object at the same resource was deleted
+    client.send(req_post).await?;
+
+    let data = manager.get(GET, &Url::parse(&url)?).await?;
+    assert!(data.is_none());
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod only_if_cached_mode {
     use super::*;
