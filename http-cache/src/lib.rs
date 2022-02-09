@@ -493,7 +493,7 @@ impl<T: CacheManager + Send + Sync + 'static> HttpCache<T> {
         }
         let req_url = middleware.url()?.clone();
         match middleware.remote_fetch().await {
-            Ok(cond_res) => {
+            Ok(mut cond_res) => {
                 let status = StatusCode::from_u16(cond_res.status)?;
                 if status.is_server_error() && cached_res.must_revalidate() {
                     //   111 Revalidation failed
@@ -521,7 +521,10 @@ impl<T: CacheManager + Send + Sync + 'static> HttpCache<T> {
                             cached_res.update_headers(parts)?;
                         }
                     }
-                    let mut res = self
+                    cached_res.set_cache_status_header(HitOrMiss::HIT)?;
+                    cached_res
+                        .set_cache_lookup_status_header(HitOrMiss::HIT)?;
+                    let res = self
                         .manager
                         .put(
                             &middleware.method()?.to_uppercase(),
@@ -530,8 +533,6 @@ impl<T: CacheManager + Send + Sync + 'static> HttpCache<T> {
                             policy,
                         )
                         .await?;
-                    res.set_cache_status_header(HitOrMiss::HIT)?;
-                    res.set_cache_lookup_status_header(HitOrMiss::HIT)?;
                     Ok(res)
                 } else if cond_res.status == 200 {
                     let policy = match self.options {
@@ -539,7 +540,9 @@ impl<T: CacheManager + Send + Sync + 'static> HttpCache<T> {
                             .policy_with_options(&cond_res, options)?,
                         None => middleware.policy(&cond_res)?,
                     };
-                    let mut res = self
+                    cond_res.set_cache_status_header(HitOrMiss::MISS)?;
+                    cond_res.set_cache_lookup_status_header(HitOrMiss::HIT)?;
+                    let res = self
                         .manager
                         .put(
                             &middleware.method()?.to_uppercase(),
@@ -548,8 +551,6 @@ impl<T: CacheManager + Send + Sync + 'static> HttpCache<T> {
                             policy,
                         )
                         .await?;
-                    res.set_cache_status_header(HitOrMiss::MISS)?;
-                    res.set_cache_lookup_status_header(HitOrMiss::HIT)?;
                     Ok(res)
                 } else {
                     cached_res.set_cache_status_header(HitOrMiss::HIT)?;
