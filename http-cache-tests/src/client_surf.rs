@@ -293,7 +293,7 @@ async fn revalidation_304() -> surf::Result<()> {
     let header = res.header("x-cache-lookup");
     assert_eq!(header.unwrap(), "HIT");
     let header = res.header("x-cache");
-    assert_eq!(header.unwrap(), "MISS");
+    assert_eq!(header.unwrap(), "HIT");
     Ok(())
 }
 

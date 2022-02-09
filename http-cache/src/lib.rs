@@ -530,7 +530,11 @@ impl<T: CacheManager + Send + Sync + 'static> HttpCache<T> {
                             policy,
                         )
                         .await?;
-                    res.set_cache_status_header(HitOrMiss::MISS)?;
+                    if cond_res.status == 304 {
+                        res.set_cache_status_header(HitOrMiss::HIT)?;
+                    } else {
+                        res.set_cache_status_header(HitOrMiss::MISS)?;
+                    }
                     res.set_cache_lookup_status_header(HitOrMiss::HIT)?;
                     Ok(res)
                 } else {
