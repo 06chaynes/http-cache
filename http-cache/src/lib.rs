@@ -373,6 +373,7 @@ impl<T: CacheManager + Send + Sync + 'static> HttpCache<T> {
             .await?
         {
             let (mut res, policy) = store;
+            res.set_cache_lookup_status_header(HitOrMiss::HIT)?;
             let res_url = res.url.clone();
             if let Some(warning_code) = res.warning_code() {
                 // https://tools.ietf.org/html/rfc7234#section-4.3.4
