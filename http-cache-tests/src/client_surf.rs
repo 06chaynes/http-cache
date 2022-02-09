@@ -140,7 +140,7 @@ async fn no_store_mode() -> surf::Result<()> {
     assert!(data.is_none());
 
     // To verify our endpoint receives the request rather than a cache hit
-    let res = client.send(req.clone()).await?;
+    let res = client.send(req).await?;
     let header = res.header("x-cache-lookup");
     assert!(header.is_some());
     assert_eq!(header.unwrap(), "MISS");
@@ -180,7 +180,7 @@ async fn no_cache_mode() -> surf::Result<()> {
     assert!(data.is_some());
 
     // To verify our endpoint receives the request rather than a cache hit
-    let res = client.send(req.clone()).await?;
+    let res = client.send(req).await?;
     let header = res.header("x-cache-lookup");
     assert!(header.is_some());
     assert_eq!(header.unwrap(), "HIT");
@@ -214,7 +214,7 @@ async fn force_cache_mode() -> surf::Result<()> {
     assert!(data.is_some());
 
     // Should result in a cache hit and no remote request
-    client.send(req.clone()).await?;
+    client.send(req).await?;
     Ok(())
 }
 
@@ -318,7 +318,7 @@ mod only_if_cached_mode {
         }));
 
         // Should result in a cache miss and no remote request
-        client.send(req.clone()).await?;
+        client.send(req).await?;
 
         // Try to load cached object
         let data = manager.get(GET, &Url::parse(&url)?).await?;
@@ -357,7 +357,7 @@ mod only_if_cached_mode {
         }));
 
         // Should result in a cache hit and no remote request
-        let mut res = client.send(req.clone()).await?;
+        let mut res = client.send(req).await?;
         assert_eq!(res.body_bytes().await?, TEST_BODY);
         Ok(())
     }
