@@ -205,6 +205,42 @@ async fn delete_after_non_get_head_method_request() -> surf::Result<()> {
     Ok(())
 }
 
+#[async_std::test]
+async fn revalidation_304() -> surf::Result<()> {
+    let mock_server = MockServer::start().await;
+    let m = build_mock("public, must-revalidate", TEST_BODY, 200, 1);
+    let m_304 = Mock::given(method("GET"))
+        .respond_with(ResponseTemplate::new(304))
+        .expect(1);
+    let mock_guard = mock_server.register_as_scoped(m).await;
+    let url = format!("{}/", &mock_server.uri());
+    let manager = Arc::new(MokaManager::default());
+    let req = Request::new(Method::Get, Url::parse(&url)?);
+
+    // Construct Surf client with cache defaults
+    let client = Client::new().with(Cache(HttpCache {
+        mode: CacheMode::Default,
+        manager: Arc::clone(&manager),
+        options: None,
+    }));
+
+    // Cold pass to load cache
+    client.send(req.clone()).await?;
+
+    drop(mock_guard);
+
+    let _mock_guard = mock_server.register_as_scoped(m_304).await;
+
+    // Try to load cached object
+    let data = manager.get(GET, &Url::parse(&url)?).await?;
+    assert!(data.is_some());
+
+    // Hot pass to make sure revalidation request was sent
+    let mut res = client.send(req).await?;
+    assert_eq!(res.body_bytes().await?, TEST_BODY);
+    Ok(())
+}
+
 #[cfg(test)]
 mod only_if_cached_mode {
     use super::*;
