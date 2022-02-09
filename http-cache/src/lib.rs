@@ -460,7 +460,9 @@ impl<T: CacheManager + Send + Sync + 'static> HttpCache<T> {
                 )
                 .await?)
         } else if !middleware.is_method_get_head() {
-            self.manager.delete("GET", &middleware.url()?).await?;
+            if self.manager.get("GET", &middleware.url()?).await?.is_some() {
+                self.manager.delete("GET", &middleware.url()?).await?;
+            }
             Ok(res)
         } else {
             Ok(res)
@@ -504,7 +506,7 @@ impl<T: CacheManager + Send + Sync + 'static> HttpCache<T> {
                     );
                     cached_res.set_cache_status_header(HitOrMiss::HIT)?;
                     Ok(cached_res)
-                } else if cond_res.status == 304 {
+                } else if cond_res.status == 304 || cond_res.status == 200 {
                     let after_res = policy.after_response(
                         &middleware.parts()?,
                         &cond_res.parts()?,

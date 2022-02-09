@@ -70,6 +70,47 @@ async fn default_mode_with_options() -> surf::Result<()> {
 }
 
 #[async_std::test]
+async fn default_mode_no_cache_response() -> surf::Result<()> {
+    let mock_server = MockServer::start().await;
+    let m = build_mock("no-cache", TEST_BODY, 200, 2);
+    let _mock_guard = mock_server.register_as_scoped(m).await;
+    let url = format!("{}/", &mock_server.uri());
+    let manager = Arc::new(MokaManager::default());
+    let req = Request::new(Method::Get, Url::parse(&url)?);
+
+    // Construct Surf client with cache defaults
+    let client = Client::new().with(Cache(HttpCache {
+        mode: CacheMode::Default,
+        manager: Arc::clone(&manager),
+        options: None,
+    }));
+
+    // Cold pass to load cache
+    let res = client.send(req.clone()).await?;
+    let header = res.header("x-cache-lookup");
+    assert!(header.is_some());
+    assert_eq!(header.unwrap(), "MISS");
+    let header = res.header("x-cache");
+    assert!(header.is_some());
+    assert_eq!(header.unwrap(), "MISS");
+
+    // Try to load cached object
+    let data = manager.get(GET, &Url::parse(&url)?).await?;
+    assert!(data.is_some());
+
+    // Hot pass to make sure the expect response was returned
+    let mut res = client.send(req).await?;
+    assert_eq!(res.body_bytes().await?, TEST_BODY);
+    let header = res.header("x-cache-lookup");
+    assert!(header.is_some());
+    assert_eq!(header.unwrap(), "HIT");
+    let header = res.header("x-cache");
+    assert!(header.is_some());
+    assert_eq!(header.unwrap(), "MISS");
+    Ok(())
+}
+
+#[async_std::test]
 async fn no_store_mode() -> surf::Result<()> {
     let mock_server = MockServer::start().await;
     let m = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 2);
