@@ -460,8 +460,9 @@ impl<T: CacheManager + Send + Sync + 'static> HttpCache<T> {
                 )
                 .await?)
         } else if !middleware.is_method_get_head() {
-            if self.manager.get("GET", &middleware.url()?).await?.is_some() {
-                self.manager.delete("GET", &middleware.url()?).await?;
+            match self.manager.delete("GET", &middleware.url()?).await {
+                Ok(()) => {}
+                Err(_e) => {}
             }
             Ok(res)
         } else {
