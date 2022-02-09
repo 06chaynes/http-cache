@@ -373,7 +373,6 @@ impl<T: CacheManager + Send + Sync + 'static> HttpCache<T> {
             .await?
         {
             let (mut res, policy) = store;
-            res.set_cache_lookup_status_header(HitOrMiss::HIT)?;
             let res_url = res.url.clone();
             if let Some(warning_code) = res.warning_code() {
                 // https://tools.ietf.org/html/rfc7234#section-4.3.4
@@ -482,6 +481,7 @@ impl<T: CacheManager + Send + Sync + 'static> HttpCache<T> {
             BeforeRequest::Fresh(parts) => {
                 cached_res.update_headers(parts)?;
                 cached_res.set_cache_status_header(HitOrMiss::HIT)?;
+                cached_res.set_cache_lookup_status_header(HitOrMiss::HIT)?;
                 return Ok(cached_res);
             }
             BeforeRequest::Stale { request: parts, matches } => {
@@ -530,6 +530,7 @@ impl<T: CacheManager + Send + Sync + 'static> HttpCache<T> {
                         )
                         .await?;
                     res.set_cache_status_header(HitOrMiss::MISS)?;
+                    res.set_cache_lookup_status_header(HitOrMiss::HIT)?;
                     Ok(res)
                 } else {
                     cached_res.set_cache_status_header(HitOrMiss::HIT)?;

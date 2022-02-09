@@ -23,6 +23,9 @@ async fn default_mode() -> surf::Result<()> {
 
     // Cold pass to load cache
     let res = client.send(req.clone()).await?;
+    let header = res.header("x-cache-lookup");
+    assert!(header.is_some());
+    assert_eq!(header.unwrap(), "MISS");
     let header = res.header("x-cache");
     assert!(header.is_some());
     assert_eq!(header.unwrap(), "MISS");
@@ -34,6 +37,9 @@ async fn default_mode() -> surf::Result<()> {
     // Hot pass to make sure the expect response was returned
     let mut res = client.send(req).await?;
     assert_eq!(res.body_bytes().await?, TEST_BODY);
+    let header = res.header("x-cache-lookup");
+    assert!(header.is_some());
+    assert_eq!(header.unwrap(), "HIT");
     let header = res.header("x-cache");
     assert!(header.is_some());
     assert_eq!(header.unwrap(), "HIT");
@@ -135,6 +141,9 @@ async fn no_store_mode() -> surf::Result<()> {
 
     // To verify our endpoint receives the request rather than a cache hit
     let res = client.send(req.clone()).await?;
+    let header = res.header("x-cache-lookup");
+    assert!(header.is_some());
+    assert_eq!(header.unwrap(), "MISS");
     let header = res.header("x-cache");
     assert!(header.is_some());
     assert_eq!(header.unwrap(), "MISS");
@@ -279,6 +288,12 @@ async fn revalidation_304() -> surf::Result<()> {
     // Hot pass to make sure revalidation request was sent
     let mut res = client.send(req).await?;
     assert_eq!(res.body_bytes().await?, TEST_BODY);
+    let header = res.header("x-cache-lookup");
+    assert!(header.is_some());
+    assert_eq!(header.unwrap(), "HIT");
+    let header = res.header("x-cache");
+    assert!(header.is_some());
+    assert_eq!(header.unwrap(), "MISS");
     Ok(())
 }
 
