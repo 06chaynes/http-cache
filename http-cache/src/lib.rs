@@ -508,7 +508,7 @@ impl<T: CacheManager + Send + Sync + 'static> HttpCache<T> {
                     );
                     cached_res.set_cache_status_header(HitOrMiss::HIT)?;
                     Ok(cached_res)
-                } else if cond_res.status == 304 || cond_res.status == 200 {
+                } else if cond_res.status == 304 {
                     let after_res = policy.after_response(
                         &middleware.parts()?,
                         &cond_res.parts()?,
@@ -530,11 +530,25 @@ impl<T: CacheManager + Send + Sync + 'static> HttpCache<T> {
                             policy,
                         )
                         .await?;
-                    if cond_res.status == 304 {
-                        res.set_cache_status_header(HitOrMiss::HIT)?;
-                    } else {
-                        res.set_cache_status_header(HitOrMiss::MISS)?;
-                    }
+                    res.set_cache_status_header(HitOrMiss::HIT)?;
+                    res.set_cache_lookup_status_header(HitOrMiss::HIT)?;
+                    Ok(res)
+                } else if cond_res.status == 200 {
+                    let policy = match self.options {
+                        Some(options) => middleware
+                            .policy_with_options(&cond_res, options)?,
+                        None => middleware.policy(&cond_res)?,
+                    };
+                    let mut res = self
+                        .manager
+                        .put(
+                            &middleware.method()?.to_uppercase(),
+                            &req_url,
+                            cond_res,
+                            policy,
+                        )
+                        .await?;
+                    res.set_cache_status_header(HitOrMiss::MISS)?;
                     res.set_cache_lookup_status_header(HitOrMiss::HIT)?;
                     Ok(res)
                 } else {
