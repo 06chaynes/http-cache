@@ -236,7 +236,7 @@ async fn delete_after_non_get_head_method_request() -> surf::Result<()> {
 #[async_std::test]
 async fn revalidation_304() -> surf::Result<()> {
     let mock_server = MockServer::start().await;
-    let m = build_mock("public, must-revalidate", TEST_BODY, 200, 1);
+    let m = build_mock(MUST_REVALIDATE, TEST_BODY, 200, 1);
     let m_304 = Mock::given(method(GET))
         .respond_with(ResponseTemplate::new(304))
         .expect(1);
