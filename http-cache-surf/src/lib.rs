@@ -92,7 +92,7 @@ impl Middleware for SurfMiddleware<'_> {
         }
         Ok(())
     }
-    fn set_no_cache(&mut self) -> Result<()> {
+    fn force_no_cache(&mut self) -> Result<()> {
         self.req.insert_header(CACHE_CONTROL.as_str(), "no-cache");
         Ok(())
     }

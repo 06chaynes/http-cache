@@ -236,7 +236,7 @@ pub trait Middleware {
     /// Attempts to update the request headers with the passed `http::request::Parts`
     fn update_headers(&mut self, parts: request::Parts) -> Result<()>;
     /// Attempts to force the "no-cache" directive on the request
-    fn set_no_cache(&mut self) -> Result<()>;
+    fn force_no_cache(&mut self) -> Result<()>;
     /// Attempts to construct `http::request::Parts` from the request
     fn parts(&self) -> Result<request::Parts>;
     /// Attempts to determine the requested url
@@ -393,7 +393,7 @@ impl<T: CacheManager + Send + Sync + 'static> HttpCache<T> {
                     self.conditional_fetch(middleware, res, policy).await
                 }
                 CacheMode::NoCache => {
-                    middleware.set_no_cache()?;
+                    middleware.force_no_cache()?;
                     let mut res = self.remote_fetch(&mut middleware).await?;
                     res.cache_lookup_status(HitOrMiss::HIT)?;
                     Ok(res)

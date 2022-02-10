@@ -101,7 +101,7 @@ impl Middleware for ReqwestMiddleware<'_> {
         }
         Ok(())
     }
-    fn set_no_cache(&mut self) -> Result<()> {
+    fn force_no_cache(&mut self) -> Result<()> {
         self.req
             .headers_mut()
             .insert(CACHE_CONTROL, HeaderValue::from_str("no-cache")?);
