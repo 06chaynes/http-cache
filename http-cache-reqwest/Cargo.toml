@@ -17,7 +17,7 @@ edition = "2018"
 anyhow = "1.0.53"
 async-trait = "0.1.52"
 http = "0.2.6"
-http-cache-semantics = "0.9.14"
+http-cache-semantics = "1.0.0"
 reqwest = { version = "0.11.9", default-features = false }
 reqwest-middleware = "0.1.4"
 serde = { version = "1.0.136", features = ["derive"] }
