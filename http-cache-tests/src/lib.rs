@@ -36,6 +36,12 @@ const CACHEABLE_PUBLIC: &str = "max-age=86400, public";
 
 const CACHEABLE_PRIVATE: &str = "max-age=86400, private";
 
+const MUST_REVALIDATE: &str = "public, must-revalidate";
+
+const HIT: &str = "HIT";
+
+const MISS: &str = "MISS";
+
 #[cfg(test)]
 mod http_cache_tests {
     use crate::*;
