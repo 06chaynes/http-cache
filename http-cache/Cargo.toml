@@ -11,7 +11,7 @@ categories = [
     "caching",
     "web-programming::http-client"
 ]
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 anyhow = "1.0.53"
