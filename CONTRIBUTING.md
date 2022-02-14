@@ -3,7 +3,7 @@
 First off, thank you for considering contributing to http-cache.
 
 If your contribution is not straightforward, please first discuss the change you
-wish to make by creating a new [issue](https://github.com/06chaynes/http-cache/issues) 
+wish to make by creating a new [issue](https://github.com/06chaynes/http-cache/issues)
 or [discussion](https://github.com/06chaynes/http-cache/discussions) before making the change.
 
 ## Reporting issues
