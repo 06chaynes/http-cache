@@ -497,11 +497,7 @@ impl<T: CacheManager + Send + Sync + 'static> HttpCache<T> {
                     //   because an attempt to revalidate the response failed,
                     //   due to an inability to reach the server.
                     // (https://tools.ietf.org/html/rfc2616#section-14.46)
-                    cached_res.add_warning(
-                        req_url,
-                        111,
-                        "Revalidation failed",
-                    );
+                    cached_res.add_warning(req_url, 111, "Revalidation failed");
                     cached_res.cache_status(HitOrMiss::HIT)?;
                     Ok(cached_res)
                 } else if cond_res.status == 304 {
