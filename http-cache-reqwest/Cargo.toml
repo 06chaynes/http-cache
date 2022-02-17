@@ -29,7 +29,7 @@ path = "../http-cache"
 version = "0.5.0"
 
 [dev-dependencies]
-tokio = { version = "1.16.1", features = ["macros", "rt-multi-thread"] }
+tokio = { version = "1.17.0", features = ["macros", "rt-multi-thread"] }
 
 [features]
 default = ["manager-cacache"]
