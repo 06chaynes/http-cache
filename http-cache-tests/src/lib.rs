@@ -56,7 +56,7 @@ mod http_cache_tests {
             url: url.clone(),
             version: HttpVersion::Http11,
         };
-        res.add_warning(url, 112, "Test Warning");
+        res.add_warning(&url, 112, "Test Warning");
         let code = res.warning_code();
         assert!(code.is_some());
         assert_eq!(code.unwrap(), 112);

@@ -136,7 +136,7 @@ impl HttpResponse {
     }
 
     /// Adds a warning header to a response
-    pub fn add_warning(&mut self, url: Url, code: usize, message: &str) {
+    pub fn add_warning(&mut self, url: &Url, code: usize, message: &str) {
         // Warning    = "Warning" ":" 1#warning-value
         // warning-value = warn-code SP warn-agent SP warn-text [SP warn-date]
         // warn-code  = 3DIGIT
@@ -403,7 +403,7 @@ impl<T: CacheManager + Send + Sync + 'static> HttpCache<T> {
                     // SHOULD be included if the cache is intentionally disconnected from
                     // the rest of the network for a period of time.
                     // (https://tools.ietf.org/html/rfc2616#section-14.46)
-                    res.add_warning(res_url, 112, "Disconnected operation");
+                    res.add_warning(&res_url, 112, "Disconnected operation");
                     res.cache_status(HitOrMiss::HIT)?;
                     Ok(res)
                 }
@@ -497,7 +497,11 @@ impl<T: CacheManager + Send + Sync + 'static> HttpCache<T> {
                     //   because an attempt to revalidate the response failed,
                     //   due to an inability to reach the server.
                     // (https://tools.ietf.org/html/rfc2616#section-14.46)
-                    cached_res.add_warning(req_url, 111, "Revalidation failed");
+                    cached_res.add_warning(
+                        &req_url,
+                        111,
+                        "Revalidation failed",
+                    );
                     cached_res.cache_status(HitOrMiss::HIT)?;
                     Ok(cached_res)
                 } else if cond_res.status == 304 {
@@ -557,7 +561,11 @@ impl<T: CacheManager + Send + Sync + 'static> HttpCache<T> {
                     //   because an attempt to revalidate the response failed,
                     //   due to an inability to reach the server.
                     // (https://tools.ietf.org/html/rfc2616#section-14.46)
-                    cached_res.add_warning(req_url, 111, "Revalidation failed");
+                    cached_res.add_warning(
+                        &req_url,
+                        111,
+                        "Revalidation failed",
+                    );
                     cached_res.cache_status(HitOrMiss::HIT)?;
                     Ok(cached_res)
                 }
