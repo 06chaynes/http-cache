@@ -280,11 +280,11 @@ impl TryFrom<http::Version> for HttpVersion {
 
     fn try_from(value: http::Version) -> Result<Self> {
         Ok(match value {
-            http::Version::HTTP_09 => HttpVersion::Http09,
-            http::Version::HTTP_10 => HttpVersion::Http10,
-            http::Version::HTTP_11 => HttpVersion::Http11,
-            http::Version::HTTP_2 => HttpVersion::H2,
-            http::Version::HTTP_3 => HttpVersion::H3,
+            http::Version::HTTP_09 => Self::Http09,
+            http::Version::HTTP_10 => Self::Http10,
+            http::Version::HTTP_11 => Self::Http11,
+            http::Version::HTTP_2 => Self::H2,
+            http::Version::HTTP_3 => Self::H3,
             _ => return Err(CacheError::BadVersion),
         })
     }
@@ -293,11 +293,11 @@ impl TryFrom<http::Version> for HttpVersion {
 impl From<HttpVersion> for http::Version {
     fn from(value: HttpVersion) -> Self {
         match value {
-            HttpVersion::Http09 => http::Version::HTTP_09,
-            HttpVersion::Http10 => http::Version::HTTP_10,
-            HttpVersion::Http11 => http::Version::HTTP_11,
-            HttpVersion::H2 => http::Version::HTTP_2,
-            HttpVersion::H3 => http::Version::HTTP_3,
+            HttpVersion::Http09 => Self::HTTP_09,
+            HttpVersion::Http10 => Self::HTTP_10,
+            HttpVersion::Http11 => Self::HTTP_11,
+            HttpVersion::H2 => Self::HTTP_2,
+            HttpVersion::H3 => Self::HTTP_3,
         }
     }
 }
@@ -308,11 +308,11 @@ impl TryFrom<http_types::Version> for HttpVersion {
 
     fn try_from(value: http_types::Version) -> Result<Self> {
         Ok(match value {
-            http_types::Version::Http0_9 => HttpVersion::Http09,
-            http_types::Version::Http1_0 => HttpVersion::Http10,
-            http_types::Version::Http1_1 => HttpVersion::Http11,
-            http_types::Version::Http2_0 => HttpVersion::H2,
-            http_types::Version::Http3_0 => HttpVersion::H3,
+            http_types::Version::Http0_9 => Self::Http09,
+            http_types::Version::Http1_0 => Self::Http10,
+            http_types::Version::Http1_1 => Self::Http11,
+            http_types::Version::Http2_0 => Self::H2,
+            http_types::Version::Http3_0 => Self::H3,
             _ => return Err(CacheError::BadVersion),
         })
     }
@@ -322,11 +322,11 @@ impl TryFrom<http_types::Version> for HttpVersion {
 impl From<HttpVersion> for http_types::Version {
     fn from(value: HttpVersion) -> Self {
         match value {
-            HttpVersion::Http09 => http_types::Version::Http0_9,
-            HttpVersion::Http10 => http_types::Version::Http1_0,
-            HttpVersion::Http11 => http_types::Version::Http1_1,
-            HttpVersion::H2 => http_types::Version::Http2_0,
-            HttpVersion::H3 => http_types::Version::Http3_0,
+            HttpVersion::Http09 => Self::Http0_9,
+            HttpVersion::Http10 => Self::Http1_0,
+            HttpVersion::Http11 => Self::Http1_1,
+            HttpVersion::H2 => Self::Http2_0,
+            HttpVersion::H3 => Self::Http3_0,
         }
     }
 }
