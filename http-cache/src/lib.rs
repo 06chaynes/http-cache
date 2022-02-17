@@ -129,6 +129,7 @@ impl HttpResponse {
     }
 
     /// Returns the status code of the warning header if present
+    #[must_use]
     pub fn warning_code(&self) -> Option<usize> {
         self.headers.get("Warning").and_then(|hdr| {
             hdr.as_str().chars().take(3).collect::<String>().parse().ok()
@@ -175,6 +176,7 @@ impl HttpResponse {
     }
 
     /// Checks if the Cache-Control header contains the must-revalidate directive
+    #[must_use]
     pub fn must_revalidate(&self) -> bool {
         self.headers.get(CACHE_CONTROL.as_str()).map_or(false, |val| {
             val.as_str().to_lowercase().contains("must-revalidate")
