@@ -370,7 +370,6 @@ impl<T: CacheManager + Send + Sync + 'static> HttpCache<T> {
         {
             let (mut res, policy) = store;
             res.cache_lookup_status(HitOrMiss::HIT)?;
-            let res_url = res.url.clone();
             if let Some(warning_code) = res.warning_code() {
                 // https://tools.ietf.org/html/rfc7234#section-4.3.4
                 //
@@ -403,7 +402,11 @@ impl<T: CacheManager + Send + Sync + 'static> HttpCache<T> {
                     // SHOULD be included if the cache is intentionally disconnected from
                     // the rest of the network for a period of time.
                     // (https://tools.ietf.org/html/rfc2616#section-14.46)
-                    res.add_warning(&res_url, 112, "Disconnected operation");
+                    res.add_warning(
+                        &res.url.clone(),
+                        112,
+                        "Disconnected operation",
+                    );
                     res.cache_status(HitOrMiss::HIT)?;
                     Ok(res)
                 }
@@ -487,7 +490,7 @@ impl<T: CacheManager + Send + Sync + 'static> HttpCache<T> {
                 }
             }
         }
-        let req_url = middleware.url()?.clone();
+        let req_url = middleware.url()?;
         match middleware.remote_fetch().await {
             Ok(mut cond_res) => {
                 let status = StatusCode::from_u16(cond_res.status)?;
