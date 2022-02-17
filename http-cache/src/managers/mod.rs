@@ -1,5 +1,5 @@
 #[cfg(feature = "manager-cacache")]
-pub(crate) mod cacache;
+pub mod cacache;
 
 #[cfg(feature = "manager-moka")]
-pub(crate) mod moka;
+pub mod moka;
