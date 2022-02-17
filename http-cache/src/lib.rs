@@ -118,7 +118,7 @@ impl HttpResponse {
             response::Builder::new().status(self.status).body(())?;
         {
             let headers = converted.headers_mut();
-            for header in self.headers.iter() {
+            for header in &self.headers {
                 headers.insert(
                     http::header::HeaderName::from_str(header.0.as_str())?,
                     http::HeaderValue::from_str(header.1.as_str())?,
