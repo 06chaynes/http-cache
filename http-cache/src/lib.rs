@@ -176,11 +176,9 @@ impl HttpResponse {
 
     /// Checks if the Cache-Control header contains the must-revalidate directive
     pub fn must_revalidate(&self) -> bool {
-        if let Some(val) = self.headers.get(CACHE_CONTROL.as_str()) {
+        self.headers.get(CACHE_CONTROL.as_str()).map_or(false, |val| {
             val.as_str().to_lowercase().contains("must-revalidate")
-        } else {
-            false
-        }
+        })
     }
 
     /// Adds the custom `x-cache` header to the response
