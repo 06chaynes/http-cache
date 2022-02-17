@@ -13,16 +13,16 @@ pub enum CacheError {
     General(#[from] anyhow::Error),
     /// Error from http
     #[error(transparent)]
-    #[diagnostic(code(http_cache::http_error))]
-    HttpError(#[from] http::Error),
+    #[diagnostic(code(http_cache::http))]
+    Http(#[from] http::Error),
     /// There was an error parsing the HTTP status code
     #[error(transparent)]
     #[diagnostic(code(http_cache::invalid_status_code))]
     InvalidStatusCode(#[from] http::status::InvalidStatusCode),
     /// There was an error converting the header to a string
     #[error(transparent)]
-    #[diagnostic(code(http_cache::header_to_str_error))]
-    HeaderToStrError(#[from] http::header::ToStrError),
+    #[diagnostic(code(http_cache::header_to_str))]
+    HeaderToStr(#[from] http::header::ToStrError),
     /// There was an error parsing the HTTP method
     #[error(transparent)]
     #[diagnostic(code(http_cache::invalid_method))]
@@ -46,13 +46,13 @@ pub enum CacheError {
     /// Error from cacache
     #[cfg(feature = "manager-cacache")]
     #[error(transparent)]
-    #[diagnostic(code(http_cache::cacache_error))]
-    CaCacheError(#[from] cacache::Error),
+    #[diagnostic(code(http_cache::cacache))]
+    CaCache(#[from] cacache::Error),
     /// Error from bincode
     #[cfg(any(feature = "manager-cacache", feature = "manager-moka"))]
     #[error(transparent)]
-    #[diagnostic(code(http_cache::bincode_error))]
-    BincodeError(#[from] Box<bincode::ErrorKind>),
+    #[diagnostic(code(http_cache::bincode))]
+    Bincode(#[from] Box<bincode::ErrorKind>),
     /// There was an error parsing the HTTP request version
     #[error("Unknown HTTP version")]
     #[diagnostic(code(http_cache::bad_version))]
