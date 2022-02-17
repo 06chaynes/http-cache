@@ -112,7 +112,7 @@ pub struct HttpResponse {
 }
 
 impl HttpResponse {
-    /// Returns http::response::Parts
+    /// Returns `http::response::Parts`
     pub fn parts(&self) -> Result<response::Parts> {
         let mut converted =
             response::Builder::new().status(self.status).body(())?;
@@ -163,8 +163,8 @@ impl HttpResponse {
         self.headers.remove("Warning");
     }
 
-    /// Update the headers from http::response::Parts
-    pub fn update_headers(&mut self, parts: response::Parts) -> Result<()> {
+    /// Update the headers from `http::response::Parts`
+    pub fn update_headers(&mut self, parts: &response::Parts) -> Result<()> {
         for header in parts.headers.iter() {
             self.headers.insert(
                 header.0.as_str().to_string(),
@@ -234,7 +234,7 @@ pub trait Middleware {
         options: CacheOptions,
     ) -> Result<CachePolicy>;
     /// Attempts to update the request headers with the passed `http::request::Parts`
-    fn update_headers(&mut self, parts: request::Parts) -> Result<()>;
+    fn update_headers(&mut self, parts: &request::Parts) -> Result<()>;
     /// Attempts to force the "no-cache" directive on the request
     fn force_no_cache(&mut self) -> Result<()>;
     /// Attempts to construct `http::request::Parts` from the request
@@ -415,7 +415,7 @@ impl<T: CacheManager + Send + Sync + 'static> HttpCache<T> {
                     // ENOTCACHED
                     let mut res = HttpResponse {
                         body: b"GatewayTimeout".to_vec(),
-                        headers: Default::default(),
+                        headers: HashMap::default(),
                         status: 504,
                         url: middleware.url()?,
                         version: HttpVersion::Http11,
@@ -476,14 +476,14 @@ impl<T: CacheManager + Send + Sync + 'static> HttpCache<T> {
             policy.before_request(&middleware.parts()?, SystemTime::now());
         match before_req {
             BeforeRequest::Fresh(parts) => {
-                cached_res.update_headers(parts)?;
+                cached_res.update_headers(&parts)?;
                 cached_res.cache_status(HitOrMiss::HIT)?;
                 cached_res.cache_lookup_status(HitOrMiss::HIT)?;
                 return Ok(cached_res);
             }
             BeforeRequest::Stale { request: parts, matches } => {
                 if matches {
-                    middleware.update_headers(parts)?;
+                    middleware.update_headers(&parts)?;
                 }
             }
         }
@@ -510,7 +510,7 @@ impl<T: CacheManager + Send + Sync + 'static> HttpCache<T> {
                         AfterResponse::Modified(new_policy, parts)
                         | AfterResponse::NotModified(new_policy, parts) => {
                             policy = new_policy;
-                            cached_res.update_headers(parts)?;
+                            cached_res.update_headers(&parts)?;
                         }
                     }
                     cached_res.cache_status(HitOrMiss::HIT)?;

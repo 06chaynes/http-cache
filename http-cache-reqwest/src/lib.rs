@@ -94,9 +94,8 @@ impl Middleware for ReqwestMiddleware<'_> {
             options,
         ))
     }
-    fn update_headers(&mut self, parts: Parts) -> Result<()> {
-        let headers = parts.headers;
-        for header in headers.iter() {
+    fn update_headers(&mut self, parts: &Parts) -> Result<()> {
+        for header in parts.headers.iter() {
             self.req.headers_mut().insert(header.0.clone(), header.1.clone());
         }
         Ok(())

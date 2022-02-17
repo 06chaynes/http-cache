@@ -69,7 +69,7 @@ mod http_cache_tests {
             .body(())?;
         let parts = http_res.into_parts().0;
         let cloned_headers = parts.headers.clone();
-        res.update_headers(parts)?;
+        res.update_headers(&parts)?;
         assert!(res.must_revalidate());
         assert_eq!(res.parts()?.headers, cloned_headers);
         res.headers.remove(CACHE_CONTROL.as_str());

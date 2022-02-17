@@ -82,7 +82,7 @@ impl Middleware for SurfMiddleware<'_> {
             options,
         ))
     }
-    fn update_headers(&mut self, parts: Parts) -> Result<()> {
+    fn update_headers(&mut self, parts: &Parts) -> Result<()> {
         for header in parts.headers.iter() {
             let value = match HeaderValue::from_str(header.1.to_str()?) {
                 Ok(v) => v,
