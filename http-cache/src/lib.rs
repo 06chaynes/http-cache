@@ -51,9 +51,9 @@ pub use managers::moka::MokaManager;
 pub use moka::future::{Cache as MokaCache, CacheBuilder as MokaCacheBuilder};
 
 // Custom headers used to indicate cache status (hit or miss)
-/// `x-cache` header: Did this proxy serve the result from cache (HIT for yes, MISS for no)
+/// `x-cache` header: Value will be HIT if the response was served from cache, MISS if not
 pub const XCACHE: &str = "x-cache";
-/// `x-cache-lookup` header: Did the proxy have a cacheable response to the request (HIT for yes, MISS for no)
+/// `x-cache-lookup` header: Value will be HIT if a response existed in cache, MISS if not
 pub const XCACHELOOKUP: &str = "x-cache-lookup";
 
 /// Represents a basic cache status
