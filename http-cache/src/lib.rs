@@ -184,18 +184,13 @@ impl HttpResponse {
     }
 
     /// Adds the custom `x-cache` header to the response
-    pub fn cache_status(&mut self, hit_or_miss: HitOrMiss) -> Result<()> {
+    pub fn cache_status(&mut self, hit_or_miss: HitOrMiss) {
         self.headers.insert(XCACHE.to_string(), hit_or_miss.to_string());
-        Ok(())
     }
 
     /// Adds the custom `x-cache-lookup` header to the response
-    pub fn cache_lookup_status(
-        &mut self,
-        hit_or_miss: HitOrMiss,
-    ) -> Result<()> {
+    pub fn cache_lookup_status(&mut self, hit_or_miss: HitOrMiss) {
         self.headers.insert(XCACHELOOKUP.to_string(), hit_or_miss.to_string());
-        Ok(())
     }
 }
 
@@ -367,7 +362,7 @@ impl<T: CacheManager + Send + Sync + 'static> HttpCache<T> {
         let url = middleware.url()?;
         if let Some(store) = self.manager.get(&method, &url).await? {
             let (mut res, policy) = store;
-            res.cache_lookup_status(HitOrMiss::HIT)?;
+            res.cache_lookup_status(HitOrMiss::HIT);
             if let Some(warning_code) = res.warning_code() {
                 // https://tools.ietf.org/html/rfc7234#section-4.3.4
                 //
@@ -392,7 +387,7 @@ impl<T: CacheManager + Send + Sync + 'static> HttpCache<T> {
                 CacheMode::NoCache => {
                     middleware.force_no_cache()?;
                     let mut res = self.remote_fetch(&mut middleware).await?;
-                    res.cache_lookup_status(HitOrMiss::HIT)?;
+                    res.cache_lookup_status(HitOrMiss::HIT);
                     Ok(res)
                 }
                 CacheMode::ForceCache | CacheMode::OnlyIfCached => {
@@ -405,7 +400,7 @@ impl<T: CacheManager + Send + Sync + 'static> HttpCache<T> {
                         112,
                         "Disconnected operation",
                     );
-                    res.cache_status(HitOrMiss::HIT)?;
+                    res.cache_status(HitOrMiss::HIT);
                     Ok(res)
                 }
                 _ => self.remote_fetch(&mut middleware).await,
@@ -421,8 +416,8 @@ impl<T: CacheManager + Send + Sync + 'static> HttpCache<T> {
                         url: middleware.url()?,
                         version: HttpVersion::Http11,
                     };
-                    res.cache_status(HitOrMiss::MISS)?;
-                    res.cache_lookup_status(HitOrMiss::MISS)?;
+                    res.cache_status(HitOrMiss::MISS);
+                    res.cache_lookup_status(HitOrMiss::MISS);
                     Ok(res)
                 }
                 _ => self.remote_fetch(&mut middleware).await,
@@ -435,8 +430,8 @@ impl<T: CacheManager + Send + Sync + 'static> HttpCache<T> {
         middleware: &mut impl Middleware,
     ) -> Result<HttpResponse> {
         let mut res = middleware.remote_fetch().await?;
-        res.cache_status(HitOrMiss::MISS)?;
-        res.cache_lookup_status(HitOrMiss::MISS)?;
+        res.cache_status(HitOrMiss::MISS);
+        res.cache_lookup_status(HitOrMiss::MISS);
         let policy = match self.options {
             Some(options) => middleware.policy_with_options(&res, options)?,
             None => middleware.policy(&res)?,
@@ -473,8 +468,8 @@ impl<T: CacheManager + Send + Sync + 'static> HttpCache<T> {
         match before_req {
             BeforeRequest::Fresh(parts) => {
                 cached_res.update_headers(&parts)?;
-                cached_res.cache_status(HitOrMiss::HIT)?;
-                cached_res.cache_lookup_status(HitOrMiss::HIT)?;
+                cached_res.cache_status(HitOrMiss::HIT);
+                cached_res.cache_lookup_status(HitOrMiss::HIT);
                 return Ok(cached_res);
             }
             BeforeRequest::Stale { request: parts, matches } => {
@@ -498,7 +493,7 @@ impl<T: CacheManager + Send + Sync + 'static> HttpCache<T> {
                         111,
                         "Revalidation failed",
                     );
-                    cached_res.cache_status(HitOrMiss::HIT)?;
+                    cached_res.cache_status(HitOrMiss::HIT);
                     Ok(cached_res)
                 } else if cond_res.status == 304 {
                     let after_res = policy.after_response(
@@ -513,8 +508,8 @@ impl<T: CacheManager + Send + Sync + 'static> HttpCache<T> {
                             cached_res.update_headers(&parts)?;
                         }
                     }
-                    cached_res.cache_status(HitOrMiss::HIT)?;
-                    cached_res.cache_lookup_status(HitOrMiss::HIT)?;
+                    cached_res.cache_status(HitOrMiss::HIT);
+                    cached_res.cache_lookup_status(HitOrMiss::HIT);
                     let method = middleware.method()?.to_uppercase();
                     let res = self
                         .manager
@@ -527,8 +522,8 @@ impl<T: CacheManager + Send + Sync + 'static> HttpCache<T> {
                             .policy_with_options(&cond_res, options)?,
                         None => middleware.policy(&cond_res)?,
                     };
-                    cond_res.cache_status(HitOrMiss::MISS)?;
-                    cond_res.cache_lookup_status(HitOrMiss::HIT)?;
+                    cond_res.cache_status(HitOrMiss::MISS);
+                    cond_res.cache_lookup_status(HitOrMiss::HIT);
                     let method = middleware.method()?.to_uppercase();
                     let res = self
                         .manager
@@ -536,7 +531,7 @@ impl<T: CacheManager + Send + Sync + 'static> HttpCache<T> {
                         .await?;
                     Ok(res)
                 } else {
-                    cached_res.cache_status(HitOrMiss::HIT)?;
+                    cached_res.cache_status(HitOrMiss::HIT);
                     Ok(cached_res)
                 }
             }
@@ -554,7 +549,7 @@ impl<T: CacheManager + Send + Sync + 'static> HttpCache<T> {
                         111,
                         "Revalidation failed",
                     );
-                    cached_res.cache_status(HitOrMiss::HIT)?;
+                    cached_res.cache_status(HitOrMiss::HIT);
                     Ok(cached_res)
                 }
             }
