@@ -24,7 +24,7 @@ impl fmt::Debug for MokaManager {
 
 impl Default for MokaManager {
     fn default() -> Self {
-        MokaManager { cache: Cache::new(42) }
+        Self { cache: Cache::new(42) }
     }
 }
 

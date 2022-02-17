@@ -14,7 +14,7 @@ pub struct CACacheManager {
 
 impl Default for CACacheManager {
     fn default() -> Self {
-        CACacheManager { path: "./http-cacache".into() }
+        Self { path: "./http-cacache".into() }
     }
 }
 
