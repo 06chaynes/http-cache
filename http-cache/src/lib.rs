@@ -220,7 +220,7 @@ pub trait CacheManager {
 
 /// Describes the functionality required for interfacing with HTTP client middleware
 #[async_trait::async_trait]
-pub trait Middleware {
+pub trait Middleware: Send {
     /// Determines if the request method is either GET or HEAD
     fn is_method_get_head(&self) -> bool;
     /// Returns a new cache policy with default options
@@ -361,11 +361,9 @@ impl<T: CacheManager + Send + Sync + 'static> HttpCache<T> {
         if !is_cacheable {
             return self.remote_fetch(&mut middleware).await;
         }
-        if let Some(store) = self
-            .manager
-            .get(&middleware.method()?.to_uppercase(), &middleware.url()?)
-            .await?
-        {
+        let method = middleware.method()?.to_uppercase();
+        let url = middleware.url()?;
+        if let Some(store) = self.manager.get(&method, &url).await? {
             let (mut res, policy) = store;
             res.cache_lookup_status(HitOrMiss::HIT)?;
             if let Some(warning_code) = res.warning_code() {
@@ -446,18 +444,13 @@ impl<T: CacheManager + Send + Sync + 'static> HttpCache<T> {
             && self.mode != CacheMode::Reload
             && res.status == 200
             && policy.is_storable();
+        let is_get_head = middleware.is_method_get_head();
+        let url = middleware.url()?;
+        let method = middleware.method()?.to_uppercase();
         if is_cacheable {
-            Ok(self
-                .manager
-                .put(
-                    &middleware.method()?.to_uppercase(),
-                    &middleware.url()?,
-                    res,
-                    policy,
-                )
-                .await?)
-        } else if !middleware.is_method_get_head() {
-            match self.manager.delete("GET", &middleware.url()?).await {
+            Ok(self.manager.put(&method, &url, res, policy).await?)
+        } else if !is_get_head {
+            match self.manager.delete("GET", &url).await {
                 Ok(()) => {}
                 Err(_e) => {}
             }
@@ -520,14 +513,10 @@ impl<T: CacheManager + Send + Sync + 'static> HttpCache<T> {
                     }
                     cached_res.cache_status(HitOrMiss::HIT)?;
                     cached_res.cache_lookup_status(HitOrMiss::HIT)?;
+                    let method = middleware.method()?.to_uppercase();
                     let res = self
                         .manager
-                        .put(
-                            &middleware.method()?.to_uppercase(),
-                            &req_url,
-                            cached_res,
-                            policy,
-                        )
+                        .put(&method, &req_url, cached_res, policy)
                         .await?;
                     Ok(res)
                 } else if cond_res.status == 200 {
@@ -538,14 +527,10 @@ impl<T: CacheManager + Send + Sync + 'static> HttpCache<T> {
                     };
                     cond_res.cache_status(HitOrMiss::MISS)?;
                     cond_res.cache_lookup_status(HitOrMiss::HIT)?;
+                    let method = middleware.method()?.to_uppercase();
                     let res = self
                         .manager
-                        .put(
-                            &middleware.method()?.to_uppercase(),
-                            &req_url,
-                            cond_res,
-                            policy,
-                        )
+                        .put(&method, &req_url, cond_res, policy)
                         .await?;
                     Ok(res)
                 } else {
