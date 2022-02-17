@@ -131,24 +131,24 @@ impl HttpResponse {
     /// Returns the status code of the warning header if present
     #[must_use]
     pub fn warning_code(&self) -> Option<usize> {
-        self.headers.get("Warning").and_then(|hdr| {
+        self.headers.get("warning").and_then(|hdr| {
             hdr.as_str().chars().take(3).collect::<String>().parse().ok()
         })
     }
 
     /// Adds a warning header to a response
     pub fn add_warning(&mut self, url: &Url, code: usize, message: &str) {
-        // Warning    = "Warning" ":" 1#warning-value
+        // warning    = "warning" ":" 1#warning-value
         // warning-value = warn-code SP warn-agent SP warn-text [SP warn-date]
         // warn-code  = 3DIGIT
         // warn-agent = ( host [ ":" port ] ) | pseudonym
         //                 ; the name or pseudonym of the server adding
-        //                 ; the Warning header, for use in debugging
+        //                 ; the warning header, for use in debugging
         // warn-text  = quoted-string
         // warn-date  = <"> HTTP-date <">
         // (https://tools.ietf.org/html/rfc2616#section-14.46)
         self.headers.insert(
-            "Warning".to_string(),
+            "warning".to_string(),
             format!(
                 "{} {} {:?} \"{}\"",
                 code,
@@ -161,7 +161,7 @@ impl HttpResponse {
 
     /// Removes a warning header from a response
     pub fn remove_warning(&mut self) {
-        self.headers.remove("Warning");
+        self.headers.remove("warning");
     }
 
     /// Update the headers from `http::response::Parts`
@@ -368,10 +368,10 @@ impl<T: CacheManager + Send + Sync + 'static> HttpCache<T> {
                 //
                 // If a stored response is selected for update, the cache MUST:
                 //
-                // * delete any Warning header fields in the stored response with
+                // * delete any warning header fields in the stored response with
                 //   warn-code 1xx (see Section 5.5);
                 //
-                // * retain any Warning header fields in the stored response with
+                // * retain any warning header fields in the stored response with
                 //   warn-code 2xx;
                 //
                 #[allow(clippy::manual_range_contains)]
