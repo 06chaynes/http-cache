@@ -374,8 +374,7 @@ impl<T: CacheManager + Send + Sync + 'static> HttpCache<T> {
                 // * retain any warning header fields in the stored response with
                 //   warn-code 2xx;
                 //
-                #[allow(clippy::manual_range_contains)]
-                if warning_code >= 100 && warning_code < 200 {
+                if (100..200).contains(&warning_code) {
                     res.remove_warning();
                 }
             }
