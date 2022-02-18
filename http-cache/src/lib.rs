@@ -196,7 +196,7 @@ impl HttpResponse {
 
 /// A trait providing methods for storing, reading, and removing cache records.
 #[async_trait::async_trait]
-pub trait CacheManager {
+pub trait CacheManager: Send + Sync + 'static {
     /// Attempts to pull a cached response and related policy from cache.
     async fn get(
         &self,
@@ -334,7 +334,7 @@ pub use http_cache_semantics::CacheOptions;
 
 /// Caches requests according to http spec.
 #[derive(Debug, Clone)]
-pub struct HttpCache<T: CacheManager + Send + Sync + 'static> {
+pub struct HttpCache<T: CacheManager> {
     /// Determines the manager behavior.
     pub mode: CacheMode,
     /// Manager instance that implements the [`CacheManager`] trait.
@@ -346,7 +346,7 @@ pub struct HttpCache<T: CacheManager + Send + Sync + 'static> {
 }
 
 #[allow(dead_code)]
-impl<T: CacheManager + Send + Sync + 'static> HttpCache<T> {
+impl<T: CacheManager> HttpCache<T> {
     /// Attempts to run the passed middleware along with the cache
     pub async fn run(
         &self,
