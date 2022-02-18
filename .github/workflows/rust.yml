@@ -63,7 +63,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: clippy
-          args: --lib --tests --all-features --all-targets --workspace -- -D warnings
+          args: --lib --tests --all-features --all-targets --workspace -- -D warnings -D clippy::nursery
 
   docs:
     name: Docs
