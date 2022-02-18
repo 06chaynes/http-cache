@@ -36,13 +36,18 @@ jobs:
 
   rustfmt:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        rust:
+          - stable
+          - 1.56.1
     steps:
       - name: Checkout repository
         uses: actions/checkout@v2
       - name: Install Rust
         uses: actions-rs/toolchain@v1
         with:
-          toolchain: stable
+          toolchain: ${{ matrix.rust }}
           profile: minimal
           override: true
           components: rustfmt
@@ -54,13 +59,18 @@ jobs:
 
   clippy:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        rust:
+          - stable
+          - 1.56.1
     steps:
       - name: Checkout repository
         uses: actions/checkout@v2
       - name: Install Rust
         uses: actions-rs/toolchain@v1
         with:
-          toolchain: stable
+          toolchain: ${{ matrix.rust }}
           profile: minimal
           override: true
           components: clippy
