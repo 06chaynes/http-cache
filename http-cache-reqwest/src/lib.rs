@@ -65,7 +65,7 @@ pub use http_cache::{MokaCache, MokaCacheBuilder, MokaManager};
 
 /// Wrapper for [`HttpCache`]
 #[derive(Debug)]
-pub struct Cache<T: CacheManager + Send + Sync + 'static>(pub HttpCache<T>);
+pub struct Cache<T: CacheManager>(pub HttpCache<T>);
 
 /// Implements ['Middleware'] for reqwest
 pub(crate) struct ReqwestMiddleware<'a> {
