@@ -435,21 +435,18 @@ impl<T: CacheManager> HttpCache<T> {
             Some(options) => middleware.policy_with_options(&res, options)?,
             None => middleware.policy(&res)?,
         };
-        let is_cacheable = middleware.is_method_get_head()
+        let is_get_head = middleware.is_method_get_head();
+        let is_cacheable = is_get_head
             && self.mode != CacheMode::NoStore
             && self.mode != CacheMode::Reload
             && res.status == 200
             && policy.is_storable();
-        let is_get_head = middleware.is_method_get_head();
         let url = middleware.url()?;
         let method = middleware.method()?.to_uppercase();
         if is_cacheable {
             Ok(self.manager.put(&method, &url, res, policy).await?)
         } else if !is_get_head {
-            match self.manager.delete("GET", &url).await {
-                Ok(()) => {}
-                Err(_e) => {}
-            }
+            self.manager.delete("GET", &url).await.ok();
             Ok(res)
         } else {
             Ok(res)
