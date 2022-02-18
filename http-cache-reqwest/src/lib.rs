@@ -169,9 +169,7 @@ fn convert_response(response: HttpResponse) -> anyhow::Result<Response> {
 }
 
 #[async_trait::async_trait]
-impl<T: CacheManager + 'static + Send + Sync> reqwest_middleware::Middleware
-    for Cache<T>
-{
+impl<T: CacheManager> reqwest_middleware::Middleware for Cache<T> {
     async fn handle(
         &self,
         req: Request,
