@@ -5,18 +5,18 @@ edition = "2021"
 publish = false
 
 [dependencies]
-anyhow = "1.0.53"
+anyhow = "1.0.55"
 async-std = { version = "1.10.0", features = ["attributes"] }
-cacache = "10.0.0"
+cacache = "10.0.1"
 http = "0.2.6"
 http-cache-semantics = "1.0.0"
 http-types = "2.12.0"
 reqwest = "0.11.9"
-reqwest-middleware = "0.1.4"
+reqwest-middleware = "0.1.5"
 surf = "2.3.2"
 tokio = { version = "1.17.0", features = ["macros", "rt-multi-thread"] }
 url = "2.2.2"
-wiremock = "0.5.10"
+wiremock = "0.5.11"
 
 [dependencies.http-cache]
 path = "../http-cache"
