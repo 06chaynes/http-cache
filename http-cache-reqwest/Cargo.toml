@@ -14,7 +14,7 @@ categories = [
 edition = "2021"
 
 [dependencies]
-anyhow = "1.0.55"
+anyhow = "1.0.56"
 async-trait = "0.1.52"
 http = "0.2.6"
 http-cache-semantics = "1.0.0"
