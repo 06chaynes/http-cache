@@ -20,13 +20,13 @@ wiremock = "0.5.11"
 
 [dependencies.http-cache]
 path = "../http-cache"
-version = "0.6.0"
+version = "0.6.1"
 features = ["with-http-types", "manager-moka"]
 
 [dependencies.http-cache-reqwest]
 path = "../http-cache-reqwest"
-version = "0.4.0"
+version = "0.4.1"
 
 [dependencies.http-cache-surf]
 path = "../http-cache-surf"
-version = "0.4.0"
+version = "0.4.1"
