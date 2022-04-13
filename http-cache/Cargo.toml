@@ -22,8 +22,8 @@ http = "0.2.6"
 http-cache-semantics = "1.0.0"
 http-types = { version = "2.12.0", default-features = false, optional = true }
 httpdate = "1.0.2"
-miette = "4.3.0"
-moka = { version = "0.8.0", features = ["future"], optional = true }
+miette = "4.4.0"
+moka = { version = "0.8.2", features = ["future"], optional = true }
 serde = { version = "1.0.136", features = ["derive"] }
 thiserror = "1.0.30"
 url = { version = "2.2.2", features = ["serde"] }
