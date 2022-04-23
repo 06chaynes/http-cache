@@ -1,6 +1,6 @@
 [package]
 name = "http-cache-reqwest"
-version = "0.4.2"
+version = "0.4.3"
 description = "http-cache middleware implementation for reqwest"
 authors = ["Christian Haynes <06chaynes@gmail.com>", "Kat Marchán <kzm@zkat.tech>"]
 repository = "https://github.com/06chaynes/http-cache.git"
