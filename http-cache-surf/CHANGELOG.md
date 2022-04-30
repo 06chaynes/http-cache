@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.6] - 2022-04-30
+
+### Changed
+
+- Updated the minimum versions of the following dependencies:
+  - http-cache [0.6.5]
+  - http [0.2.7]
+
 ## [0.4.5] - 2022-04-26
 
 ### Fixed
