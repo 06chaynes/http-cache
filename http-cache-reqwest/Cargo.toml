@@ -1,6 +1,6 @@
 [package]
 name = "http-cache-reqwest"
-version = "0.4.4"
+version = "0.4.5"
 description = "http-cache middleware implementation for reqwest"
 authors = ["Christian Haynes <06chaynes@gmail.com>", "Kat Marchán <kzm@zkat.tech>"]
 repository = "https://github.com/06chaynes/http-cache.git"
@@ -16,7 +16,7 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0.57"
 async-trait = "0.1.53"
-http = "0.2.6"
+http = "0.2.7"
 http-cache-semantics = "1.0.1"
 reqwest = { version = "0.11.10", default-features = false }
 reqwest-middleware = "0.1.6"
@@ -26,10 +26,10 @@ url = { version = "2.2.2", features = ["serde"] }
 
 [dependencies.http-cache]
 path = "../http-cache"
-version = "0.6.4"
+version = "0.6.5"
 
 [dev-dependencies]
-tokio = { version = "1.17.0", features = ["macros", "rt-multi-thread"] }
+tokio = { version = "1.18.0", features = ["macros", "rt-multi-thread"] }
 
 [features]
 default = ["manager-cacache"]
