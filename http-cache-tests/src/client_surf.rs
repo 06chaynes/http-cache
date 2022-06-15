@@ -11,13 +11,13 @@ async fn default_mode() -> surf::Result<()> {
     let m = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 1);
     let _mock_guard = mock_server.register_as_scoped(m).await;
     let url = format!("{}/", &mock_server.uri());
-    let manager = Arc::new(MokaManager::default());
+    let manager = MokaManager::default();
     let req = Request::new(Method::Get, Url::parse(&url)?);
 
     // Construct Surf client with cache defaults
     let client = Client::new().with(Cache(HttpCache {
         mode: CacheMode::Default,
-        manager: Arc::clone(&manager),
+        manager: manager.clone(),
         options: None,
     }));
 
@@ -44,13 +44,13 @@ async fn default_mode_with_options() -> surf::Result<()> {
     let m = build_mock(CACHEABLE_PRIVATE, TEST_BODY, 200, 1);
     let _mock_guard = mock_server.register_as_scoped(m).await;
     let url = format!("{}/", &mock_server.uri());
-    let manager = Arc::new(MokaManager::default());
+    let manager = MokaManager::default();
     let req = Request::new(Method::Get, Url::parse(&url)?);
 
     // Construct Surf client with cache options override
     let client = Client::new().with(Cache(HttpCache {
         mode: CacheMode::Default,
-        manager: Arc::clone(&manager),
+        manager: manager.clone(),
         options: Some(CacheOptions { shared: false, ..Default::default() }),
     }));
 
@@ -73,13 +73,13 @@ async fn default_mode_no_cache_response() -> surf::Result<()> {
     let m = build_mock("no-cache", TEST_BODY, 200, 2);
     let _mock_guard = mock_server.register_as_scoped(m).await;
     let url = format!("{}/", &mock_server.uri());
-    let manager = Arc::new(MokaManager::default());
+    let manager = MokaManager::default();
     let req = Request::new(Method::Get, Url::parse(&url)?);
 
     // Construct Surf client with cache defaults
     let client = Client::new().with(Cache(HttpCache {
         mode: CacheMode::Default,
-        manager: Arc::clone(&manager),
+        manager: manager.clone(),
         options: None,
     }));
 
@@ -113,13 +113,13 @@ async fn removes_warning() -> surf::Result<()> {
         .expect(1);
     let _mock_guard = mock_server.register_as_scoped(m).await;
     let url = format!("{}/", &mock_server.uri());
-    let manager = Arc::new(MokaManager::default());
+    let manager = MokaManager::default();
     let req = Request::new(Method::Get, Url::parse(&url)?);
 
     // Construct Surf client with cache defaults
     let client = Client::new().with(Cache(HttpCache {
         mode: CacheMode::Default,
-        manager: Arc::clone(&manager),
+        manager: manager.clone(),
         options: None,
     }));
 
@@ -147,13 +147,13 @@ async fn no_store_mode() -> surf::Result<()> {
     let m = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 2);
     let _mock_guard = mock_server.register_as_scoped(m).await;
     let url = format!("{}/", &mock_server.uri());
-    let manager = Arc::new(MokaManager::default());
+    let manager = MokaManager::default();
     let req = Request::new(Method::Get, Url::parse(&url)?);
 
     // Construct Surf client with cache defaults
     let client = Client::new().with(Cache(HttpCache {
         mode: CacheMode::NoStore,
-        manager: Arc::clone(&manager),
+        manager: manager.clone(),
         options: None,
     }));
 
@@ -177,13 +177,13 @@ async fn no_cache_mode() -> surf::Result<()> {
     let m = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 2);
     let _mock_guard = mock_server.register_as_scoped(m).await;
     let url = format!("{}/", &mock_server.uri());
-    let manager = Arc::new(MokaManager::default());
+    let manager = MokaManager::default();
     let req = Request::new(Method::Get, Url::parse(&url)?);
 
     // Construct Surf client with cache defaults
     let client = Client::new().with(Cache(HttpCache {
         mode: CacheMode::NoCache,
-        manager: Arc::clone(&manager),
+        manager: manager.clone(),
         options: None,
     }));
 
@@ -209,13 +209,13 @@ async fn force_cache_mode() -> surf::Result<()> {
     let m = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 1);
     let _mock_guard = mock_server.register_as_scoped(m).await;
     let url = format!("{}/", &mock_server.uri());
-    let manager = Arc::new(MokaManager::default());
+    let manager = MokaManager::default();
     let req = Request::new(Method::Get, Url::parse(&url)?);
 
     // Construct Surf client with cache defaults
     let client = Client::new().with(Cache(HttpCache {
         mode: CacheMode::ForceCache,
-        manager: Arc::clone(&manager),
+        manager: manager.clone(),
         options: None,
     }));
 
@@ -245,14 +245,14 @@ async fn delete_after_non_get_head_method_request() -> surf::Result<()> {
     let _mock_guard_get = mock_server.register_as_scoped(m_get).await;
     let _mock_guard_post = mock_server.register_as_scoped(m_post).await;
     let url = format!("{}/", &mock_server.uri());
-    let manager = Arc::new(MokaManager::default());
+    let manager = MokaManager::default();
     let req_get = Request::new(Method::Get, Url::parse(&url)?);
     let req_post = Request::new(Method::Post, Url::parse(&url)?);
 
     // Construct Surf client with cache defaults
     let client = Client::new().with(Cache(HttpCache {
         mode: CacheMode::Default,
-        manager: Arc::clone(&manager),
+        manager: manager.clone(),
         options: None,
     }));
 
@@ -283,13 +283,13 @@ async fn revalidation_304() -> surf::Result<()> {
         .expect(1);
     let mock_guard = mock_server.register_as_scoped(m).await;
     let url = format!("{}/", &mock_server.uri());
-    let manager = Arc::new(MokaManager::default());
+    let manager = MokaManager::default();
     let req = Request::new(Method::Get, Url::parse(&url)?);
 
     // Construct Surf client with cache defaults
     let client = Client::new().with(Cache(HttpCache {
         mode: CacheMode::Default,
-        manager: Arc::clone(&manager),
+        manager: manager.clone(),
         options: None,
     }));
 
@@ -321,13 +321,13 @@ async fn revalidation_200() -> surf::Result<()> {
     let m_200 = build_mock(MUST_REVALIDATE, b"updated", 200, 1);
     let mock_guard = mock_server.register_as_scoped(m).await;
     let url = format!("{}/", &mock_server.uri());
-    let manager = Arc::new(MokaManager::default());
+    let manager = MokaManager::default();
     let req = Request::new(Method::Get, Url::parse(&url)?);
 
     // Construct Surf client with cache defaults
     let client = Client::new().with(Cache(HttpCache {
         mode: CacheMode::Default,
-        manager: Arc::clone(&manager),
+        manager: manager.clone(),
         options: None,
     }));
 
@@ -361,13 +361,13 @@ async fn revalidation_500() -> surf::Result<()> {
         .expect(1);
     let mock_guard = mock_server.register_as_scoped(m).await;
     let url = format!("{}/", &mock_server.uri());
-    let manager = Arc::new(MokaManager::default());
+    let manager = MokaManager::default();
     let req = Request::new(Method::Get, Url::parse(&url)?);
 
     // Construct Surf client with cache defaults
     let client = Client::new().with(Cache(HttpCache {
         mode: CacheMode::Default,
-        manager: Arc::clone(&manager),
+        manager: manager.clone(),
         options: None,
     }));
 
@@ -403,13 +403,13 @@ mod only_if_cached_mode {
         let m = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 0);
         let _mock_guard = mock_server.register_as_scoped(m).await;
         let url = format!("{}/", &mock_server.uri());
-        let manager = Arc::new(MokaManager::default());
+        let manager = MokaManager::default();
         let req = Request::new(Method::Get, Url::parse(&url)?);
 
         // Construct Surf client with cache defaults
         let client = Client::new().with(Cache(HttpCache {
             mode: CacheMode::OnlyIfCached,
-            manager: Arc::clone(&manager),
+            manager: manager.clone(),
             options: None,
         }));
 
@@ -430,13 +430,13 @@ mod only_if_cached_mode {
         let m = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 1);
         let _mock_guard = mock_server.register_as_scoped(m).await;
         let url = format!("{}/", &mock_server.uri());
-        let manager = Arc::new(MokaManager::default());
+        let manager = MokaManager::default();
         let req = Request::new(Method::Get, Url::parse(&url)?);
 
         // Construct Surf client with cache defaults
         let client = Client::new().with(Cache(HttpCache {
             mode: CacheMode::Default,
-            manager: Arc::clone(&manager),
+            manager: manager.clone(),
             options: None,
         }));
 
@@ -452,7 +452,7 @@ mod only_if_cached_mode {
         // Construct Surf client with cache defaults
         let client = Client::new().with(Cache(HttpCache {
             mode: CacheMode::OnlyIfCached,
-            manager: Arc::clone(&manager),
+            manager: manager.clone(),
             options: None,
         }));
 

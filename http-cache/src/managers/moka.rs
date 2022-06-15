@@ -12,7 +12,7 @@ use url::Url;
 #[derive(Clone)]
 pub struct MokaManager {
     /// The instance of `moka::future::Cache`
-    pub cache: Cache<String, Arc<Vec<u8>>>,
+    pub cache: Arc<Cache<String, Arc<Vec<u8>>>>,
 }
 
 impl fmt::Debug for MokaManager {
@@ -24,7 +24,7 @@ impl fmt::Debug for MokaManager {
 
 impl Default for MokaManager {
     fn default() -> Self {
-        Self { cache: Cache::new(42) }
+        Self::new(Cache::new(42))
     }
 }
 
@@ -39,6 +39,10 @@ fn req_key(method: &str, url: &Url) -> String {
 }
 
 impl MokaManager {
+    /// Create a new manager from a pre-configured Cache
+    pub fn new(cache: Cache<String, Arc<Vec<u8>>>) -> Self {
+        Self { cache: Arc::new(cache) }
+    }
     /// Clears out the entire cache.
     pub async fn clear(&self) -> Result<()> {
         self.cache.invalidate_all();
@@ -48,7 +52,7 @@ impl MokaManager {
 }
 
 #[async_trait::async_trait]
-impl CacheManager for Arc<MokaManager> {
+impl CacheManager for MokaManager {
     async fn get(
         &self,
         method: &str,
