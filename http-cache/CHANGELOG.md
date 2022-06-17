@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.7.0] - 2022-06-17
+
+### Changed
+
+- The `CacheManager` trait is now implemented directly against the `MokaManager` struct rather than `Arc<MokaManager>`. The Arc is now internal to the `MokaManager` struct as part of the `cache` field.
+
+- Updated the minimum versions of the following dependencies:
+  - async-trait [0.1.56]
+  - http [0.2.8]
+  - miette [4.7.1]
+  - moka [0.8.5]
+  - serde [1.0.137]
+  - thiserror [1.0.31]
+
 ## [0.6.5] - 2022-04-30
 
 ### Changed

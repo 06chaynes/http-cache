@@ -8,25 +8,25 @@ publish = false
 anyhow = "1.0.57"
 async-std = { version = "1.11.0", features = ["attributes"] }
 cacache = "10.0.1"
-http = "0.2.7"
+http = "0.2.8"
 http-cache-semantics = "1.0.1"
 http-types = "2.12.0"
-reqwest = "0.11.10"
+reqwest = "0.11.11"
 reqwest-middleware = "0.1.6"
 surf = "2.3.2"
-tokio = { version = "1.18.0", features = ["macros", "rt-multi-thread"] }
+tokio = { version = "1.19.2", features = ["macros", "rt-multi-thread"] }
 url = "2.2.2"
 wiremock = "0.5.13"
 
 [dependencies.http-cache]
 path = "../http-cache"
-version = "0.6.5"
+version = "0.7.0"
 features = ["with-http-types", "manager-moka"]
 
 [dependencies.http-cache-reqwest]
 path = "../http-cache-reqwest"
-version = "0.4.5"
+version = "0.5.0"
 
 [dependencies.http-cache-surf]
 path = "../http-cache-surf"
-version = "0.4.6"
+version = "0.5.0"
