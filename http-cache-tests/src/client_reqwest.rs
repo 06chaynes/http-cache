@@ -11,13 +11,13 @@ async fn default_mode() -> anyhow::Result<()> {
     let m = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 1);
     let _mock_guard = mock_server.register_as_scoped(m).await;
     let url = format!("{}/", &mock_server.uri());
-    let manager = Arc::new(MokaManager::default());
+    let manager = MokaManager::default();
 
     // Construct reqwest client with cache defaults
     let client = ClientBuilder::new(Client::new())
         .with(Cache(HttpCache {
             mode: CacheMode::Default,
-            manager: Arc::clone(&manager),
+            manager: manager.clone(),
             options: None,
         }))
         .build();
@@ -41,13 +41,13 @@ async fn default_mode_with_options() -> anyhow::Result<()> {
     let m = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 1);
     let _mock_guard = mock_server.register_as_scoped(m).await;
     let url = format!("{}/", &mock_server.uri());
-    let manager = Arc::new(MokaManager::default());
+    let manager = MokaManager::default();
 
     // Construct reqwest client with cache options override
     let client = ClientBuilder::new(Client::new())
         .with(Cache(HttpCache {
             mode: CacheMode::Default,
-            manager: Arc::clone(&manager),
+            manager: manager.clone(),
             options: Some(CacheOptions { shared: false, ..Default::default() }),
         }))
         .build();
@@ -67,13 +67,13 @@ async fn no_cache_mode() -> anyhow::Result<()> {
     let m = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 2);
     let _mock_guard = mock_server.register_as_scoped(m).await;
     let url = format!("{}/", &mock_server.uri());
-    let manager = Arc::new(MokaManager::default());
+    let manager = MokaManager::default();
 
     // Construct reqwest client with cache defaults
     let client = ClientBuilder::new(Client::new())
         .with(Cache(HttpCache {
             mode: CacheMode::NoCache,
-            manager: Arc::clone(&manager),
+            manager: manager.clone(),
             options: None,
         }))
         .build();
