@@ -16,7 +16,7 @@ Should likely be registered after any middleware modifying the request.
 
 ## Minimum Supported Rust Version (MSRV)
 
-1.56.1
+1.59.0
 
 ## Install
 

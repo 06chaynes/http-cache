@@ -69,8 +69,8 @@ pub enum HitOrMiss {
 impl fmt::Display for HitOrMiss {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            HitOrMiss::HIT => write!(f, "HIT"),
-            HitOrMiss::MISS => write!(f, "MISS"),
+            Self::HIT => write!(f, "HIT"),
+            Self::MISS => write!(f, "MISS"),
         }
     }
 }

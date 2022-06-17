@@ -16,18 +16,13 @@ jobs:
   fmt:
     name: Check formatting
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        rust:
-          - stable
-          - 1.56.1
     steps:
       - name: Checkout repository
         uses: actions/checkout@v2
       - name: Install Rust
         uses: actions-rs/toolchain@v1
         with:
-          toolchain: ${{ matrix.rust }}
+          toolchain: stable
           profile: minimal
           override: true
           components: rustfmt
@@ -38,13 +33,9 @@ jobs:
           args: --all -- --check
 
   test:
-    name: Test ${{ matrix.rust }} on ${{ matrix.os }}
+    name: Test stable on ${{ matrix.os }}
     needs: [fmt]
     strategy:
-      matrix:
-        rust:
-          - stable
-          - 1.56.1
         os:
           - ubuntu-latest
           - windows-latest
@@ -56,7 +47,7 @@ jobs:
       - name: Install Rust
         uses: actions-rs/toolchain@v1
         with:
-          toolchain: ${{ matrix.rust }}
+          toolchain: stable
           profile: minimal
           override: true
       - uses: actions-rs/cargo@v1
@@ -68,18 +59,13 @@ jobs:
     name: Check clippy
     needs: [fmt, test]
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        rust:
-          - stable
-          - 1.56.1
     steps:
       - name: Checkout repository
         uses: actions/checkout@v2
       - name: Install Rust
         uses: actions-rs/toolchain@v1
         with:
-          toolchain: ${{ matrix.rust }}
+          toolchain: stable
           profile: minimal
           override: true
           components: clippy
@@ -87,7 +73,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: clippy
-          args: --lib --tests --all-features --all-targets --workspace -- -D warnings -D clippy::nursery
+          args: --lib --tests --all-features --all-targets --workspace -- -D warnings
 
   docs:
     name: Build docs
@@ -109,3 +95,28 @@ jobs:
         with:
           command: doc
           args: --no-deps --document-private-items --workspace
+  
+  msrv:
+    name: Verify MSRV
+    needs: [fmt, test]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          override: true
+      - name: Install cargo msrv
+        uses: baptiste0928/cargo-install@v1
+        with:
+          crate: msrv
+      - name: Run cargo msrv
+        working-directory: ./http-cache
+        uses: actions-rs/cargo@v1
+          with:
+            command: msrv
+            args: verify
+
