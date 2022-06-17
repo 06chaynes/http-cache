@@ -7,6 +7,7 @@
 - The `CacheManager` trait is now implemented directly against the `MokaManager` struct rather than `Arc<MokaManager>`. The Arc is now internal to the `MokaManager` struct as part of the `cache` field.
 
 - Updated the minimum versions of the following dependencies:
+  - http-cache [0.7.0]
   - async-trait [0.1.56]
   - http [0.2.8]
   - reqwest [0.11.11]
