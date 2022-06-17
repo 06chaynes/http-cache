@@ -114,6 +114,7 @@ jobs:
         uses: baptiste0928/cargo-install@v1
         with:
           crate: msrv
+          version: 0.15.1
       - name: Run cargo msrv
         working-directory: ./http-cache
         run: cargo msrv verify
