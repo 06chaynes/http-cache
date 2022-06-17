@@ -116,8 +116,5 @@ jobs:
           crate: msrv
       - name: Run cargo msrv
         working-directory: ./http-cache
-        uses: actions-rs/cargo@v1
-        with:
-          command: msrv
-          args: verify
+        run: cargo msrv verify
 
