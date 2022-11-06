@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.7.1] - 2022-11-06
+
+### Changed
+
+- Updated the minimum versions of the following dependencies:
+  - anyhow [1.0.66]
+  - async-trait [0.1.58]
+  - miette [5.4.1]
+  - moka [0.9.6]
+  - serde [1.0.147]
+  - thiserror [1.0.37]
+  - url [2.3.1]
+
 ## [0.7.0] - 2022-06-17
 
 ### Changed

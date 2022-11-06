@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.5.1] - 2022-11-06
+
+### Changed
+
+- Updated the minimum versions of the following dependencies:
+  - http-cache [0.7.1]
+  - anyhow [1.0.66]
+  - async-trait [0.1.58]
+  - reqwest [0.11.12]
+  - serde [1.0.147]
+  - url [2.3.1]
+  - task-local-extensions [0.1.3]
+  - tokio [1.21.2]
+
 ## [0.5.0] - 2022-06-17
 
 ### Changed
