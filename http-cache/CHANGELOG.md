@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.7.2] - 2022-11-16
+
+- Added derive `Eq` to `HttpVersion` enum.
+
+### Changed
+
 ## [0.7.1] - 2022-11-06
 
 ### Changed
