@@ -165,7 +165,7 @@ impl<T: CacheManager> surf::middleware::Middleware for Cache<T> {
         }
         converted.set_status(res.status.try_into()?);
         converted.set_version(Some(res.version.try_into()?));
-        converted.set_body(res.body.clone());
+        converted.set_body(res.body);
         Ok(surf::Response::from(converted))
     }
 }
