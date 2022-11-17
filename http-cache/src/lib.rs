@@ -76,7 +76,7 @@ impl fmt::Display for HitOrMiss {
 }
 
 /// Represents an HTTP version
-#[derive(Debug, Copy, Clone, PartialEq, Deserialize, Serialize)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[non_exhaustive]
 pub enum HttpVersion {
     /// HTTP Version 0.9
