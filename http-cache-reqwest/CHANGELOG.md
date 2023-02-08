@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.6.0] - 2023-02-07
+
+- MSRV is now 1.60.0
+
+### Changed
+
+- Updated the minimum versions of the following dependencies:
+  - http-cache [0.8.0]
+  - anyhow [1.0.69]
+  - async-trait [0.1.64]
+  - reqwest [0.11.14]
+  - serde [1.0.152]
+  - tokio [1.25.0]
+
 ## [0.5.2] - 2022-11-16
 
 ### Changed
