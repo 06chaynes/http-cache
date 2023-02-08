@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.8.0] - 2023-02-07
+
+### Changed
+
+- MSRV is now 1.60.0
+
+- Updated the minimum versions of the following dependencies:
+  - anyhow [1.0.69]
+  - async-trait [0.1.64]
+  - cacache [11.0.0]
+  - miette [5.5.0]
+  - moka [0.9.7]
+  - serde [1.0.152]
+  - thiserror [1.0.38]
+
 ## [0.7.2] - 2022-11-16
 
 - Added derive `Eq` to `HttpVersion` enum.

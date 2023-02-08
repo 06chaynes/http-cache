@@ -35,7 +35,7 @@ struct Store {
 }
 
 fn req_key(method: &str, url: &Url) -> String {
-    format!("{}:{}", method, url)
+    format!("{method}:{url}")
 }
 
 impl MokaManager {

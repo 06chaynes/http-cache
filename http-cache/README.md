@@ -20,7 +20,7 @@ See the [Provided Client Implementations](#provided-client-implementations) sect
 
 ## Minimum Supported Rust Version (MSRV)
 
-1.59.0
+1.60.0
 
 ## Install
 
