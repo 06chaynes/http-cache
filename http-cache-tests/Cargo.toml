@@ -30,3 +30,7 @@ version = "0.6.0"
 [dependencies.http-cache-surf]
 path = "../http-cache-surf"
 version = "0.6.0"
+
+[dependencies.http-cache-quickcache]
+path = "../http-cache-quickcache"
+version = "0.1.0"

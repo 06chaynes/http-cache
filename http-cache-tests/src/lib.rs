@@ -6,6 +6,9 @@ mod client_surf;
 #[cfg(test)]
 mod client_reqwest;
 
+#[cfg(test)]
+mod manager_quickcache;
+
 use http::{header::CACHE_CONTROL, StatusCode};
 use http_cache::*;
 use http_types::{headers::HeaderValue, Method, Version};

@@ -47,6 +47,10 @@ The following features are available. By default `manager-cacache` is enabled.
 - **Surf**: See [README](https://github.com/06chaynes/http-cache/blob/latest/http-cache-surf/README.md) for more details
 - **Reqwest**: See [README](https://github.com/06chaynes/http-cache/blob/latest/http-cache-reqwest/README.md) for more details
 
+## Additional Manager Implementations
+
+- **quick-cache**: See [README](https://github.com/06chaynes/http-cache/blob/latest/http-cache-quickcache/README.md) for more details
+
 ## License
 
 Licensed under either of
