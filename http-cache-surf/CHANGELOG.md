@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.7.0] - 2023-02-16
+
+### Changed
+
+- MSRV is now 1.62.1
+
+- Updated the minimum versions of the following dependencies:
+  - http-cache [0.9.0]
+
 ## [0.6.0] - 2023-02-07
 
 - MSRV is now 1.60.0

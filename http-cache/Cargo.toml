@@ -1,6 +1,6 @@
 [package]
 name = "http-cache"
-version = "0.8.0"
+version = "0.9.0"
 description = "An HTTP caching middleware"
 authors = ["Christian Haynes <06chaynes@gmail.com>", "Kat Marchán <kzm@zkat.tech>"]
 repository = "https://github.com/06chaynes/http-cache.git"
@@ -12,7 +12,7 @@ categories = [
     "web-programming::http-client"
 ]
 edition = "2021"
-rust-version = "1.60.0"
+rust-version = "1.62.1"
 
 [dependencies]
 anyhow = "1.0.69"
@@ -24,7 +24,7 @@ http-cache-semantics = "1.0.1"
 http-types = { version = "2.12.0", default-features = false, optional = true }
 httpdate = "1.0.2"
 miette = "5.5.0"
-moka = { version = "0.9.7", features = ["future"], optional = true }
+moka = { version = "0.10.0", features = ["future"], optional = true }
 serde = { version = "1.0.152", features = ["derive"] }
 thiserror = "1.0.38"
 url = { version = "2.3.1", features = ["serde"] }

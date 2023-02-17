@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.9.0] - 2023-02-16
+
+### Changed
+
+- MSRV is now 1.62.1
+
+- Updated the minimum versions of the following dependencies:
+  - moka [0.10.0]
+
 ## [0.8.0] - 2023-02-07
 
 ### Changed
