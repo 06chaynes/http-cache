@@ -1,6 +1,6 @@
 # http-cache
 
-[![CI](https://img.shields.io/github/workflow/status/06chaynes/http-cache/rust.yml?label=CI&style=for-the-badge)](https://github.com/06chaynes/http-cache/actions/workflows/rust.yml)
+[![CI](https://img.shields.io/github/actions/workflow/status/06chaynes/http-cache/rust.yml?label=CI&style=for-the-badge)](https://github.com/06chaynes/http-cache/actions/workflows/rust.yml)
 [![Crates.io](https://img.shields.io/crates/v/http-cache?style=for-the-badge)](https://crates.io/crates/http-cache)
 [![Docs.rs](https://img.shields.io/docsrs/http-cache?style=for-the-badge)](https://docs.rs/http-cache)
 [![Codecov](https://img.shields.io/codecov/c/github/06chaynes/http-cache?style=for-the-badge)](https://app.codecov.io/gh/06chaynes/http-cache)
