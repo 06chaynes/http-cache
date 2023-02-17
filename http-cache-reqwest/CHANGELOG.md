@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.1] - 2023-02-17
+
+### Changed
+
+- Updated the minimum versions of the following dependencies:
+  - http [0.2.9]
+
 ## [0.7.0] - 2023-02-16
 
 ### Changed

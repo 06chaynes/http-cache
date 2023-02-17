@@ -8,7 +8,7 @@ publish = false
 anyhow = "1.0.69"
 async-std = { version = "1.12.0", features = ["attributes"] }
 cacache = "11.0.0"
-http = "0.2.8"
+http = "0.2.9"
 http-cache-semantics = "1.0.1"
 http-types = "2.12.0"
 reqwest = "0.11.14"
@@ -20,17 +20,17 @@ wiremock = "0.5.17"
 
 [dependencies.http-cache]
 path = "../http-cache"
-version = "0.9.0"
+version = "0.9.1"
 features = ["with-http-types", "manager-moka"]
 
 [dependencies.http-cache-reqwest]
 path = "../http-cache-reqwest"
-version = "0.7.0"
+version = "0.7.1"
 
 [dependencies.http-cache-surf]
 path = "../http-cache-surf"
-version = "0.7.0"
+version = "0.7.1"
 
 [dependencies.http-cache-quickcache]
 path = "../http-cache-quickcache"
-version = "0.1.0"
+version = "0.1.1"
