@@ -114,7 +114,10 @@ jobs:
         uses: baptiste0928/cargo-install@v1
         with:
           crate: cargo-msrv
-      - name: Run cargo msrv
+      - name: Run cargo msrv http-cache
         working-directory: ./http-cache
+        run: cargo msrv verify
+      - name: Run cargo msrv http-cache-quickcache
+        working-directory: ./http-cache-quickcache
         run: cargo msrv verify
 
