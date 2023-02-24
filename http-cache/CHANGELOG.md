@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.2] - 2023-02-23
+
+### Changed
+
+- Updated the minimum versions of the following dependencies:
+  - cacache [11.1.0]
+
 ## [0.9.1] - 2023-02-17
 
 ### Changed
