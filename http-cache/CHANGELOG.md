@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.10.0] - 2023-03-08
+
+### Changed
+
+- MSRV is now 1.63.0
+
+- Updated the minimum versions of the following dependencies:
+  - async-trait [0.1.66]
+  - cacache [11.3.0]
+  - serde [1.0.154]
+  - thiserror [1.0.39]
+
 ## [0.9.2] - 2023-02-23
 
 ### Changed
