@@ -24,8 +24,9 @@ quick_cache = "0.2.2"
 
 [dependencies.http-cache]
 path = "../http-cache"
-version = "0.10.0"
+version = "0.10.1"
 default-features = false
+features = ["bincode"]
 
 [package.metadata.docs.rs]
 all-features = true

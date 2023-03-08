@@ -20,7 +20,7 @@ wiremock = "0.5.17"
 
 [dependencies.http-cache]
 path = "../http-cache"
-version = "0.10.0"
+version = "0.10.1"
 features = ["with-http-types", "manager-moka"]
 
 [dependencies.http-cache-reqwest]

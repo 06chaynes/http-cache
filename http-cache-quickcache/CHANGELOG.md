@@ -9,7 +9,7 @@
 - Set `default-features = false` for `http-cache` dependency
 
 - Updated the minimum versions of the following dependencies:
-  - http-cache [0.10.0]
+  - http-cache [0.10.1]
   - async-trait [0.1.66]
   - serde [1.0.154]
 
