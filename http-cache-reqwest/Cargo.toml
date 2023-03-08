@@ -27,6 +27,7 @@ url = { version = "2.3.1", features = ["serde"] }
 [dependencies.http-cache]
 path = "../http-cache"
 version = "0.9.2"
+default-features = false
 
 [dev-dependencies]
 tokio = { version = "1.25.0", features = ["macros", "rt-multi-thread"] }
