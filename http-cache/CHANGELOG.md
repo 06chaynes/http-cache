@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.10.1] - 2023-03-08
+
+### Changed
+
+- Set conditional check for `CacheError::Bincode` to `cfg(feature = "bincode")`
+
 ## [0.10.0] - 2023-03-08
 
 ### Changed
