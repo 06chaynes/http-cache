@@ -17,20 +17,11 @@ jobs:
     name: Check formatting
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
-      - name: Install Rust
-        uses: actions-rs/toolchain@v1
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: stable
-          profile: minimal
-          override: true
-          components: rustfmt
-      - name: Check formatting
-        uses: actions-rs/cargo@v1
-        with:
-          command: fmt
-          args: --all -- --check
+          components: "rustfmt"
+      - run: cargo fmt --all -- --check
 
   test:
     name: Test stable on ${{ matrix.os }}
@@ -43,77 +34,41 @@ jobs:
           - macOS-latest
     runs-on: ${{ matrix.os }}
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
-      - name: Install Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          profile: minimal
-          override: true
-      - uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --workspace --all-targets --all-features
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo test --workspace --all-targets --all-features
 
   clippy:
     name: Check clippy
     needs: [fmt, test]
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
-      - name: Install Rust
-        uses: actions-rs/toolchain@v1
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: stable
-          profile: minimal
-          override: true
-          components: clippy
-      - name: Clippy check
-        uses: actions-rs/cargo@v1
-        with:
-          command: clippy
-          args: --lib --tests --all-features --all-targets --workspace -- -D warnings
+          components: "clippy"
+      - run: cargo clippy --lib --tests --all-features --all-targets --workspace -- -D warnings
 
   docs:
     name: Build docs
     needs: [fmt, test]
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
-      - name: Install Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: nightly
-          override: true
-      - name: Check documentation
-        uses: actions-rs/cargo@v1
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@nightly
         env:
           RUSTFLAGS: --cfg docsrs
           RUSTDOCFLAGS: --cfg docsrs -Dwarnings
-        with:
-          command: doc
-          args: --no-deps --document-private-items --workspace
+      - run: cargo doc --no-deps --document-private-items --workspace
   
   msrv:
     name: Verify MSRV
     needs: [fmt, test]
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
-      - name: Install Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          profile: minimal
-          override: true
-      - name: Install cargo msrv
-        uses: baptiste0928/cargo-install@v2
-        with:
-          crate: cargo-msrv
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo install cargo-msrv
       - name: Run cargo msrv http-cache
         working-directory: ./http-cache
         run: cargo msrv verify
