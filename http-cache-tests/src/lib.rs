@@ -50,7 +50,7 @@ mod http_cache_tests {
     use crate::*;
 
     #[test]
-    fn response_methods_work() -> anyhow::Result<()> {
+    fn response_methods_work() -> Result<()> {
         let url = Url::from_str("http://example.com")?;
         let mut res = HttpResponse {
             body: TEST_BODY.to_vec(),
@@ -81,7 +81,7 @@ mod http_cache_tests {
     }
 
     #[test]
-    fn can_convert_versions_from_http() -> anyhow::Result<()> {
+    fn can_convert_versions_from_http() -> Result<()> {
         let v: HttpVersion = http::Version::HTTP_09.try_into()?;
         assert_eq!(v, HttpVersion::Http09);
         let v: http::Version = HttpVersion::Http09.into();
@@ -110,7 +110,7 @@ mod http_cache_tests {
     }
 
     #[test]
-    fn can_convert_versions_from_http_types() -> anyhow::Result<()> {
+    fn can_convert_versions_from_http_types() -> Result<()> {
         let v: HttpVersion = http_types::Version::Http0_9.try_into()?;
         assert_eq!(v, HttpVersion::Http09);
         let v: http_types::Version = HttpVersion::Http09.into();
@@ -145,7 +145,7 @@ mod http_cache_tests {
         use std::sync::Arc;
 
         #[async_std::test]
-        async fn cacache() -> anyhow::Result<()> {
+        async fn cacache() -> Result<()> {
             let url = Url::parse("http://example.com")?;
             let manager = CACacheManager::default();
             let http_res = HttpResponse {
@@ -176,7 +176,7 @@ mod http_cache_tests {
         }
 
         #[async_std::test]
-        async fn moka() -> anyhow::Result<()> {
+        async fn moka() -> Result<()> {
             // Added to test custom Debug impl
             assert_eq!(
                 format!("{:?}", MokaManager::default()),

@@ -6,7 +6,7 @@ use http_cache_surf::Cache;
 use surf::{middleware::Next, Client, Request};
 
 #[async_std::test]
-async fn default_mode() -> surf::Result<()> {
+async fn default_mode() -> Result<()> {
     let mock_server = MockServer::start().await;
     let m = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 1);
     let _mock_guard = mock_server.register_as_scoped(m).await;
@@ -39,7 +39,7 @@ async fn default_mode() -> surf::Result<()> {
 }
 
 #[async_std::test]
-async fn default_mode_with_options() -> surf::Result<()> {
+async fn default_mode_with_options() -> Result<()> {
     let mock_server = MockServer::start().await;
     let m = build_mock(CACHEABLE_PRIVATE, TEST_BODY, 200, 1);
     let _mock_guard = mock_server.register_as_scoped(m).await;
@@ -68,7 +68,7 @@ async fn default_mode_with_options() -> surf::Result<()> {
 }
 
 #[async_std::test]
-async fn default_mode_no_cache_response() -> surf::Result<()> {
+async fn default_mode_no_cache_response() -> Result<()> {
     let mock_server = MockServer::start().await;
     let m = build_mock("no-cache", TEST_BODY, 200, 2);
     let _mock_guard = mock_server.register_as_scoped(m).await;
@@ -101,7 +101,7 @@ async fn default_mode_no_cache_response() -> surf::Result<()> {
 }
 
 #[async_std::test]
-async fn removes_warning() -> surf::Result<()> {
+async fn removes_warning() -> Result<()> {
     let mock_server = MockServer::start().await;
     let m = Mock::given(method(GET))
         .respond_with(
@@ -142,7 +142,7 @@ async fn removes_warning() -> surf::Result<()> {
 }
 
 #[async_std::test]
-async fn no_store_mode() -> surf::Result<()> {
+async fn no_store_mode() -> Result<()> {
     let mock_server = MockServer::start().await;
     let m = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 2);
     let _mock_guard = mock_server.register_as_scoped(m).await;
@@ -172,7 +172,7 @@ async fn no_store_mode() -> surf::Result<()> {
 }
 
 #[async_std::test]
-async fn no_cache_mode() -> surf::Result<()> {
+async fn no_cache_mode() -> Result<()> {
     let mock_server = MockServer::start().await;
     let m = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 2);
     let _mock_guard = mock_server.register_as_scoped(m).await;
@@ -204,7 +204,7 @@ async fn no_cache_mode() -> surf::Result<()> {
 }
 
 #[async_std::test]
-async fn force_cache_mode() -> surf::Result<()> {
+async fn force_cache_mode() -> Result<()> {
     let mock_server = MockServer::start().await;
     let m = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 1);
     let _mock_guard = mock_server.register_as_scoped(m).await;
@@ -236,7 +236,7 @@ async fn force_cache_mode() -> surf::Result<()> {
 }
 
 #[async_std::test]
-async fn delete_after_non_get_head_method_request() -> surf::Result<()> {
+async fn delete_after_non_get_head_method_request() -> Result<()> {
     let mock_server = MockServer::start().await;
     let m_get = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 1);
     let m_post = Mock::given(method("POST"))
@@ -275,7 +275,7 @@ async fn delete_after_non_get_head_method_request() -> surf::Result<()> {
 }
 
 #[async_std::test]
-async fn revalidation_304() -> surf::Result<()> {
+async fn revalidation_304() -> Result<()> {
     let mock_server = MockServer::start().await;
     let m = build_mock(MUST_REVALIDATE, TEST_BODY, 200, 1);
     let m_304 = Mock::given(method(GET))
@@ -315,7 +315,7 @@ async fn revalidation_304() -> surf::Result<()> {
 }
 
 #[async_std::test]
-async fn revalidation_200() -> surf::Result<()> {
+async fn revalidation_200() -> Result<()> {
     let mock_server = MockServer::start().await;
     let m = build_mock(MUST_REVALIDATE, TEST_BODY, 200, 1);
     let m_200 = build_mock(MUST_REVALIDATE, b"updated", 200, 1);
@@ -353,7 +353,7 @@ async fn revalidation_200() -> surf::Result<()> {
 }
 
 #[async_std::test]
-async fn revalidation_500() -> surf::Result<()> {
+async fn revalidation_500() -> Result<()> {
     let mock_server = MockServer::start().await;
     let m = build_mock(MUST_REVALIDATE, TEST_BODY, 200, 1);
     let m_500 = Mock::given(method(GET))
@@ -398,7 +398,7 @@ mod only_if_cached_mode {
     use super::*;
 
     #[async_std::test]
-    async fn miss() -> surf::Result<()> {
+    async fn miss() -> Result<()> {
         let mock_server = MockServer::start().await;
         let m = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 0);
         let _mock_guard = mock_server.register_as_scoped(m).await;
@@ -425,7 +425,7 @@ mod only_if_cached_mode {
     }
 
     #[async_std::test]
-    async fn hit() -> surf::Result<()> {
+    async fn hit() -> Result<()> {
         let mock_server = MockServer::start().await;
         let m = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 1);
         let _mock_guard = mock_server.register_as_scoped(m).await;

@@ -8,7 +8,7 @@ use reqwest::{Client, Request, ResponseBuilderExt};
 use reqwest_middleware::ClientBuilder;
 
 #[async_std::test]
-async fn quickcache() -> anyhow::Result<()> {
+async fn quickcache() -> Result<()> {
     // Added to test custom Debug impl
     assert_eq!(format!("{:?}", QuickManager::default()), "QuickManager { .. }",);
     let url = Url::parse("http://example.com")?;
@@ -34,7 +34,7 @@ async fn quickcache() -> anyhow::Result<()> {
 }
 
 #[tokio::test]
-async fn default_mode() -> anyhow::Result<()> {
+async fn default_mode() -> Result<()> {
     let mock_server = MockServer::start().await;
     let m = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 1);
     let _mock_guard = mock_server.register_as_scoped(m).await;
@@ -64,7 +64,7 @@ async fn default_mode() -> anyhow::Result<()> {
 }
 
 #[tokio::test]
-async fn default_mode_with_options() -> anyhow::Result<()> {
+async fn default_mode_with_options() -> Result<()> {
     let mock_server = MockServer::start().await;
     let m = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 1);
     let _mock_guard = mock_server.register_as_scoped(m).await;
@@ -90,7 +90,7 @@ async fn default_mode_with_options() -> anyhow::Result<()> {
 }
 
 #[tokio::test]
-async fn no_cache_mode() -> anyhow::Result<()> {
+async fn no_cache_mode() -> Result<()> {
     let mock_server = MockServer::start().await;
     let m = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 2);
     let _mock_guard = mock_server.register_as_scoped(m).await;
