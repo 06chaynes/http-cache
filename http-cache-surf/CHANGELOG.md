@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.9.0] - 2022-03-29
+
+### Added
+
+- A generic error type `Error` deriving thiserror::Error
+
+- The following dependencies:
+  - thiserror
+
+### Changed
+
+- Updated the minimum versions of the following dependencies:
+  - http-cache [0.11.0]
+  - anyhow [1.0.70]
+  - async-trait [0.1.68]
+  - serde [1.0.159]
+  - thiserror [1.0.40]
+
 ## [0.8.0] - 2023-03-08
 
 ### Changed
