@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.9.0] - 2022-03-29
+
+### Added
+
+- `BadRequest` error type for request parsing failure.
+
+### Changed
+
+- Updated the minimum versions of the following dependencies:
+  - http-cache [0.11.0]
+  - anyhow [1.0.70]
+  - async-trait [0.1.68]
+  - reqwest [0.11.16]
+  - reqwest-middleware [0.2.1]
+  - serde [1.0.159]
+  - task-local-extensions [0.1.4]
+  - tokio [1.27.0]
+
 ## [0.8.0] - 2023-03-08
 
 ### Changed
