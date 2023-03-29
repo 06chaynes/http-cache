@@ -33,7 +33,12 @@
 //!     Ok(())
 //! }
 //! ```
+mod error;
+
 use anyhow::anyhow;
+
+pub use error::BadRequest;
+
 use std::{
     collections::HashMap,
     convert::{TryFrom, TryInto},
@@ -46,7 +51,7 @@ use http::{
     request::Parts,
     HeaderValue, Method,
 };
-use http_cache::{CacheError, CacheManager, Middleware, Result};
+use http_cache::{CacheManager, Middleware, Result};
 use http_cache_semantics::CachePolicy;
 use reqwest::{Request, Response, ResponseBuilderExt};
 use reqwest_middleware::{Error, Next};
@@ -72,6 +77,13 @@ pub(crate) struct ReqwestMiddleware<'a> {
     pub req: Request,
     pub next: Next<'a>,
     pub extensions: &'a mut Extensions,
+}
+
+fn clone_req(request: &Request) -> std::result::Result<Request, Error> {
+    match request.try_clone() {
+        Some(r) => Ok(r),
+        None => Err(Error::Middleware(anyhow!(BadRequest))),
+    }
 }
 
 #[async_trait::async_trait]
@@ -107,10 +119,10 @@ impl Middleware for ReqwestMiddleware<'_> {
         Ok(())
     }
     fn parts(&self) -> Result<Parts> {
-        let copied_req = self.req.try_clone().ok_or(CacheError::BadRequest)?;
+        let copied_req = clone_req(&self.req)?;
         let converted = match http::Request::try_from(copied_req) {
             Ok(r) => r,
-            Err(e) => return Err(CacheError::General(anyhow!(e))),
+            Err(e) => return Err(Box::new(e)),
         };
         Ok(converted.into_parts().0)
     }
@@ -121,11 +133,11 @@ impl Middleware for ReqwestMiddleware<'_> {
         Ok(self.req.method().as_ref().to_string())
     }
     async fn remote_fetch(&mut self) -> Result<HttpResponse> {
-        let copied_req = self.req.try_clone().ok_or(CacheError::BadRequest)?;
+        let copied_req = clone_req(&self.req)?;
         let res = match self.next.clone().run(copied_req, self.extensions).await
         {
             Ok(r) => r,
-            Err(e) => return Err(CacheError::General(anyhow!(e))),
+            Err(e) => return Err(Box::new(e)),
         };
         let mut headers = HashMap::new();
         for header in res.headers() {
@@ -139,7 +151,7 @@ impl Middleware for ReqwestMiddleware<'_> {
         let version = res.version();
         let body: Vec<u8> = match res.bytes().await {
             Ok(b) => b,
-            Err(e) => return Err(CacheError::General(anyhow!(e))),
+            Err(e) => return Err(Box::new(e)),
         }
         .to_vec();
         Ok(HttpResponse {
