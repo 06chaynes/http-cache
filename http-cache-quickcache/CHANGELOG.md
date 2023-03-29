@@ -1,6 +1,16 @@
 
 # Changelog
 
+## [0.3.0] - 2023-03-29
+
+### Changed
+
+- Updated the minimum versions of the following dependencies:
+  - http-cache [0.11.0]
+  - async-trait [0.1.68]
+  - serde [1.0.159]
+  - quick_cache [0.2.4]
+
 ## [0.2.0] - 2023-03-08
 
 ### Changed
