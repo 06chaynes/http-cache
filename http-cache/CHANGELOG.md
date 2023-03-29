@@ -1,5 +1,40 @@
 # Changelog
 
+## [0.11.0] - 2023-03-29
+
+### Added
+
+- `BoxError` type alias for `Box<dyn std::error::Error + Send + Sync>`.
+
+- `BadVersion` error type for unknown http versions.
+
+- `BadHeader` error type for bad http header values.
+
+### Removed
+
+- `CacheError` enum.
+
+- The following dependencies:
+  - anyhow
+  - thiserror
+  - miette
+
+### Changed
+
+- `CacheError` enum has been replaced in function by `Box<dyn std::error::Error + Send + Sync>`.
+
+- `Result` typedef is now `std::result::Result<T, BoxError>`.
+
+- `Error` type for the TryFrom implentation for the `HttpVersion` struct is now `BoxError` containing a `BadVersion` error.
+
+- `CacheManager` trait `put` method now returns `Result<(), BoxError>`.
+
+- Updated the minimum versions of the following dependencies:
+  - async-trait [0.1.68]
+  - cacache [11.4.0]
+  - moka [0.10.1]
+  - serde [1.0.159]
+
 ## [0.10.1] - 2023-03-08
 
 ### Changed
