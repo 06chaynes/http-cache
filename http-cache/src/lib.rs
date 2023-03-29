@@ -37,7 +37,7 @@ use http_cache_semantics::{AfterResponse, BeforeRequest, CachePolicy};
 use serde::{Deserialize, Serialize};
 use url::Url;
 
-pub use error::{CacheError, Result};
+pub use error::{BadHeader, BadVersion, BoxError, Result};
 
 #[cfg(feature = "manager-cacache")]
 pub use managers::cacache::CACacheManager;
@@ -273,7 +273,7 @@ pub enum CacheMode {
 }
 
 impl TryFrom<http::Version> for HttpVersion {
-    type Error = CacheError;
+    type Error = BoxError;
 
     fn try_from(value: http::Version) -> Result<Self> {
         Ok(match value {
@@ -282,7 +282,7 @@ impl TryFrom<http::Version> for HttpVersion {
             http::Version::HTTP_11 => Self::Http11,
             http::Version::HTTP_2 => Self::H2,
             http::Version::HTTP_3 => Self::H3,
-            _ => return Err(CacheError::BadVersion),
+            _ => return Err(Box::new(BadVersion)),
         })
     }
 }
@@ -301,7 +301,7 @@ impl From<HttpVersion> for http::Version {
 
 #[cfg(feature = "http-types")]
 impl TryFrom<http_types::Version> for HttpVersion {
-    type Error = CacheError;
+    type Error = BoxError;
 
     fn try_from(value: http_types::Version) -> Result<Self> {
         Ok(match value {
@@ -310,7 +310,7 @@ impl TryFrom<http_types::Version> for HttpVersion {
             http_types::Version::Http1_1 => Self::Http11,
             http_types::Version::Http2_0 => Self::H2,
             http_types::Version::Http3_0 => Self::H3,
-            _ => return Err(CacheError::BadVersion),
+            _ => return Err(Box::new(BadVersion)),
         })
     }
 }
