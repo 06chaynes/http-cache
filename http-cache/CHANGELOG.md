@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.12.0] - 2023-05-19
+
+### Changed
+
+- `CACacheManager` field `path` has changed to `std::path::PathBuf`
+
+- Updated the minimum versions of the following dependencies:
+  - cacache [11.5.2]
+  - moka [0.11.0]
+  - serde [1.0.163]
+
 ## [0.11.0] - 2023-03-29
 
 ### Added
