@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.10.0] - 2022-05-19
+
+### Changed
+
+- Updated the minimum versions of the following dependencies:
+  - http-cache [0.12.0]
+  - anyhow [1.0.71]
+  - reqwest [0.11.18]
+  - reqwest-middleware [0.2.2]
+  - serde [1.0.163]
+  - tokio [1.28.1]
+
 ## [0.9.0] - 2022-03-29
 
 ### Added
