@@ -4,6 +4,7 @@
 
 ### Changed
 
+- MSRV is now 1.65.0
 - Updated the minimum versions of the following dependencies:
   - http-cache [0.12.0]
   - anyhow [1.0.71]
