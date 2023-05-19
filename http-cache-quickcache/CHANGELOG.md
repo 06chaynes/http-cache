@@ -1,6 +1,16 @@
 
 # Changelog
 
+## [0.4.0] - 2023-05-19
+
+### Changed
+
+- MSRV is now 1.65.0
+- Updated the minimum versions of the following dependencies:
+  - http-cache [0.12.0]
+  - serde [1.0.163]
+  - quick_cache [0.3.0]
+
 ## [0.3.0] - 2023-03-29
 
 ### Changed
