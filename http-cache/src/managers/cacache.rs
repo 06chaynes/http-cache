@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use crate::{CacheManager, HttpResponse, Result};
 
 use http_cache_semantics::CachePolicy;
@@ -9,7 +11,7 @@ use url::Url;
 #[derive(Debug, Clone)]
 pub struct CACacheManager {
     /// Directory where the cache will be stored.
-    pub path: String,
+    pub path: PathBuf,
 }
 
 impl Default for CACacheManager {
