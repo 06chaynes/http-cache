@@ -60,19 +60,3 @@ jobs:
           RUSTFLAGS: --cfg docsrs
           RUSTDOCFLAGS: --cfg docsrs -Dwarnings
       - run: cargo doc --no-deps --document-private-items --workspace
-  
-  msrv:
-    name: Verify MSRV
-    needs: [fmt, test]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: dtolnay/rust-toolchain@stable
-      - run: cargo install cargo-msrv
-      - name: Run cargo msrv http-cache
-        working-directory: ./http-cache
-        run: cargo msrv verify
-      - name: Run cargo msrv http-cache-quickcache
-        working-directory: ./http-cache-quickcache
-        run: cargo msrv verify
-

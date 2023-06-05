@@ -1,0 +1,25 @@
+name: msrv
+
+on: [push]
+
+env:
+  CARGO_TERM_COLOR: always
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Verify MSRV
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo install cargo-msrv
+      - name: Run cargo msrv http-cache
+        working-directory: ./http-cache
+        run: cargo msrv verify
+      - name: Run cargo msrv http-cache-quickcache
+        working-directory: ./http-cache-quickcache
+        run: cargo msrv verify
