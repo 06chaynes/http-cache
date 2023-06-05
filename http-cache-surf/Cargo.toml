@@ -21,7 +21,7 @@ http-cache-semantics = "1.0.1"
 http-types = "2.12.0"
 serde = { version = "1.0.163", features = ["derive"] }
 surf = "2.3.2"
-url = { version = "2.3.1", features = ["serde"] }
+url = { version = "2.4.0", features = ["serde"] }
 thiserror = "1.0.40"
 
 [dependencies.http-cache]

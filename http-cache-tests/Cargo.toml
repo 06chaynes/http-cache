@@ -6,15 +6,15 @@ publish = false
 
 [dependencies]
 async-std = { version = "1.12.0", features = ["attributes"] }
-cacache = "11.5.2"
+cacache = "11.6.0"
 http = "0.2.9"
 http-cache-semantics = "1.0.1"
 http-types = "2.12.0"
 reqwest = "0.11.18"
 reqwest-middleware = "0.2.2"
 surf = "2.3.2"
-tokio = { version = "1.28.1", features = ["macros", "rt-multi-thread"] }
-url = "2.3.1"
+tokio = { version = "1.28.2", features = ["macros", "rt-multi-thread"] }
+url = "2.4.0"
 wiremock = "0.5.18"
 
 [dependencies.http-cache]

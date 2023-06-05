@@ -22,7 +22,7 @@ reqwest = { version = "0.11.18", default-features = false }
 reqwest-middleware = "0.2.2"
 serde = { version = "1.0.163", features = ["derive"] }
 task-local-extensions = "0.1.4"
-url = { version = "2.3.1", features = ["serde"] }
+url = { version = "2.4.0", features = ["serde"] }
 
 [dependencies.http-cache]
 path = "../http-cache"
@@ -30,7 +30,7 @@ version = "0.12.0"
 default-features = false
 
 [dev-dependencies]
-tokio = { version = "1.28.1", features = ["macros", "rt-multi-thread"] }
+tokio = { version = "1.28.2", features = ["macros", "rt-multi-thread"] }
 
 [features]
 default = ["manager-cacache"]
