@@ -5,7 +5,7 @@
 
 ### Changed
 
-- MSRV is now 1.65.0
+- MSRV is now 1.66.1
 - Updated the minimum versions of the following dependencies:
   - http-cache [0.12.0]
   - serde [1.0.163]

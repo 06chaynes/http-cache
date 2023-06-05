@@ -4,7 +4,7 @@
 
 ### Changed
 
-- MSRV is now 1.65.0
+- MSRV is now 1.66.1
 - `CACacheManager` field `path` has changed to `std::path::PathBuf`
 
 - Updated the minimum versions of the following dependencies:
