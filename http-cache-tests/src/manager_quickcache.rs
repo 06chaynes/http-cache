@@ -23,12 +23,14 @@ async fn quickcache() -> Result<()> {
     let req = http::Request::get("http://example.com").body(())?;
     let res = http::Response::builder().status(200).body(TEST_BODY.to_vec())?;
     let policy = CachePolicy::new(&req, &res);
-    manager.put(GET, &url, http_res.clone(), policy.clone()).await?;
-    let data = manager.get(GET, &url).await?;
+    manager
+        .put(format!("{}:{}", GET, &url), http_res.clone(), policy.clone())
+        .await?;
+    let data = manager.get(&format!("{}:{}", GET, &url)).await?;
     assert!(data.is_some());
     assert_eq!(data.unwrap().0.body, TEST_BODY);
-    manager.delete(GET, &url).await?;
-    let data = manager.get(GET, &url).await?;
+    manager.delete(&format!("{}:{}", GET, &url)).await?;
+    let data = manager.get(&format!("{}:{}", GET, &url)).await?;
     assert!(data.is_none());
     Ok(())
 }
@@ -46,7 +48,7 @@ async fn default_mode() -> Result<()> {
         .with(Cache(HttpCache {
             mode: CacheMode::Default,
             manager: manager.clone(),
-            options: None,
+            options: HttpCacheOptions::default(),
         }))
         .build();
 
@@ -54,7 +56,7 @@ async fn default_mode() -> Result<()> {
     client.get(url.clone()).send().await?;
 
     // Try to load cached object
-    let data = manager.get(GET, &Url::parse(&url)?).await?;
+    let data = manager.get(&format!("{}:{}", GET, &Url::parse(&url)?)).await?;
     assert!(data.is_some());
 
     // Hot pass to make sure the expect response was returned
@@ -76,7 +78,13 @@ async fn default_mode_with_options() -> Result<()> {
         .with(Cache(HttpCache {
             mode: CacheMode::Default,
             manager: manager.clone(),
-            options: Some(CacheOptions { shared: false, ..Default::default() }),
+            options: HttpCacheOptions {
+                cache_key: None,
+                cache_options: Some(CacheOptions {
+                    shared: false,
+                    ..Default::default()
+                }),
+            },
         }))
         .build();
 
@@ -84,7 +92,7 @@ async fn default_mode_with_options() -> Result<()> {
     client.get(url.clone()).send().await?;
 
     // Try to load cached object
-    let data = manager.get(GET, &Url::parse(&url)?).await?;
+    let data = manager.get(&format!("{}:{}", GET, &Url::parse(&url)?)).await?;
     assert!(data.is_some());
     Ok(())
 }
@@ -102,7 +110,7 @@ async fn no_cache_mode() -> Result<()> {
         .with(Cache(HttpCache {
             mode: CacheMode::NoCache,
             manager: manager.clone(),
-            options: None,
+            options: HttpCacheOptions::default(),
         }))
         .build();
 
@@ -110,7 +118,7 @@ async fn no_cache_mode() -> Result<()> {
     client.get(url.clone()).send().await?;
 
     // Try to load cached object
-    let data = manager.get(GET, &Url::parse(&url)?).await?;
+    let data = manager.get(&format!("{}:{}", GET, &Url::parse(&url)?)).await?;
     assert!(data.is_some());
 
     // To verify our endpoint receives the request rather than a cache hit

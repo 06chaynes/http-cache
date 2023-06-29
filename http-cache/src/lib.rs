@@ -29,7 +29,12 @@ mod error;
 mod managers;
 
 use std::{
-    collections::HashMap, convert::TryFrom, fmt, str::FromStr, time::SystemTime,
+    collections::HashMap,
+    convert::TryFrom,
+    fmt::{self, Debug},
+    str::FromStr,
+    sync::Arc,
+    time::SystemTime,
 };
 
 use http::{header::CACHE_CONTROL, request, response, StatusCode};
@@ -200,19 +205,17 @@ pub trait CacheManager: Send + Sync + 'static {
     /// Attempts to pull a cached response and related policy from cache.
     async fn get(
         &self,
-        method: &str,
-        url: &Url,
+        cache_key: &str,
     ) -> Result<Option<(HttpResponse, CachePolicy)>>;
     /// Attempts to cache a response and related policy.
     async fn put(
         &self,
-        method: &str,
-        url: &Url,
+        cache_key: String,
         res: HttpResponse,
         policy: CachePolicy,
     ) -> Result<HttpResponse>;
     /// Attempts to remove a record from cache.
-    async fn delete(&self, method: &str, url: &Url) -> Result<()>;
+    async fn delete(&self, cache_key: &str) -> Result<()>;
 }
 
 /// Describes the functionality required for interfacing with HTTP client middleware
@@ -332,6 +335,47 @@ impl From<HttpVersion> for http_types::Version {
 /// [`http-cache-semantics`](https://github.com/kornelski/rusty-http-cache-semantics).
 pub use http_cache_semantics::CacheOptions;
 
+/// A closure that takes [`http::request::Parts`] and returns a [`String`].
+/// By default, the cache key is a combination of the request method and uri with a colon in between.
+pub type CacheKey = Arc<dyn Fn(&request::Parts) -> String + Send + Sync>;
+
+/// Can be used to override the default [`CacheOptions`] and cache key.
+/// The cache key is a closure that takes [`http::request::Parts`] and returns a [`String`].
+#[derive(Default, Clone)]
+pub struct HttpCacheOptions {
+    /// Override the default cache options.
+    pub cache_options: Option<CacheOptions>,
+    /// Override the default cache key generator.
+    pub cache_key: Option<CacheKey>,
+}
+
+impl Debug for HttpCacheOptions {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("HttpCacheOptions")
+            .field("cache_options", &self.cache_options)
+            .field("cache_key", &"Fn(&request::Parts) -> String")
+            .finish()
+    }
+}
+
+impl HttpCacheOptions {
+    fn create_cache_key(
+        &self,
+        parts: &request::Parts,
+        override_method: Option<&str>,
+    ) -> String {
+        if let Some(cache_key) = &self.cache_key {
+            cache_key(parts)
+        } else {
+            format!(
+                "{}:{}",
+                override_method.unwrap_or_else(|| parts.method.as_str()),
+                parts.uri
+            )
+        }
+    }
+}
+
 /// Caches requests according to http spec.
 #[derive(Debug, Clone)]
 pub struct HttpCache<T: CacheManager> {
@@ -342,7 +386,7 @@ pub struct HttpCache<T: CacheManager> {
     /// as the backend has been provided, see [`CACacheManager`].
     pub manager: T,
     /// Override the default cache options.
-    pub options: Option<CacheOptions>,
+    pub options: HttpCacheOptions,
 }
 
 #[allow(dead_code)]
@@ -358,9 +402,11 @@ impl<T: CacheManager> HttpCache<T> {
         if !is_cacheable {
             return self.remote_fetch(&mut middleware).await;
         }
-        let method = middleware.method()?.to_uppercase();
-        let url = middleware.url()?;
-        if let Some(store) = self.manager.get(&method, &url).await? {
+        if let Some(store) = self
+            .manager
+            .get(&self.options.create_cache_key(&middleware.parts()?, None))
+            .await?
+        {
             let (mut res, policy) = store;
             res.cache_lookup_status(HitOrMiss::HIT);
             if let Some(warning_code) = res.warning_code() {
@@ -431,7 +477,7 @@ impl<T: CacheManager> HttpCache<T> {
         let mut res = middleware.remote_fetch().await?;
         res.cache_status(HitOrMiss::MISS);
         res.cache_lookup_status(HitOrMiss::MISS);
-        let policy = match self.options {
+        let policy = match self.options.cache_options {
             Some(options) => middleware.policy_with_options(&res, options)?,
             None => middleware.policy(&res)?,
         };
@@ -441,12 +487,24 @@ impl<T: CacheManager> HttpCache<T> {
             && self.mode != CacheMode::Reload
             && res.status == 200
             && policy.is_storable();
-        let url = middleware.url()?;
-        let method = middleware.method()?.to_uppercase();
         if is_cacheable {
-            Ok(self.manager.put(&method, &url, res, policy).await?)
+            Ok(self
+                .manager
+                .put(
+                    self.options.create_cache_key(&middleware.parts()?, None),
+                    res,
+                    policy,
+                )
+                .await?)
         } else if !is_get_head {
-            self.manager.delete("GET", &url).await.ok();
+            self.manager
+                .delete(
+                    &self
+                        .options
+                        .create_cache_key(&middleware.parts()?, Some("GET")),
+                )
+                .await
+                .ok();
             Ok(res)
         } else {
             Ok(res)
@@ -506,24 +564,32 @@ impl<T: CacheManager> HttpCache<T> {
                     }
                     cached_res.cache_status(HitOrMiss::HIT);
                     cached_res.cache_lookup_status(HitOrMiss::HIT);
-                    let method = middleware.method()?.to_uppercase();
                     let res = self
                         .manager
-                        .put(&method, &req_url, cached_res, policy)
+                        .put(
+                            self.options
+                                .create_cache_key(&middleware.parts()?, None),
+                            cached_res,
+                            policy,
+                        )
                         .await?;
                     Ok(res)
                 } else if cond_res.status == 200 {
-                    let policy = match self.options {
+                    let policy = match self.options.cache_options {
                         Some(options) => middleware
                             .policy_with_options(&cond_res, options)?,
                         None => middleware.policy(&cond_res)?,
                     };
                     cond_res.cache_status(HitOrMiss::MISS);
                     cond_res.cache_lookup_status(HitOrMiss::HIT);
-                    let method = middleware.method()?.to_uppercase();
                     let res = self
                         .manager
-                        .put(&method, &req_url, cond_res, policy)
+                        .put(
+                            self.options
+                                .create_cache_key(&middleware.parts()?, None),
+                            cond_res,
+                            policy,
+                        )
                         .await?;
                     Ok(res)
                 } else {

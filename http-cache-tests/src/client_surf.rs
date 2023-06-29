@@ -18,7 +18,7 @@ async fn default_mode() -> Result<()> {
     let client = Client::new().with(Cache(HttpCache {
         mode: CacheMode::Default,
         manager: manager.clone(),
-        options: None,
+        options: HttpCacheOptions::default(),
     }));
 
     // Cold pass to load cache
@@ -27,7 +27,7 @@ async fn default_mode() -> Result<()> {
     assert_eq!(res.header(XCACHE).unwrap(), MISS);
 
     // Try to load cached object
-    let data = manager.get(GET, &Url::parse(&url)?).await?;
+    let data = manager.get(&format!("{}:{}", GET, &Url::parse(&url)?)).await?;
     assert!(data.is_some());
 
     // Hot pass to make sure the expect response was returned
@@ -51,14 +51,20 @@ async fn default_mode_with_options() -> Result<()> {
     let client = Client::new().with(Cache(HttpCache {
         mode: CacheMode::Default,
         manager: manager.clone(),
-        options: Some(CacheOptions { shared: false, ..Default::default() }),
+        options: HttpCacheOptions {
+            cache_key: None,
+            cache_options: Some(CacheOptions {
+                shared: false,
+                ..Default::default()
+            }),
+        },
     }));
 
     // Cold pass to load cache
     client.send(req.clone()).await?;
 
     // Try to load cached object
-    let data = manager.get(GET, &Url::parse(&url)?).await?;
+    let data = manager.get(&format!("{}:{}", GET, &Url::parse(&url)?)).await?;
     assert!(data.is_some());
 
     // Hot pass to make sure the expect response was returned
@@ -80,7 +86,7 @@ async fn default_mode_no_cache_response() -> Result<()> {
     let client = Client::new().with(Cache(HttpCache {
         mode: CacheMode::Default,
         manager: manager.clone(),
-        options: None,
+        options: HttpCacheOptions::default(),
     }));
 
     // Cold pass to load cache
@@ -89,7 +95,7 @@ async fn default_mode_no_cache_response() -> Result<()> {
     assert_eq!(res.header(XCACHE).unwrap(), MISS);
 
     // Try to load cached object
-    let data = manager.get(GET, &Url::parse(&url)?).await?;
+    let data = manager.get(&format!("{}:{}", GET, &Url::parse(&url)?)).await?;
     assert!(data.is_some());
 
     // Hot pass to make sure the expect response was returned
@@ -120,7 +126,7 @@ async fn removes_warning() -> Result<()> {
     let client = Client::new().with(Cache(HttpCache {
         mode: CacheMode::Default,
         manager: manager.clone(),
-        options: None,
+        options: HttpCacheOptions::default(),
     }));
 
     // Cold pass to load cache
@@ -129,7 +135,7 @@ async fn removes_warning() -> Result<()> {
     assert_eq!(res.header(XCACHE).unwrap(), MISS);
 
     // Try to load cached object
-    let data = manager.get(GET, &Url::parse(&url)?).await?;
+    let data = manager.get(&format!("{}:{}", GET, &Url::parse(&url)?)).await?;
     assert!(data.is_some());
 
     // Hot pass to make sure the expect response was returned
@@ -154,14 +160,14 @@ async fn no_store_mode() -> Result<()> {
     let client = Client::new().with(Cache(HttpCache {
         mode: CacheMode::NoStore,
         manager: manager.clone(),
-        options: None,
+        options: HttpCacheOptions::default(),
     }));
 
     // Remote request but should not cache
     client.send(req.clone()).await?;
 
     // Try to load cached object
-    let data = manager.get(GET, &Url::parse(&url)?).await?;
+    let data = manager.get(&format!("{}:{}", GET, &Url::parse(&url)?)).await?;
     assert!(data.is_none());
 
     // To verify our endpoint receives the request rather than a cache hit
@@ -184,7 +190,7 @@ async fn no_cache_mode() -> Result<()> {
     let client = Client::new().with(Cache(HttpCache {
         mode: CacheMode::NoCache,
         manager: manager.clone(),
-        options: None,
+        options: HttpCacheOptions::default(),
     }));
 
     // Remote request and should cache
@@ -193,7 +199,7 @@ async fn no_cache_mode() -> Result<()> {
     assert_eq!(res.header(XCACHE).unwrap(), MISS);
 
     // Try to load cached object
-    let data = manager.get(GET, &Url::parse(&url)?).await?;
+    let data = manager.get(&format!("{}:{}", GET, &Url::parse(&url)?)).await?;
     assert!(data.is_some());
 
     // To verify our endpoint receives the request rather than a cache hit
@@ -216,7 +222,7 @@ async fn force_cache_mode() -> Result<()> {
     let client = Client::new().with(Cache(HttpCache {
         mode: CacheMode::ForceCache,
         manager: manager.clone(),
-        options: None,
+        options: HttpCacheOptions::default(),
     }));
 
     // Should result in a cache miss and a remote request
@@ -225,7 +231,7 @@ async fn force_cache_mode() -> Result<()> {
     assert_eq!(res.header(XCACHE).unwrap(), MISS);
 
     // Try to load cached object
-    let data = manager.get(GET, &Url::parse(&url)?).await?;
+    let data = manager.get(&format!("{}:{}", GET, &Url::parse(&url)?)).await?;
     assert!(data.is_some());
 
     // Should result in a cache hit and no remote request
@@ -253,7 +259,7 @@ async fn delete_after_non_get_head_method_request() -> Result<()> {
     let client = Client::new().with(Cache(HttpCache {
         mode: CacheMode::Default,
         manager: manager.clone(),
-        options: None,
+        options: HttpCacheOptions::default(),
     }));
 
     // Cold pass to load cache
@@ -262,13 +268,13 @@ async fn delete_after_non_get_head_method_request() -> Result<()> {
     assert_eq!(res.header(XCACHE).unwrap(), MISS);
 
     // Try to load cached object
-    let data = manager.get(GET, &Url::parse(&url)?).await?;
+    let data = manager.get(&format!("{}:{}", GET, &Url::parse(&url)?)).await?;
     assert!(data.is_some());
 
     // Post request to make sure the cache object at the same resource was deleted
     client.send(req_post).await?;
 
-    let data = manager.get(GET, &Url::parse(&url)?).await?;
+    let data = manager.get(&format!("{}:{}", GET, &Url::parse(&url)?)).await?;
     assert!(data.is_none());
 
     Ok(())
@@ -290,7 +296,7 @@ async fn revalidation_304() -> Result<()> {
     let client = Client::new().with(Cache(HttpCache {
         mode: CacheMode::Default,
         manager: manager.clone(),
-        options: None,
+        options: HttpCacheOptions::default(),
     }));
 
     // Cold pass to load cache
@@ -303,7 +309,7 @@ async fn revalidation_304() -> Result<()> {
     let _mock_guard = mock_server.register_as_scoped(m_304).await;
 
     // Try to load cached object
-    let data = manager.get(GET, &Url::parse(&url)?).await?;
+    let data = manager.get(&format!("{}:{}", GET, &Url::parse(&url)?)).await?;
     assert!(data.is_some());
 
     // Hot pass to make sure revalidation request was sent
@@ -328,7 +334,7 @@ async fn revalidation_200() -> Result<()> {
     let client = Client::new().with(Cache(HttpCache {
         mode: CacheMode::Default,
         manager: manager.clone(),
-        options: None,
+        options: HttpCacheOptions::default(),
     }));
 
     // Cold pass to load cache
@@ -341,7 +347,7 @@ async fn revalidation_200() -> Result<()> {
     let _mock_guard = mock_server.register_as_scoped(m_200).await;
 
     // Try to load cached object
-    let data = manager.get(GET, &Url::parse(&url)?).await?;
+    let data = manager.get(&format!("{}:{}", GET, &Url::parse(&url)?)).await?;
     assert!(data.is_some());
 
     // Hot pass to make sure revalidation request was sent
@@ -368,7 +374,7 @@ async fn revalidation_500() -> Result<()> {
     let client = Client::new().with(Cache(HttpCache {
         mode: CacheMode::Default,
         manager: manager.clone(),
-        options: None,
+        options: HttpCacheOptions::default(),
     }));
 
     // Cold pass to load cache
@@ -381,7 +387,7 @@ async fn revalidation_500() -> Result<()> {
     let _mock_guard = mock_server.register_as_scoped(m_500).await;
 
     // Try to load cached object
-    let data = manager.get(GET, &Url::parse(&url)?).await?;
+    let data = manager.get(&format!("{}:{}", GET, &Url::parse(&url)?)).await?;
     assert!(data.is_some());
 
     // Hot pass to make sure revalidation request was sent
@@ -410,7 +416,7 @@ mod only_if_cached_mode {
         let client = Client::new().with(Cache(HttpCache {
             mode: CacheMode::OnlyIfCached,
             manager: manager.clone(),
-            options: None,
+            options: HttpCacheOptions::default(),
         }));
 
         // Should result in a cache miss and no remote request
@@ -419,7 +425,8 @@ mod only_if_cached_mode {
         assert_eq!(res.header(XCACHE).unwrap(), MISS);
 
         // Try to load cached object
-        let data = manager.get(GET, &Url::parse(&url)?).await?;
+        let data =
+            manager.get(&format!("{}:{}", GET, &Url::parse(&url)?)).await?;
         assert!(data.is_none());
         Ok(())
     }
@@ -437,7 +444,7 @@ mod only_if_cached_mode {
         let client = Client::new().with(Cache(HttpCache {
             mode: CacheMode::Default,
             manager: manager.clone(),
-            options: None,
+            options: HttpCacheOptions::default(),
         }));
 
         // Cold pass to load the cache
@@ -446,14 +453,15 @@ mod only_if_cached_mode {
         assert_eq!(res.header(XCACHE).unwrap(), MISS);
 
         // Try to load cached object
-        let data = manager.get(GET, &Url::parse(&url)?).await?;
+        let data =
+            manager.get(&format!("{}:{}", GET, &Url::parse(&url)?)).await?;
         assert!(data.is_some());
 
         // Construct Surf client with cache defaults
         let client = Client::new().with(Cache(HttpCache {
             mode: CacheMode::OnlyIfCached,
             manager: manager.clone(),
-            options: None,
+            options: HttpCacheOptions::default(),
         }));
 
         // Should result in a cache hit and no remote request

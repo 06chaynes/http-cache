@@ -13,7 +13,7 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 //! The surf middleware implementation for http-cache.
 //! ```no_run
-//! use http_cache_surf::{Cache, CacheMode, CACacheManager, HttpCache};
+//! use http_cache_surf::{Cache, CacheMode, CACacheManager, HttpCache, HttpCacheOptions};
 //!
 //! #[async_std::main]
 //! async fn main() -> surf::Result<()> {
@@ -22,7 +22,7 @@
 //!         .with(Cache(HttpCache {
 //!             mode: CacheMode::Default,
 //!             manager: CACacheManager::default(),
-//!             options: None,
+//!             options: HttpCacheOptions::default(),
 //!         }))
 //!         .send(req)
 //!         .await?;
