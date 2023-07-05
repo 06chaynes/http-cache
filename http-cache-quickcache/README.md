@@ -6,7 +6,7 @@
 [![Codecov](https://img.shields.io/codecov/c/github/06chaynes/http-cache?style=for-the-badge)](https://app.codecov.io/gh/06chaynes/http-cache)
 ![Crates.io](https://img.shields.io/crates/l/http-cache-quickcache?style=for-the-badge)
 
-<img align="right" src="https://raw.githubusercontent.com/06chaynes/http-cache/latest/.assets/images/http-cache_logo_bluegreen.svg" height="150px" alt="the http-cache logo">
+<img class="logo" align="right" src="https://raw.githubusercontent.com/06chaynes/http-cache/latest/.assets/images/http-cache_logo_bluegreen.svg" height="150px" alt="the http-cache logo">
 
 An http-cache manager implementation for [quick-cache](https://github.com/arthurprs/quick-cache).
 

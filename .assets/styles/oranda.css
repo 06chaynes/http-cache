@@ -1,0 +1,11 @@
+@layer overrides {
+    img.logo {
+        height: 150px !important;
+    }
+    html.axo {
+        /* Our theme's own colors */
+        --highlight-color: rgb(0, 161, 154) !important;
+        --axo-orange-color: #00a19a !important;
+        --axo-pink-color: #b0dde9 !important;
+    }
+}
