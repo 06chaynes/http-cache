@@ -7,6 +7,7 @@
     "readme_path": "./http-cache/README.md"
   },
   "build": {
+    "path_prefix": "http-cache",
     "additional_pages": {
       "http-cache changelog": "./http-cache/CHANGELOG.md",
       "http-cache-reqwest": "./http-cache-reqwest/README.md",
