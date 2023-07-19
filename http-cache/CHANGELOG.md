@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.13.0] - 2023-07-19
+
+### Added
+
+- `CacheKey` type, a closure that takes [`http::request::Parts`] and returns a [`String`].
+
+- `HttpCacheOptions` struct that contains the cache key (`CacheKey`) and the cache options (`CacheOptions`).
+
+### Changed
+
+- `CacheManager` trait `get`, `put`, and `delete` methods now require a `cache_key` argument rather than `method` and `url` arguments. This allows for custom keys to be specified.
+
+- Both the `CACacheManager` trait and `MokaManager` implementation have been updated to reflect the above change.
+
+- Updated the minimum versions of the following dependencies:
+  - async-trait [0.1.71]
+  - moka [0.11.2]
+  - serde [1.0.171]
+
 ## [0.12.0] - 2023-06-05
 
 ### Changed

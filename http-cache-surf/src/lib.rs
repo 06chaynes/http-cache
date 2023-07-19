@@ -13,7 +13,7 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 //! The surf middleware implementation for http-cache.
 //! ```no_run
-//! use http_cache_surf::{Cache, CacheMode, CACacheManager, HttpCache};
+//! use http_cache_surf::{Cache, CacheMode, CACacheManager, HttpCache, HttpCacheOptions};
 //!
 //! #[async_std::main]
 //! async fn main() -> surf::Result<()> {
@@ -22,7 +22,7 @@
 //!         .with(Cache(HttpCache {
 //!             mode: CacheMode::Default,
 //!             manager: CACacheManager::default(),
-//!             options: None,
+//!             options: HttpCacheOptions::default(),
 //!         }))
 //!         .send(req)
 //!         .await?;
@@ -36,14 +36,17 @@ use std::{
     collections::HashMap, convert::TryInto, str::FromStr, time::SystemTime,
 };
 
-use http::{header::CACHE_CONTROL, request, request::Parts};
+pub use http::request::Parts;
+use http::{header::CACHE_CONTROL, request};
 use http_cache::{BadHeader, BoxError, CacheManager, Middleware, Result};
 use http_cache_semantics::CachePolicy;
 use http_types::{headers::HeaderValue, Method, Response, StatusCode, Version};
 use surf::{middleware::Next, Client, Request};
 use url::Url;
 
-pub use http_cache::{CacheMode, CacheOptions, HttpCache, HttpResponse};
+pub use http_cache::{
+    CacheMode, CacheOptions, HttpCache, HttpCacheOptions, HttpResponse,
+};
 
 #[cfg(feature = "manager-cacache")]
 #[cfg_attr(docsrs, doc(cfg(feature = "manager-cacache")))]

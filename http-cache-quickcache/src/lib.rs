@@ -5,7 +5,6 @@ use std::{fmt, sync::Arc};
 use http_cache_semantics::CachePolicy;
 use quick_cache::sync::Cache;
 use serde::{Deserialize, Serialize};
-use url::Url;
 
 /// Implements [`CacheManager`] with [`quick-cache`](https://github.com/arthurprs/quick-cache) as the backend.
 #[derive(Clone)]
@@ -33,10 +32,6 @@ struct Store {
     policy: CachePolicy,
 }
 
-fn req_key(method: &str, url: &Url) -> String {
-    format!("{method}:{url}")
-}
-
 impl QuickManager {
     /// Create a new manager from a pre-configured Cache
     pub fn new(cache: Cache<String, Arc<Vec<u8>>>) -> Self {
@@ -48,10 +43,9 @@ impl QuickManager {
 impl CacheManager for QuickManager {
     async fn get(
         &self,
-        method: &str,
-        url: &Url,
+        cache_key: &str,
     ) -> Result<Option<(HttpResponse, CachePolicy)>> {
-        let store: Store = match self.cache.get(&req_key(method, url)) {
+        let store: Store = match self.cache.get(cache_key) {
             Some(d) => bincode::deserialize(&d)?,
             None => return Ok(None),
         };
@@ -60,19 +54,18 @@ impl CacheManager for QuickManager {
 
     async fn put(
         &self,
-        method: &str,
-        url: &Url,
+        cache_key: String,
         response: HttpResponse,
         policy: CachePolicy,
     ) -> Result<HttpResponse> {
         let data = Store { response: response.clone(), policy };
         let bytes = bincode::serialize(&data)?;
-        self.cache.insert(req_key(method, url), Arc::new(bytes));
+        self.cache.insert(cache_key, Arc::new(bytes));
         Ok(response)
     }
 
-    async fn delete(&self, method: &str, url: &Url) -> Result<()> {
-        self.cache.remove(&req_key(method, url));
+    async fn delete(&self, cache_key: &str) -> Result<()> {
+        self.cache.remove(cache_key);
         Ok(())
     }
 }

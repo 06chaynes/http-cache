@@ -1,0 +1,31 @@
+{
+  "project": {
+    "name": "http-cache",
+    "description": "An HTTP caching middleware",
+    "repository": "https://github.com/06chaynes/http-cache",
+    "license": "MIT OR Apache-2.0",
+    "readme_path": "./http-cache/README.md"
+  },
+  "build": {
+    "additional_pages": {
+      "http-cache changelog": "./http-cache/CHANGELOG.md",
+      "http-cache-reqwest": "./http-cache-reqwest/README.md",
+      "http-cache-reqwest changelog": "./http-cache-reqwest/CHANGELOG.md",
+      "http-cache-surf": "./http-cache-surf/README.md",
+      "http-cache-surf changelog": "./http-cache-surf/CHANGELOG.md",
+      "http-cache-quickcache": "./http-cache-quickcache/README.md",
+      "http-cache-quickcache changelog": "./http-cache-quickcache/CHANGELOG.md"
+    }
+  },
+  "components": {
+    "changelog": false,
+    "artifacts": {
+      "cargo_dist": false
+    }
+  },
+  "styles": {
+    "theme": "axodark",
+    "favicon": "./.assets/images/http-cache_logo_bluegreen.png",
+    "additional_css": ["./.assets/styles/oranda.css"]
+  }
+}

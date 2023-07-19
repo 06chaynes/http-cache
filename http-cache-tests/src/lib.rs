@@ -160,17 +160,23 @@ mod http_cache_tests {
                 .status(200)
                 .body(TEST_BODY.to_vec())?;
             let policy = CachePolicy::new(&req, &res);
-            manager.put(GET, &url, http_res.clone(), policy.clone()).await?;
-            let data = manager.get(GET, &url).await?;
+            manager
+                .put(
+                    format!("{}:{}", GET, &url),
+                    http_res.clone(),
+                    policy.clone(),
+                )
+                .await?;
+            let data = manager.get(&format!("{}:{}", GET, &url)).await?;
             assert!(data.is_some());
             assert_eq!(data.unwrap().0.body, TEST_BODY);
-            manager.delete(GET, &url).await?;
-            let data = manager.get(GET, &url).await?;
+            manager.delete(&format!("{}:{}", GET, &url)).await?;
+            let data = manager.get(&format!("{}:{}", GET, &url)).await?;
             assert!(data.is_none());
 
-            manager.put(GET, &url, http_res, policy).await?;
+            manager.put(format!("{}:{}", GET, &url), http_res, policy).await?;
             manager.clear().await?;
-            let data = manager.get(GET, &url).await?;
+            let data = manager.get(&format!("{}:{}", GET, &url)).await?;
             assert!(data.is_none());
             Ok(())
         }
@@ -196,17 +202,23 @@ mod http_cache_tests {
                 .status(200)
                 .body(TEST_BODY.to_vec())?;
             let policy = CachePolicy::new(&req, &res);
-            manager.put(GET, &url, http_res.clone(), policy.clone()).await?;
-            let data = manager.get(GET, &url).await?;
+            manager
+                .put(
+                    format!("{}:{}", GET, &url),
+                    http_res.clone(),
+                    policy.clone(),
+                )
+                .await?;
+            let data = manager.get(&format!("{}:{}", GET, &url)).await?;
             assert!(data.is_some());
             assert_eq!(data.unwrap().0.body, TEST_BODY);
-            manager.delete(GET, &url).await?;
-            let data = manager.get(GET, &url).await?;
+            manager.delete(&format!("{}:{}", GET, &url)).await?;
+            let data = manager.get(&format!("{}:{}", GET, &url)).await?;
             assert!(data.is_none());
 
-            manager.put(GET, &url, http_res, policy).await?;
+            manager.put(format!("{}:{}", GET, &url), http_res, policy).await?;
             manager.clear().await?;
-            let data = manager.get(GET, &url).await?;
+            let data = manager.get(&format!("{}:{}", GET, &url)).await?;
             assert!(data.is_none());
             Ok(())
         }

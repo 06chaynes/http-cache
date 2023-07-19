@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.11.0] - 2023-07-19
+
+### Changed
+
+- Implemented new `HttpCacheOptions` struct
+
+- Updated the minimum versions of the following dependencies:
+  - http-cache [0.13.0]
+  - anyhow [1.0.72]
+  - async-trait [0.1.71]
+  - serde [1.0.171]
+  - tokio [1.29.1]
+
 ## [0.10.0] - 2022-06-05
 
 ### Changed

@@ -5,7 +5,6 @@ use std::{fmt, sync::Arc};
 use http_cache_semantics::CachePolicy;
 use moka::future::{Cache, ConcurrentCacheExt};
 use serde::{Deserialize, Serialize};
-use url::Url;
 
 /// Implements [`CacheManager`] with [`moka`](https://github.com/moka-rs/moka) as the backend.
 #[cfg_attr(docsrs, doc(cfg(feature = "manager-moka")))]
@@ -34,10 +33,6 @@ struct Store {
     policy: CachePolicy,
 }
 
-fn req_key(method: &str, url: &Url) -> String {
-    format!("{method}:{url}")
-}
-
 impl MokaManager {
     /// Create a new manager from a pre-configured Cache
     pub fn new(cache: Cache<String, Arc<Vec<u8>>>) -> Self {
@@ -55,10 +50,9 @@ impl MokaManager {
 impl CacheManager for MokaManager {
     async fn get(
         &self,
-        method: &str,
-        url: &Url,
+        cache_key: &str,
     ) -> Result<Option<(HttpResponse, CachePolicy)>> {
-        let store: Store = match self.cache.get(&req_key(method, url)) {
+        let store: Store = match self.cache.get(cache_key) {
             Some(d) => bincode::deserialize(&d)?,
             None => return Ok(None),
         };
@@ -67,20 +61,19 @@ impl CacheManager for MokaManager {
 
     async fn put(
         &self,
-        method: &str,
-        url: &Url,
+        cache_key: String,
         response: HttpResponse,
         policy: CachePolicy,
     ) -> Result<HttpResponse> {
         let data = Store { response: response.clone(), policy };
         let bytes = bincode::serialize(&data)?;
-        self.cache.insert(req_key(method, url), Arc::new(bytes)).await;
+        self.cache.insert(cache_key, Arc::new(bytes)).await;
         self.cache.sync();
         Ok(response)
     }
 
-    async fn delete(&self, method: &str, url: &Url) -> Result<()> {
-        self.cache.invalidate(&req_key(method, url)).await;
+    async fn delete(&self, cache_key: &str) -> Result<()> {
+        self.cache.invalidate(cache_key).await;
         self.cache.sync();
         Ok(())
     }

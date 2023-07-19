@@ -18,7 +18,7 @@ async fn default_mode() -> Result<()> {
         .with(Cache(HttpCache {
             mode: CacheMode::Default,
             manager: manager.clone(),
-            options: None,
+            options: HttpCacheOptions::default(),
         }))
         .build();
 
@@ -26,7 +26,7 @@ async fn default_mode() -> Result<()> {
     client.get(url.clone()).send().await?;
 
     // Try to load cached object
-    let data = manager.get(GET, &Url::parse(&url)?).await?;
+    let data = manager.get(&format!("{}:{}", GET, &Url::parse(&url)?)).await?;
     assert!(data.is_some());
 
     // Hot pass to make sure the expect response was returned
@@ -48,7 +48,13 @@ async fn default_mode_with_options() -> Result<()> {
         .with(Cache(HttpCache {
             mode: CacheMode::Default,
             manager: manager.clone(),
-            options: Some(CacheOptions { shared: false, ..Default::default() }),
+            options: HttpCacheOptions {
+                cache_key: None,
+                cache_options: Some(CacheOptions {
+                    shared: false,
+                    ..Default::default()
+                }),
+            },
         }))
         .build();
 
@@ -56,7 +62,7 @@ async fn default_mode_with_options() -> Result<()> {
     client.get(url.clone()).send().await?;
 
     // Try to load cached object
-    let data = manager.get(GET, &Url::parse(&url)?).await?;
+    let data = manager.get(&format!("{}:{}", GET, &Url::parse(&url)?)).await?;
     assert!(data.is_some());
     Ok(())
 }
@@ -74,7 +80,7 @@ async fn no_cache_mode() -> Result<()> {
         .with(Cache(HttpCache {
             mode: CacheMode::NoCache,
             manager: manager.clone(),
-            options: None,
+            options: HttpCacheOptions::default(),
         }))
         .build();
 
@@ -82,10 +88,44 @@ async fn no_cache_mode() -> Result<()> {
     client.get(url.clone()).send().await?;
 
     // Try to load cached object
-    let data = manager.get(GET, &Url::parse(&url)?).await?;
+    let data = manager.get(&format!("{}:{}", GET, &Url::parse(&url)?)).await?;
     assert!(data.is_some());
 
     // To verify our endpoint receives the request rather than a cache hit
     client.get(url).send().await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn custom_cache_key() -> Result<()> {
+    let mock_server = MockServer::start().await;
+    let m = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 1);
+    let _mock_guard = mock_server.register_as_scoped(m).await;
+    let url = format!("{}/", &mock_server.uri());
+    let manager = MokaManager::default();
+
+    // Construct reqwest client with cache defaults and custom cache key
+    let client = ClientBuilder::new(Client::new())
+        .with(Cache(HttpCache {
+            mode: CacheMode::Default,
+            manager: manager.clone(),
+            options: HttpCacheOptions {
+                cache_key: Some(Arc::new(|req: &http::request::Parts| {
+                    format!("{}:{}:{:?}:test", req.method, req.uri, req.version)
+                })),
+                cache_options: None,
+            },
+        }))
+        .build();
+
+    // Remote request and should cache
+    client.get(url.clone()).send().await?;
+
+    // Try to load cached object
+    let data = manager
+        .get(&format!("{}:{}:{:?}:test", GET, &url, http::Version::HTTP_11))
+        .await?;
+
+    assert!(data.is_some());
     Ok(())
 }
