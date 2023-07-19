@@ -1,6 +1,19 @@
 
 # Changelog
 
+## [0.5.0] - 2023-07-19
+
+### Changed
+
+- `CacheManager` trait `get`, `put`, and `delete` methods now require a `cache_key` argument rather than `method` and `url` arguments. This allows for custom keys to be specified.
+
+- The `QuickManager` trait implementation has been updated to reflect the above change.
+
+- Updated the minimum versions of the following dependencies:
+  - http-cache [0.13.0]
+  - async-trait [0.1.71]
+  - serde [1.0.171]
+
 ## [0.4.0] - 2023-06-05
 
 ### Changed

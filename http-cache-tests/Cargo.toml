@@ -13,23 +13,23 @@ http-types = "2.12.0"
 reqwest = "0.11.18"
 reqwest-middleware = "0.2.2"
 surf = "2.3.2"
-tokio = { version = "1.28.2", features = ["macros", "rt-multi-thread"] }
+tokio = { version = "1.29.1", features = ["macros", "rt-multi-thread"] }
 url = "2.4.0"
-wiremock = "0.5.18"
+wiremock = "0.5.19"
 
 [dependencies.http-cache]
 path = "../http-cache"
-version = "0.12.0"
+version = "0.13.0"
 features = ["with-http-types", "manager-moka"]
 
 [dependencies.http-cache-reqwest]
 path = "../http-cache-reqwest"
-version = "0.10.0"
+version = "0.11.0"
 
 [dependencies.http-cache-surf]
 path = "../http-cache-surf"
-version = "0.10.0"
+version = "0.11.0"
 
 [dependencies.http-cache-quickcache]
 path = "../http-cache-quickcache"
-version = "0.4.0"
+version = "0.5.0"
