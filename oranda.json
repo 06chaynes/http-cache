@@ -1,12 +1,12 @@
 {
-"project": {
+  "project": {
     "name": "http-cache",
     "description": "An HTTP caching middleware",
     "repository": "https://github.com/06chaynes/http-cache",
     "license": "MIT OR Apache-2.0",
     "readme_path": "./http-cache/README.md"
-},
-"build": {
+  },
+  "build": {
     "additional_pages": {
       "http-cache changelog": "./http-cache/CHANGELOG.md",
       "http-cache-reqwest": "./http-cache-reqwest/README.md",
@@ -18,7 +18,10 @@
     }
   },
   "components": {
-    "changelog": false
+    "changelog": false,
+    "artifacts": {
+      "cargo_dist": false
+    }
   },
   "styles": {
     "theme": "axodark",
