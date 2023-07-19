@@ -212,7 +212,7 @@ async fn no_cache_mode() -> Result<()> {
 #[async_std::test]
 async fn force_cache_mode() -> Result<()> {
     let mock_server = MockServer::start().await;
-    let m = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 1);
+    let m = build_mock("max-age=0, public", TEST_BODY, 200, 1);
     let _mock_guard = mock_server.register_as_scoped(m).await;
     let url = format!("{}/", &mock_server.uri());
     let manager = MokaManager::default();
