@@ -28,7 +28,7 @@ cargo add http-cache-surf
 ## Example
 
 ```rust
-use http_cache_surf::{Cache, CacheMode, CACacheManager, HttpCache};
+use http_cache_surf::{Cache, CacheMode, CACacheManager, HttpCache, HttpCacheOptions};
 
 #[async_std::main]
 async fn main() -> surf::Result<()> {
@@ -37,7 +37,7 @@ async fn main() -> surf::Result<()> {
         .with(Cache(HttpCache {
           mode: CacheMode::Default,
           manager: CACacheManager::default(),
-          options: None,
+          options: HttpCacheOptions::default(),
         }))
         .send(req)
         .await?;

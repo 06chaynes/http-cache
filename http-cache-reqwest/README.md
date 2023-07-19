@@ -30,7 +30,7 @@ cargo add http-cache-reqwest
 ```rust
 use reqwest::Client;
 use reqwest_middleware::{ClientBuilder, Result};
-use http_cache_reqwest::{Cache, CacheMode, CACacheManager, HttpCache};
+use http_cache_reqwest::{Cache, CacheMode, CACacheManager, HttpCache, HttpCacheOptions};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -38,7 +38,7 @@ async fn main() -> Result<()> {
         .with(Cache(HttpCache {
           mode: CacheMode::Default,
           manager: CACacheManager::default(),
-          options: None,
+          options: HttpCacheOptions::default(),
         }))
         .build();
     client
