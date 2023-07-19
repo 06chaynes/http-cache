@@ -3,4 +3,3 @@ Cargo.lock
 **/*.rs.bk
 http-cacache/
 /.idea
-/public
