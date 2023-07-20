@@ -21,6 +21,9 @@
     "changelog": false,
     "artifacts": {
       "cargo_dist": false
+    },
+    "mdbook": {
+      "path": "./docs"
     }
   },
   "styles": {
