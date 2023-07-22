@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.11.1] - 2023-07-22
+
+### Changed
+
+- Set `default-features` to `false` for `surf` dependency.
+
 ## [0.11.0] - 2023-07-19
 
 ### Changed

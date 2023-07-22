@@ -9,6 +9,9 @@ mod client_reqwest;
 #[cfg(test)]
 mod manager_quickcache;
 
+#[cfg(test)]
+mod manager_darkbird;
+
 use http::{header::CACHE_CONTROL, StatusCode};
 use http_cache::*;
 use http_types::{headers::HeaderValue, Method, Version};

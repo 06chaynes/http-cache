@@ -7,6 +7,7 @@ publish = false
 [dependencies]
 async-std = { version = "1.12.0", features = ["attributes"] }
 cacache = "11.6.0"
+darkbird = "6.1.8"
 http = "0.2.9"
 http-cache-semantics = "1.0.1"
 http-types = "2.12.0"
@@ -28,8 +29,12 @@ version = "0.11.0"
 
 [dependencies.http-cache-surf]
 path = "../http-cache-surf"
-version = "0.11.0"
+version = "0.11.1"
 
 [dependencies.http-cache-quickcache]
 path = "../http-cache-quickcache"
 version = "0.5.0"
+
+[dependencies.http-cache-darkbird]
+path = "../http-cache-darkbird"
+version = "0.1.0"
