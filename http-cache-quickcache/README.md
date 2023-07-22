@@ -26,7 +26,7 @@ cargo add http-cache-quickcache
 
 ```rust
 use http_cache_quickcache::QuickManager;
-use http_cache_surf::{Cache, CacheMode, HttpCache};
+use http_cache_surf::{Cache, CacheMode, HttpCache, HttpCacheOptions};
 
 #[async_std::main]
 async fn main() -> surf::Result<()> {
@@ -35,7 +35,7 @@ async fn main() -> surf::Result<()> {
         .with(Cache(HttpCache {
           mode: CacheMode::Default,
           manager: QuickManager::default(),
-          options: None,
+          options: HttpCacheOptions::default(),
         }))
         .send(req)
         .await?;
