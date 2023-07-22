@@ -1,0 +1,31 @@
+[package]
+name = "http-cache-darkbird"
+version = "0.1.0"
+description = "http-cache manager implementation for darkbird"
+authors = ["Christian Haynes <06chaynes@gmail.com>", "Kat Marchán <kzm@zkat.tech>"]
+repository = "https://github.com/06chaynes/http-cache.git"
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+keywords = ["cache", "http", "manager", "darkbird"]
+categories = [
+    "caching",
+    "web-programming::http-client"
+]
+edition = "2021"
+rust-version = "1.66.1"
+
+[dependencies]
+async-trait = "0.1.71"
+darkbird = "6.1.8"
+http-cache-semantics = "1.0.1"
+serde = { version = "1.0.171", features = ["derive"] }
+thiserror = "1.0.43"
+
+[dependencies.http-cache]
+path = "../http-cache"
+version = "0.13.0"
+default-features = false
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
