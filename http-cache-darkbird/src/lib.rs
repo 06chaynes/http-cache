@@ -16,6 +16,7 @@ use serde::{Deserialize, Serialize};
 pub struct DarkbirdManager {
     /// The instance of `darkbird::Storage<String, Store>`
     pub cache: Arc<Storage<String, Store>>,
+    /// Whether full text search should be enabled
     pub full_text: bool,
 }
 
@@ -26,10 +27,14 @@ impl fmt::Debug for DarkbirdManager {
     }
 }
 
+/// The data stored in the cache
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Store {
+    /// The HTTP response
     pub response: HttpResponse,
+    /// The cache policy generated for the response
     pub policy: CachePolicy,
+    /// The cache key for this entry
     pub cache_key: String,
     full_text: bool,
 }
@@ -96,6 +101,7 @@ impl DarkbirdManager {
         })
     }
 
+    /// Create a new manager with default options
     pub async fn new_with_defaults() -> Result<Self> {
         let ops = Options::new(
             ".",
