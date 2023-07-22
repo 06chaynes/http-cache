@@ -29,7 +29,7 @@ version = "0.11.0"
 
 [dependencies.http-cache-surf]
 path = "../http-cache-surf"
-version = "0.11.0"
+version = "0.11.1"
 
 [dependencies.http-cache-quickcache]
 path = "../http-cache-quickcache"
