@@ -69,3 +69,6 @@ impl CacheManager for QuickManager {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod test;

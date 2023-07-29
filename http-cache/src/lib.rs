@@ -17,10 +17,12 @@
 //!
 //! ## Features
 //!
-//! The following features are available. By default `manager-cacache` is enabled.
+//! The following features are available. By default `manager-cacache` and `cacache-async-std` are enabled.
 //!
 //! - `manager-cacache` (default): enable [cacache](https://github.com/zkat/cacache-rs),
 //! a high-performance disk cache, backend manager.
+//! - `cacache-async-std` (default): enable [async-std](https://github.com/async-rs/async-std) runtime support for cacache.
+//! - `cacache-tokio` (disabled): enable [tokio](https://github.com/tokio-rs/tokio) runtime support for cacache.
 //! - `manager-moka` (disabled): enable [moka](https://github.com/moka-rs/moka),
 //! a high-performance in-memory cache, backend manager.
 //! - `with-http-types` (disabled): enable [http-types](https://github.com/http-rs/http-types)
@@ -618,3 +620,6 @@ impl<T: CacheManager> HttpCache<T> {
         }
     }
 }
+
+#[cfg(test)]
+mod test;

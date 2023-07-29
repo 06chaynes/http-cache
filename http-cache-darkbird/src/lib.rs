@@ -165,3 +165,6 @@ impl CacheManager for DarkbirdManager {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod test;

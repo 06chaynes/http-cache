@@ -1,12 +1,12 @@
 # http-cache
 
-[![CI](https://img.shields.io/github/actions/workflow/status/06chaynes/http-cache/rust.yml?label=CI&style=for-the-badge)](https://github.com/06chaynes/http-cache/actions/workflows/rust.yml)
+[![CI](https://img.shields.io/github/actions/workflow/status/06chaynes/http-cache/http-cache.yml?label=CI&style=for-the-badge)](https://github.com/06chaynes/http-cache/actions/workflows/http-cache.yml)
 [![Crates.io](https://img.shields.io/crates/v/http-cache?style=for-the-badge)](https://crates.io/crates/http-cache)
 [![Docs.rs](https://img.shields.io/docsrs/http-cache?style=for-the-badge)](https://docs.rs/http-cache)
 [![Codecov](https://img.shields.io/codecov/c/github/06chaynes/http-cache?style=for-the-badge)](https://app.codecov.io/gh/06chaynes/http-cache)
 ![Crates.io](https://img.shields.io/crates/l/http-cache?style=for-the-badge)
 
-<img class="logo" align="right" src="https://raw.githubusercontent.com/06chaynes/http-cache/latest/.assets/images/http-cache_logo_bluegreen.svg" height="150px" alt="the http-cache logo">
+<img class="logo" align="right" src="https://raw.githubusercontent.com/06chaynes/http-cache/main/.assets/images/http-cache_logo_bluegreen.svg" height="150px" alt="the http-cache logo">
 
 A caching middleware that follows HTTP caching rules,
 thanks to [http-cache-semantics](https://github.com/kornelski/rusty-http-cache-semantics).
@@ -32,9 +32,11 @@ cargo add http-cache
 
 ## Features
 
-The following features are available. By default `manager-cacache` is enabled.
+The following features are available. By default `manager-cacache` and `cacache-async-std` are enabled.
 
 - `manager-cacache` (default): enable [cacache](https://github.com/zkat/cacache-rs), a high-performance disk cache, backend manager.
+- `cacache-async-std` (default): enable [async-std](https://github.com/async-rs/async-std) runtime support for cacache.
+- `cacache-tokio` (disabled): enable [tokio](https://github.com/tokio-rs/tokio) runtime support for cacache.
 - `manager-moka` (disabled): enable [moka](https://github.com/moka-rs/moka), a high-performance in-memory cache, backend manager.
 - `with-http-types` (disabled): enable [http-types](https://github.com/http-rs/http-types) type conversion support
 
@@ -44,21 +46,21 @@ The following features are available. By default `manager-cacache` is enabled.
 
 ## Provided Client Implementations
 
-- **Surf**: See [README](https://github.com/06chaynes/http-cache/blob/latest/http-cache-surf/README.md) for more details
-- **Reqwest**: See [README](https://github.com/06chaynes/http-cache/blob/latest/http-cache-reqwest/README.md) for more details
+- **Surf**: See [README](https://github.com/06chaynes/http-cache/blob/main/http-cache-surf/README.md) for more details
+- **Reqwest**: See [README](https://github.com/06chaynes/http-cache/blob/main/http-cache-reqwest/README.md) for more details
 
 ## Additional Manager Implementations
 
-- **quick-cache**: See [README](https://github.com/06chaynes/http-cache/blob/latest/http-cache-quickcache/README.md) for more details
+- **quick-cache**: See [README](https://github.com/06chaynes/http-cache/blob/main/http-cache-quickcache/README.md) for more details
 
 ## License
 
 Licensed under either of
 
 - Apache License, Version 2.0
-  ([LICENSE-APACHE](https://github.com/06chaynes/http-cache/blob/latest/LICENSE-APACHE) or <http://www.apache.org/licenses/LICENSE-2.0>)
+  ([LICENSE-APACHE](https://github.com/06chaynes/http-cache/blob/main/LICENSE-APACHE) or <http://www.apache.org/licenses/LICENSE-2.0>)
 - MIT license
-  ([LICENSE-MIT](https://github.com/06chaynes/http-cache/blob/latest/LICENSE-MIT) or <http://opensource.org/licenses/MIT>)
+  ([LICENSE-MIT](https://github.com/06chaynes/http-cache/blob/main/LICENSE-MIT) or <http://opensource.org/licenses/MIT>)
 
 at your option.
 

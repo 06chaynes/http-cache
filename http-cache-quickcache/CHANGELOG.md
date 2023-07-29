@@ -1,6 +1,16 @@
 
 # Changelog
 
+## [0.5.1] - 2023-07-28
+
+### Changed
+
+- Updated the minimum versions of the following dependencies:
+  - http-cache [0.14.0]
+  - async-trait [0.1.72]
+  - serde [1.0.178]
+  - tokio [1.29.1]
+
 ## [0.5.0] - 2023-07-19
 
 ### Changed
