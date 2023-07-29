@@ -2,8 +2,8 @@ use crate::Cache;
 
 use http_cache::*;
 use http_types::Method;
-use url::Url;
 use surf::{Client, Request};
+use url::Url;
 use wiremock::{matchers::method, Mock, MockServer, ResponseTemplate};
 
 pub(crate) fn build_mock(

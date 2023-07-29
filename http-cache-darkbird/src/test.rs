@@ -1,11 +1,11 @@
 use crate::DarkbirdManager;
 use std::sync::Arc;
 
+use http_cache::*;
 use http_cache_reqwest::Cache;
 use http_cache_semantics::CachePolicy;
 use reqwest::Client;
 use reqwest_middleware::ClientBuilder;
-use http_cache::*;
 use url::Url;
 use wiremock::{matchers::method, Mock, MockServer, ResponseTemplate};
 

@@ -2,9 +2,9 @@ use crate::Cache;
 use std::sync::Arc;
 
 use http_cache::*;
-use url::Url;
 use reqwest::Client;
 use reqwest_middleware::ClientBuilder;
+use url::Url;
 use wiremock::{matchers::method, Mock, MockServer, ResponseTemplate};
 
 pub(crate) fn build_mock(
