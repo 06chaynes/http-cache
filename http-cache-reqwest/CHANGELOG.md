@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.11.1] - 2023-07-28
+
+### Changed
+
+- Using new `cacache-tokio` feature in `http-cache` dependency
+
+- Exporting `CacheManager` trait
+
+- Updated the minimum versions of the following dependencies:
+  - http-cache [0.14.0]
+  - async-trait [0.1.72]
+  - serde [1.0.178]
+
 ## [0.11.0] - 2023-07-19
 
 ### Changed

@@ -1,12 +1,12 @@
 # http-cache-darkbird
 
-[![CI](https://img.shields.io/github/actions/workflow/status/06chaynes/http-cache/rust.yml?label=CI&style=for-the-badge)](https://github.com/06chaynes/http-cache/actions/workflows/rust.yml)
+[![CI](https://img.shields.io/github/actions/workflow/status/06chaynes/http-cache/http-cache-darkbird.yml?label=CI&style=for-the-badge)](https://github.com/06chaynes/http-cache/actions/workflows/http-cache-darkbird.yml)
 [![Crates.io](https://img.shields.io/crates/v/http-cache-darkbird?style=for-the-badge)](https://crates.io/crates/http-cache-darkbird)
 [![Docs.rs](https://img.shields.io/docsrs/http-cache-darkbird?style=for-the-badge)](https://docs.rs/http-cache-darkbird)
 [![Codecov](https://img.shields.io/codecov/c/github/06chaynes/http-cache?style=for-the-badge)](https://app.codecov.io/gh/06chaynes/http-cache)
 ![Crates.io](https://img.shields.io/crates/l/http-cache-darkbird?style=for-the-badge)
 
-<img class="logo" align="right" src="https://raw.githubusercontent.com/06chaynes/http-cache/latest/.assets/images/http-cache_logo_bluegreen.svg" height="150px" alt="the http-cache logo">
+<img class="logo" align="right" src="https://raw.githubusercontent.com/06chaynes/http-cache/main/.assets/images/http-cache_logo_bluegreen.svg" height="150px" alt="the http-cache logo">
 
 An http-cache manager implementation for [darkbird](https://github.com/Rustixir/darkbird).
 
@@ -56,9 +56,9 @@ async fn main() -> Result<()> {
 Licensed under either of
 
 - Apache License, Version 2.0
-  ([LICENSE-APACHE](https://github.com/06chaynes/http-cache/blob/latest/LICENSE-APACHE) or <http://www.apache.org/licenses/LICENSE-2.0>)
+  ([LICENSE-APACHE](https://github.com/06chaynes/http-cache/blob/main/LICENSE-APACHE) or <http://www.apache.org/licenses/LICENSE-2.0>)
 - MIT license
-  ([LICENSE-MIT](https://github.com/06chaynes/http-cache/blob/latest/LICENSE-MIT) or <http://opensource.org/licenses/MIT>)
+  ([LICENSE-MIT](https://github.com/06chaynes/http-cache/blob/main/LICENSE-MIT) or <http://opensource.org/licenses/MIT>)
 
 at your option.
 

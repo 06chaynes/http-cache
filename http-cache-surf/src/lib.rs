@@ -38,14 +38,15 @@ use std::{
 
 pub use http::request::Parts;
 use http::{header::CACHE_CONTROL, request};
-use http_cache::{BadHeader, BoxError, CacheManager, Middleware, Result};
+use http_cache::{BadHeader, BoxError, Middleware, Result};
 use http_cache_semantics::CachePolicy;
 use http_types::{headers::HeaderValue, Method, Response, StatusCode, Version};
 use surf::{middleware::Next, Client, Request};
 use url::Url;
 
 pub use http_cache::{
-    CacheMode, CacheOptions, HttpCache, HttpCacheOptions, HttpResponse,
+    CacheManager, CacheMode, CacheOptions, HttpCache, HttpCacheOptions,
+    HttpResponse,
 };
 
 #[cfg(feature = "manager-cacache")]
@@ -172,3 +173,6 @@ impl<T: CacheManager> surf::middleware::Middleware for Cache<T> {
         Ok(surf::Response::from(converted))
     }
 }
+
+#[cfg(test)]
+mod test;

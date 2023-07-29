@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.14.0] - 2023-07-28
+
+### Added
+
+- `cacache-async-std` feature, which enables `async_std` runtime support in the `cacache` backend manager. This feature is enabled by default.
+
+- `cacache-tokio` feature, which enables `tokio` runtime support in the `cacache` backend manager. This feature is disabled by default.
+
+### Changed
+
+- Updated the minimum versions of the following dependencies:
+  - async-std [1.12.0]
+  - async-trait [0.1.72]
+  - serde [1.0.178]
+  - tokio [1.29.1]
+
 ## [0.13.0] - 2023-07-19
 
 ### Added

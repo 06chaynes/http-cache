@@ -1,12 +1,12 @@
 # http-cache-surf
 
-[![CI](https://img.shields.io/github/actions/workflow/status/06chaynes/http-cache/rust.yml?label=CI&style=for-the-badge)](https://github.com/06chaynes/http-cache/actions/workflows/rust.yml)
+[![CI](https://img.shields.io/github/actions/workflow/status/06chaynes/http-cache/http-cache-surf.yml?label=CI&style=for-the-badge)](https://github.com/06chaynes/http-cache/actions/workflows/http-cache-surf.yml)
 [![Crates.io](https://img.shields.io/crates/v/http-cache-surf?style=for-the-badge)](https://crates.io/crates/http-cache-surf)
 [![Docs.rs](https://img.shields.io/docsrs/http-cache-surf?style=for-the-badge)](https://docs.rs/http-cache-surf)
 [![Codecov](https://img.shields.io/codecov/c/github/06chaynes/http-cache?style=for-the-badge)](https://app.codecov.io/gh/06chaynes/http-cache)
 ![Crates.io](https://img.shields.io/crates/l/http-cache-surf?style=for-the-badge)
 
-<img class="logo" align="right" src="https://raw.githubusercontent.com/06chaynes/http-cache/latest/.assets/images/http-cache_logo_bluegreen.svg" height="150px" alt="the http-cache logo">
+<img class="logo" align="right" src="https://raw.githubusercontent.com/06chaynes/http-cache/main/.assets/images/http-cache_logo_bluegreen.svg" height="150px" alt="the http-cache logo">
 
 A caching middleware that follows HTTP caching rules,
 thanks to [http-cache-semantics](https://github.com/kornelski/rusty-http-cache-semantics).
@@ -61,9 +61,9 @@ The following features are available. By default `manager-cacache` is enabled.
 Licensed under either of
 
 - Apache License, Version 2.0
-  ([LICENSE-APACHE](https://github.com/06chaynes/http-cache/blob/latest/LICENSE-APACHE) or <http://www.apache.org/licenses/LICENSE-2.0>)
+  ([LICENSE-APACHE](https://github.com/06chaynes/http-cache/blob/main/LICENSE-APACHE) or <http://www.apache.org/licenses/LICENSE-2.0>)
 - MIT license
-  ([LICENSE-MIT](https://github.com/06chaynes/http-cache/blob/latest/LICENSE-MIT) or <http://opensource.org/licenses/MIT>)
+  ([LICENSE-MIT](https://github.com/06chaynes/http-cache/blob/main/LICENSE-MIT) or <http://opensource.org/licenses/MIT>)
 
 at your option.
 

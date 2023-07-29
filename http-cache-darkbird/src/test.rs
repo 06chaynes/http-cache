@@ -1,18 +1,44 @@
-use crate::*;
+use crate::DarkbirdManager;
 use std::sync::Arc;
 
-use http_cache_quickcache::QuickManager;
+use http_cache::*;
 use http_cache_reqwest::Cache;
 use http_cache_semantics::CachePolicy;
-use reqwest::{Client, Request, ResponseBuilderExt};
+use reqwest::Client;
 use reqwest_middleware::ClientBuilder;
+use url::Url;
+use wiremock::{matchers::method, Mock, MockServer, ResponseTemplate};
 
-#[async_std::test]
-async fn quickcache() -> Result<()> {
+pub(crate) fn build_mock(
+    cache_control_val: &str,
+    body: &[u8],
+    status: u16,
+    expect: u64,
+) -> Mock {
+    Mock::given(method(GET))
+        .respond_with(
+            ResponseTemplate::new(status)
+                .insert_header("cache-control", cache_control_val)
+                .set_body_bytes(body),
+        )
+        .expect(expect)
+}
+
+const GET: &str = "GET";
+
+const TEST_BODY: &[u8] = b"test";
+
+const CACHEABLE_PUBLIC: &str = "max-age=86400, public";
+
+#[tokio::test]
+async fn darkbird() -> Result<()> {
     // Added to test custom Debug impl
-    assert_eq!(format!("{:?}", QuickManager::default()), "QuickManager { .. }",);
+    assert_eq!(
+        format!("{:?}", DarkbirdManager::new_with_defaults().await?),
+        "DarkbirdManager { .. }",
+    );
     let url = Url::parse("http://example.com")?;
-    let manager = Arc::new(QuickManager::default());
+    let manager = Arc::new(DarkbirdManager::new_with_defaults().await?);
     let http_res = HttpResponse {
         body: TEST_BODY.to_vec(),
         headers: Default::default(),
@@ -29,9 +55,41 @@ async fn quickcache() -> Result<()> {
     let data = manager.get(&format!("{}:{}", GET, &url)).await?;
     assert!(data.is_some());
     assert_eq!(data.unwrap().0.body, TEST_BODY);
+    assert!(manager.cache.lookup(&format!("{}:{}", GET, &url)).is_some());
+    assert!(!manager.cache.lookup_by_tag(http_res.url.as_str()).is_empty());
     manager.delete(&format!("{}:{}", GET, &url)).await?;
     let data = manager.get(&format!("{}:{}", GET, &url)).await?;
     assert!(data.is_none());
+
+    let manager = Arc::new(
+        DarkbirdManager::new(
+            darkbird::Options::new(
+                ".",
+                "http-darkbird",
+                42,
+                darkbird::StorageType::RamCopies,
+                true,
+            ),
+            true,
+        )
+        .await?,
+    );
+    manager
+        .put(format!("{}:{}", GET, &url), http_res.clone(), policy.clone())
+        .await?;
+    assert!(!manager
+        .cache
+        .search(String::from_utf8(TEST_BODY.to_vec())?)
+        .is_empty());
+    assert!(!manager.cache.fetch_view("stale").is_empty());
+    assert_eq!(
+        manager.cache.fetch_view("stale").first().unwrap().value().cache_key,
+        format!("{}:{}", GET, &url)
+    );
+    assert!(manager
+        .cache
+        .range("age", "1".to_string(), "1000".to_string())
+        .is_empty());
     Ok(())
 }
 
@@ -41,7 +99,7 @@ async fn default_mode() -> Result<()> {
     let m = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 1);
     let _mock_guard = mock_server.register_as_scoped(m).await;
     let url = format!("{}/", &mock_server.uri());
-    let manager = QuickManager::default();
+    let manager = DarkbirdManager::new_with_defaults().await?;
 
     // Construct reqwest client with cache defaults
     let client = ClientBuilder::new(Client::new())
@@ -62,6 +120,12 @@ async fn default_mode() -> Result<()> {
     // Hot pass to make sure the expect response was returned
     let res = client.get(url).send().await?;
     assert_eq!(res.bytes().await?, TEST_BODY);
+
+    assert!(manager.cache.fetch_view("stale").is_empty());
+    assert!(!manager
+        .cache
+        .range("time_to_live", "0".to_string(), "9999999999999".to_string())
+        .is_empty());
     Ok(())
 }
 
@@ -71,7 +135,7 @@ async fn default_mode_with_options() -> Result<()> {
     let m = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 1);
     let _mock_guard = mock_server.register_as_scoped(m).await;
     let url = format!("{}/", &mock_server.uri());
-    let manager = QuickManager::default();
+    let manager = DarkbirdManager::new_with_defaults().await?;
 
     // Construct reqwest client with cache options override
     let client = ClientBuilder::new(Client::new())
@@ -103,7 +167,7 @@ async fn no_cache_mode() -> Result<()> {
     let m = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 2);
     let _mock_guard = mock_server.register_as_scoped(m).await;
     let url = format!("{}/", &mock_server.uri());
-    let manager = QuickManager::default();
+    let manager = DarkbirdManager::new_with_defaults().await?;
 
     // Construct reqwest client with cache defaults
     let client = ClientBuilder::new(Client::new())

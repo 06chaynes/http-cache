@@ -1,29 +1,36 @@
 name: coverage
 
-on: [push]
+on:
+  push:
+    branches: [main]
+  pull_request:
 
 env:
   CARGO_TERM_COLOR: always
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.ref }}-coverage
   cancel-in-progress: true
 
 jobs:
-  test:
-    name: coverage
+  coverage:
+    name: Code coverage
     runs-on: ubuntu-latest
-    container:
-      image: 'xd009642/tarpaulin:develop-nightly'
-      options: '--security-opt seccomp=unconfined'
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
-      - name: Generate code coverage
-        run: >
-          cargo +nightly tarpaulin --verbose --all-features --workspace
-          --timeout 120 --out Xml
-      - name: Upload to codecov.io
-        uses: codecov/codecov-action@v3
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@stable
         with:
+          components: llvm-tools
+      - uses: taiki-e/install-action@cargo-llvm-cov
+      - run: |
+          cargo llvm-cov clean --workspace
+          cargo llvm-cov --no-report --no-default-features --package http-cache --features manager-cacache,cacache-async-std,with-http-types,manager-moka
+          cargo llvm-cov --no-report --no-default-features --package http-cache --features manager-cacache,cacache-tokio
+          cargo llvm-cov --no-report --package http-cache-surf --features manager-moka
+          cargo llvm-cov --no-report --package http-cache-reqwest --features manager-moka
+          cargo llvm-cov report --lcov --output-path lcov.info
+      - uses: codecov/codecov-action@v3
+        with:
+          files: lcov.info
           fail_ci_if_error: false
+

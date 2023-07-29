@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.11.2] - 2023-07-28
+
+### Changed
+
+- Using new `cacache-async-std` feature in `http-cache` dependency
+
+- Exporting `CacheManager` trait
+
+- Updated the minimum versions of the following dependencies:
+  - http-cache [0.14.0]
+  - async-trait [0.1.72]
+  - serde [1.0.178]
+  - thiserror [1.0.44]
+
 ## [0.11.1] - 2023-07-22
 
 ### Changed

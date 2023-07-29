@@ -1,16 +1,20 @@
-name: Rust
+name: http-cache
 
 on:
   push:
-    branches: [latest]
+    branches: [main]
   pull_request:
 
 env:
   CARGO_TERM_COLOR: always
 
 concurrency:
-  group: ${{ github.ref }}
+  group: ${{ github.ref }}-http-cache
   cancel-in-progress: true
+
+defaults:
+ run:
+  working-directory: ./http-cache
 
 jobs:
   fmt:
@@ -21,7 +25,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: "rustfmt"
-      - run: cargo fmt --all -- --check
+      - run: cargo fmt -- --check
 
   test:
     name: Test stable on ${{ matrix.os }}
@@ -36,7 +40,9 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - uses: dtolnay/rust-toolchain@stable
-      - run: cargo test --workspace --all-targets --all-features
+      - run: |
+          cargo test --all-targets --no-default-features --features manager-cacache,cacache-async-std,with-http-types,manager-moka
+          cargo test --all-targets --no-default-features --features manager-cacache,cacache-tokio
 
   clippy:
     name: Check clippy
@@ -47,7 +53,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: "clippy"
-      - run: cargo clippy --lib --tests --all-features --all-targets --workspace -- -D warnings
+      - run: |
+          cargo clippy --lib --tests --all-targets --no-default-features --features manager-cacache,cacache-async-std,with-http-types,manager-moka -- -D warnings
+          cargo clippy --lib --tests --all-targets --no-default-features --features manager-cacache,cacache-tokio -- -D warnings
 
   docs:
     name: Build docs
@@ -59,4 +67,4 @@ jobs:
         env:
           RUSTFLAGS: --cfg docsrs
           RUSTDOCFLAGS: --cfg docsrs -Dwarnings
-      - run: cargo doc --no-deps --document-private-items --workspace
+      - run: cargo doc --no-deps --document-private-items

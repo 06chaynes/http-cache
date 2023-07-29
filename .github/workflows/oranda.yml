@@ -1,4 +1,4 @@
-name: Build and Deploy
+name: oranda
 on: [push]
 permissions:
   contents: write
@@ -19,7 +19,7 @@ jobs:
           oranda build
 
       - name: Deploy to Github Pages
-        uses: JamesIves/github-pages-deploy-action@v4.4.1
+        uses: JamesIves/github-pages-deploy-action@v4.4.3
         if: ${{ github.ref == 'refs/heads/latest' }}
         with:
           branch: gh-pages
