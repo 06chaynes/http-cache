@@ -20,7 +20,7 @@ jobs:
 
       - name: Deploy to Github Pages
         uses: JamesIves/github-pages-deploy-action@v4.4.3
-        if: ${{ github.ref == 'refs/heads/latest' }}
+        if: ${{ github.ref == 'refs/heads/main' }}
         with:
           branch: gh-pages
           folder: public
