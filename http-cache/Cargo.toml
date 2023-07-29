@@ -42,5 +42,4 @@ manager-moka = ["moka", "bincode"]
 with-http-types = ["http-types"]
 
 [package.metadata.docs.rs]
-all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
