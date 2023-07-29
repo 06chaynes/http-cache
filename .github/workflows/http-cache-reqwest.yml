@@ -1,0 +1,68 @@
+name: http-cache-reqwest
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+concurrency:
+  group: ${{ github.ref }}-http-cache-reqwest
+  cancel-in-progress: true
+
+defaults:
+ run:
+  working-directory: ./http-cache-reqwest
+
+jobs:
+  fmt:
+    name: Check formatting
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: "rustfmt"
+      - run: cargo fmt -- --check
+
+  test:
+    name: Test stable on ${{ matrix.os }}
+    needs: [fmt]
+    strategy:
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+          - macOS-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@stable
+      - run: |
+          cargo test --all-targets --all-features
+
+  clippy:
+    name: Check clippy
+    needs: [fmt, test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: "clippy"
+      - run: |
+          cargo clippy --lib --tests --all-targets --all-features -- -D warnings
+
+  docs:
+    name: Build docs
+    needs: [fmt, test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@nightly
+        env:
+          RUSTFLAGS: --cfg docsrs
+          RUSTDOCFLAGS: --cfg docsrs -Dwarnings
+      - run: cargo doc --no-deps --document-private-items

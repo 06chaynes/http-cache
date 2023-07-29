@@ -1,6 +1,9 @@
 name: msrv
 
-on: [push]
+on:
+  push:
+    branches: [main]
+  pull_request:
 
 env:
   CARGO_TERM_COLOR: always
@@ -22,4 +25,7 @@ jobs:
         run: cargo msrv verify
       - name: Run cargo msrv http-cache-quickcache
         working-directory: ./http-cache-quickcache
+        run: cargo msrv verify
+      - name: Run cargo msrv http-cache-darkbird
+        working-directory: ./http-cache-darkbird
         run: cargo msrv verify
