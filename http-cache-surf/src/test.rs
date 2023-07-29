@@ -1,4 +1,4 @@
-use crate::Cache;
+use crate::{error, Cache};
 
 use http_cache::*;
 use http_types::Method;
@@ -34,6 +34,16 @@ const MUST_REVALIDATE: &str = "public, must-revalidate";
 const HIT: &str = "HIT";
 
 const MISS: &str = "MISS";
+
+#[test]
+#[allow(clippy::default_constructed_unit_structs)]
+fn test_errors() -> Result<()> {
+    // Testing the Debug trait for the error type
+    let err = error::Error::Surf(anyhow::anyhow!("test"));
+    assert_eq!(format!("{:?}", &err), "Surf(test)",);
+    assert_eq!(err.to_string(), "Surf error: test".to_string(),);
+    Ok(())
+}
 
 #[cfg(feature = "manager-moka")]
 mod with_moka {
