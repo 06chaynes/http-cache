@@ -51,7 +51,7 @@ use http::{
     header::{HeaderName, CACHE_CONTROL},
     HeaderValue, Method,
 };
-use http_cache::{CacheManager, Middleware, Result};
+use http_cache::{Middleware, Result};
 use http_cache_semantics::CachePolicy;
 use reqwest::{Request, Response, ResponseBuilderExt};
 use reqwest_middleware::{Error, Next};
@@ -59,7 +59,8 @@ use task_local_extensions::Extensions;
 use url::Url;
 
 pub use http_cache::{
-    CacheMode, CacheOptions, HttpCache, HttpCacheOptions, HttpResponse,
+    CacheManager, CacheMode, CacheOptions, HttpCache, HttpCacheOptions,
+    HttpResponse,
 };
 
 #[cfg(feature = "manager-cacache")]
@@ -199,3 +200,6 @@ impl<T: CacheManager> reqwest_middleware::Middleware for Cache<T> {
         Ok(converted)
     }
 }
+
+#[cfg(test)]
+mod test;
