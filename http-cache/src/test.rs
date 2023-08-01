@@ -96,8 +96,14 @@ fn response_methods_work() -> Result<()> {
 fn version_http() -> Result<()> {
     assert_eq!(format!("{:?}", HttpVersion::Http09), "Http09");
     assert_eq!(format!("{}", HttpVersion::Http09), "HTTP/0.9");
+    assert_eq!(format!("{:?}", HttpVersion::Http10), "Http10");
+    assert_eq!(format!("{}", HttpVersion::Http10), "HTTP/1.0");
+    assert_eq!(format!("{:?}", HttpVersion::Http11), "Http11");
+    assert_eq!(format!("{}", HttpVersion::Http11), "HTTP/1.1");
     assert_eq!(format!("{:?}", HttpVersion::H2), "H2");
     assert_eq!(format!("{}", HttpVersion::H2), "HTTP/2.0");
+    assert_eq!(format!("{:?}", HttpVersion::H3), "H3");
+    assert_eq!(format!("{}", HttpVersion::H3), "HTTP/3.0");
     Ok(())
 }
 
