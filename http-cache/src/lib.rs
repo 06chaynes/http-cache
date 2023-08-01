@@ -103,6 +103,19 @@ pub enum HttpVersion {
     H3,
 }
 
+impl fmt::Display for HttpVersion {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            HttpVersion::Http09 => write!(f, "HTTP/0.9"),
+            HttpVersion::Http10 => write!(f, "HTTP/1.0"),
+            HttpVersion::Http11 => write!(f, "HTTP/1.1"),
+            HttpVersion::H2 => write!(f, "HTTP/2.0"),
+            HttpVersion::H3 => write!(f, "HTTP/3.0"),
+        }
+    }
+}
+
+
 /// A basic generic type that represents an HTTP response
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct HttpResponse {
