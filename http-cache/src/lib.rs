@@ -508,7 +508,7 @@ impl<T: CacheManager> HttpCache<T> {
             && self.mode != CacheMode::Reload
             && res.status == 200
             && policy.is_storable();
-        if is_cacheable {
+        if is_cacheable || self.mode == CacheMode::IgnoreRules {
             Ok(self
                 .manager
                 .put(
