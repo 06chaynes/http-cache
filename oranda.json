@@ -28,7 +28,7 @@
   },
   "styles": {
     "theme": "axodark",
-    "favicon": "./.assets/images/http-cache_logo_bluegreen.png",
+    "favicon": "./.assets/images/favicon.ico",
     "additional_css": ["./.assets/styles/oranda.css"]
   }
 }
