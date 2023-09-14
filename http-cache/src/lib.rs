@@ -503,12 +503,15 @@ impl<T: CacheManager> HttpCache<T> {
             None => middleware.policy(&res)?,
         };
         let is_get_head = middleware.is_method_get_head();
-        let is_cacheable = is_get_head
+        let mut is_cacheable = is_get_head
             && self.mode != CacheMode::NoStore
             && self.mode != CacheMode::Reload
             && res.status == 200
             && policy.is_storable();
-        if is_cacheable || self.mode == CacheMode::IgnoreRules {
+        if self.mode == CacheMode::IgnoreRules && res.status == 200 {
+            is_cacheable = true;
+        }
+        if is_cacheable {
             Ok(self
                 .manager
                 .put(
