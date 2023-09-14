@@ -115,7 +115,6 @@ impl fmt::Display for HttpVersion {
     }
 }
 
-
 /// A basic generic type that represents an HTTP response
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct HttpResponse {
@@ -288,6 +287,11 @@ pub enum CacheMode {
     /// not paying attention to staleness. If there was no response,
     /// it returns a network error.
     OnlyIfCached,
+    /// Overrides the check that determines if a response can be cached to always return true on 200.
+    /// Uses any response in the HTTP cache matching the request,
+    /// not paying attention to staleness. If there was no response,
+    /// it creates a normal request and updates the HTTP cache with the response.
+    IgnoreRules,
 }
 
 impl TryFrom<http::Version> for HttpVersion {
@@ -414,7 +418,7 @@ impl<T: CacheManager> HttpCache<T> {
         let is_cacheable = middleware.is_method_get_head()
             && self.mode != CacheMode::NoStore
             && self.mode != CacheMode::Reload;
-        if !is_cacheable {
+        if !is_cacheable && self.mode != CacheMode::IgnoreRules {
             return self.remote_fetch(&mut middleware).await;
         }
         if let Some(store) = self
@@ -450,7 +454,9 @@ impl<T: CacheManager> HttpCache<T> {
                     res.cache_lookup_status(HitOrMiss::HIT);
                     Ok(res)
                 }
-                CacheMode::ForceCache | CacheMode::OnlyIfCached => {
+                CacheMode::ForceCache
+                | CacheMode::OnlyIfCached
+                | CacheMode::IgnoreRules => {
                     //   112 Disconnected operation
                     // SHOULD be included if the cache is intentionally disconnected from
                     // the rest of the network for a period of time.
