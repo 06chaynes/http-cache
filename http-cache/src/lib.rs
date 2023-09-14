@@ -415,10 +415,11 @@ impl<T: CacheManager> HttpCache<T> {
         &self,
         mut middleware: impl Middleware,
     ) -> Result<HttpResponse> {
-        let is_cacheable = middleware.is_method_get_head()
-            && self.mode != CacheMode::NoStore
-            && self.mode != CacheMode::Reload;
-        if !is_cacheable && self.mode != CacheMode::IgnoreRules {
+        let is_cacheable = self.mode == CacheMode::IgnoreRules
+            || middleware.is_method_get_head()
+                && self.mode != CacheMode::NoStore
+                && self.mode != CacheMode::Reload;
+        if !is_cacheable {
             return self.remote_fetch(&mut middleware).await;
         }
         if let Some(store) = self
