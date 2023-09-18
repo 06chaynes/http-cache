@@ -23,7 +23,7 @@ http = "0.2.9"
 http-cache-semantics = "1.0.1"
 http-types = { version = "2.12.0", default-features = false, optional = true }
 httpdate = "1.0.2"
-moka = { version = "0.11.2", features = ["future"], optional = true }
+moka = { version = "0.12.0", features = ["future"], optional = true }
 serde = { version = "1.0.178", features = ["derive"] }
 url = { version = "2.4.0", features = ["serde"] }
 
