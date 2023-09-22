@@ -19,7 +19,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - run: cargo install cargo-msrv
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-binstall
+      - run: cargo binstall --version 0.15.1 --no-confirm cargo-msrv
       - name: Run cargo msrv http-cache
         working-directory: ./http-cache
         run: cargo msrv verify
