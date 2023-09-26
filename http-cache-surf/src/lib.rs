@@ -38,7 +38,9 @@ use std::{
 
 pub use http::request::Parts;
 use http::{header::CACHE_CONTROL, request};
-use http_cache::{BadHeader, BoxError, Middleware, Result, XCACHE, HitOrMiss, XCACHELOOKUP};
+use http_cache::{
+    BadHeader, BoxError, HitOrMiss, Middleware, Result, XCACHE, XCACHELOOKUP,
+};
 use http_cache_semantics::CachePolicy;
 use http_types::{headers::HeaderValue, Method, Response, StatusCode, Version};
 use surf::{middleware::Next, Client, Request};

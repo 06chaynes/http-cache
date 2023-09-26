@@ -419,16 +419,19 @@ impl<T: CacheManager> HttpCache<T> {
     }
 
     /// Runs the actions to preform when the client middleware is running without the cache
-    pub async fn run_no_cache(&self, middleware: &mut impl Middleware) -> Result<()> {
+    pub async fn run_no_cache(
+        &self,
+        middleware: &mut impl Middleware,
+    ) -> Result<()> {
         self.manager
-                .delete(
-                    &self
-                        .options
-                        .create_cache_key(&middleware.parts()?, Some("GET")),
-                )
-                .await
-                .ok();
-            Ok(())
+            .delete(
+                &self
+                    .options
+                    .create_cache_key(&middleware.parts()?, Some("GET")),
+            )
+            .await
+            .ok();
+        Ok(())
     }
 
     /// Attempts to run the passed middleware along with the cache
