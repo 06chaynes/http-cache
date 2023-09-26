@@ -220,12 +220,9 @@ mod with_moka {
         assert!(data.is_none());
 
         // To verify our endpoint receives the request rather than a cache hit
-        let _res = client.send(req).await?;
-
-        // Skipping run logic on non cacheable request now
-        // These headers should not be present now unfortunately
-        // assert_eq!(res.header(XCACHELOOKUP).unwrap(), MISS);
-        // assert_eq!(res.header(XCACHE).unwrap(), MISS);
+        let res = client.send(req).await?;
+        assert_eq!(res.header(XCACHELOOKUP).unwrap(), MISS);
+        assert_eq!(res.header(XCACHE).unwrap(), MISS);
         Ok(())
     }
 

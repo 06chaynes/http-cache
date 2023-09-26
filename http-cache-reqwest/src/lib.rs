@@ -51,7 +51,7 @@ use http::{
     header::{HeaderName, CACHE_CONTROL},
     HeaderValue, Method,
 };
-use http_cache::{Middleware, Result};
+use http_cache::{HitOrMiss, Middleware, Result, XCACHE, XCACHELOOKUP};
 use http_cache_semantics::CachePolicy;
 use reqwest::{Request, Response, ResponseBuilderExt};
 use reqwest_middleware::{Error, Next};
@@ -201,7 +201,7 @@ impl<T: CacheManager> reqwest_middleware::Middleware for Cache<T> {
             Ok(converted)
         } else {
             self.0.run_no_cache(&mut middleware).await.ok();
-            let res = match middleware
+            let mut res = match middleware
                 .next
                 .run(middleware.req, middleware.extensions)
                 .await
@@ -209,6 +209,28 @@ impl<T: CacheManager> reqwest_middleware::Middleware for Cache<T> {
                 Ok(r) => r,
                 Err(e) => return Err(Error::Middleware(anyhow::anyhow!(e))),
             };
+            res.headers_mut().insert(
+                XCACHE,
+                match HeaderValue::from_str(
+                    HitOrMiss::MISS.to_string().as_ref(),
+                ) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        return Err(Error::Middleware(anyhow::anyhow!(e)))
+                    }
+                },
+            );
+            res.headers_mut().insert(
+                XCACHELOOKUP,
+                match HeaderValue::from_str(
+                    HitOrMiss::MISS.to_string().as_ref(),
+                ) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        return Err(Error::Middleware(anyhow::anyhow!(e)))
+                    }
+                },
+            );
             Ok(res)
         }
     }

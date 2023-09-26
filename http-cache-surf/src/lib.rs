@@ -38,7 +38,7 @@ use std::{
 
 pub use http::request::Parts;
 use http::{header::CACHE_CONTROL, request};
-use http_cache::{BadHeader, BoxError, Middleware, Result};
+use http_cache::{BadHeader, BoxError, Middleware, Result, XCACHE, HitOrMiss, XCACHELOOKUP};
 use http_cache_semantics::CachePolicy;
 use http_types::{headers::HeaderValue, Method, Response, StatusCode, Version};
 use surf::{middleware::Next, Client, Request};
@@ -176,8 +176,10 @@ impl<T: CacheManager> surf::middleware::Middleware for Cache<T> {
             Ok(surf::Response::from(converted))
         } else {
             self.0.run_no_cache(&mut middleware).await.ok();
-            let res =
+            let mut res =
                 middleware.next.run(middleware.req, middleware.client).await?;
+            res.append_header(XCACHE, HitOrMiss::MISS.to_string());
+            res.append_header(XCACHELOOKUP, HitOrMiss::MISS.to_string());
             Ok(res)
         }
     }
