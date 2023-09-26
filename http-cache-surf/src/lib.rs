@@ -160,17 +160,26 @@ impl<T: CacheManager> surf::middleware::Middleware for Cache<T> {
         client: Client,
         next: Next<'_>,
     ) -> std::result::Result<surf::Response, http_types::Error> {
-        let middleware = SurfMiddleware { req, client, next };
-        let res = self.0.run(middleware).await.map_err(to_http_types_error)?;
-        let mut converted = Response::new(StatusCode::Ok);
-        for header in &res.headers {
-            let val = HeaderValue::from_bytes(header.1.as_bytes().to_vec())?;
-            converted.insert_header(header.0.as_str(), val);
+        let mut middleware = SurfMiddleware { req, client, next };
+        if self.0.can_cache_request(&middleware) {
+            let res =
+                self.0.run(middleware).await.map_err(to_http_types_error)?;
+            let mut converted = Response::new(StatusCode::Ok);
+            for header in &res.headers {
+                let val =
+                    HeaderValue::from_bytes(header.1.as_bytes().to_vec())?;
+                converted.insert_header(header.0.as_str(), val);
+            }
+            converted.set_status(res.status.try_into()?);
+            converted.set_version(Some(res.version.try_into()?));
+            converted.set_body(res.body);
+            Ok(surf::Response::from(converted))
+        } else {
+            self.0.run_no_cache(&mut middleware).await.ok();
+            let res =
+                middleware.next.run(middleware.req, middleware.client).await?;
+            Ok(res)
         }
-        converted.set_status(res.status.try_into()?);
-        converted.set_version(Some(res.version.try_into()?));
-        converted.set_body(res.body);
-        Ok(surf::Response::from(converted))
     }
 }
 

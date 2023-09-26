@@ -191,13 +191,26 @@ impl<T: CacheManager> reqwest_middleware::Middleware for Cache<T> {
         extensions: &mut Extensions,
         next: Next<'_>,
     ) -> std::result::Result<Response, Error> {
-        let middleware = ReqwestMiddleware { req, next, extensions };
-        let res = match self.0.run(middleware).await {
-            Ok(r) => r,
-            Err(e) => return Err(Error::Middleware(anyhow::anyhow!(e))),
-        };
-        let converted = convert_response(res)?;
-        Ok(converted)
+        let mut middleware = ReqwestMiddleware { req, next, extensions };
+        if self.0.can_cache_request(&middleware) {
+            let res = match self.0.run(middleware).await {
+                Ok(r) => r,
+                Err(e) => return Err(Error::Middleware(anyhow::anyhow!(e))),
+            };
+            let converted = convert_response(res)?;
+            Ok(converted)
+        } else {
+            self.0.run_no_cache(&mut middleware).await.ok();
+            let res = match middleware
+                .next
+                .run(middleware.req, middleware.extensions)
+                .await
+            {
+                Ok(r) => r,
+                Err(e) => return Err(Error::Middleware(anyhow::anyhow!(e))),
+            };
+            Ok(res)
+        }
     }
 }
 
