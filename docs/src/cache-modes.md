@@ -14,4 +14,4 @@ When constructing a new instance of `HttpCache`, you must specify a cache mode. 
 
 - `OnlyIfCached`: This mode will inspect the HTTP cache on the way to the network. If there is a cached response it will be used regardless of freshness. If there is no cached response it will return a `504 Gateway Timeout` error.
 
-- `IgnoreRules`: This mode will ignore the HTTP headers and always store a response given it was a 200 response. It will also ignore the staleness when retrieving a response from the cache, so expiration of the cached response will need to be handled manually. If there was no cached response it will create a normal request, and will update the cache with the response.
+- `IgnoreRules`: This mode will ignore the HTTP headers and always store a response given it was a 200 status code. It will also ignore the staleness when retrieving a response from the cache, so expiration of the cached response will need to be handled manually. If there was no cached response it will create a normal request, and will update the cache with the response.
