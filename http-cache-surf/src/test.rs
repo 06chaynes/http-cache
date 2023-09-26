@@ -1,4 +1,4 @@
-use crate::Cache;
+use crate::{error, Cache};
 
 use http_cache::*;
 use http_types::Method;
@@ -34,6 +34,16 @@ const MUST_REVALIDATE: &str = "public, must-revalidate";
 const HIT: &str = "HIT";
 
 const MISS: &str = "MISS";
+
+#[test]
+#[allow(clippy::default_constructed_unit_structs)]
+fn test_errors() -> Result<()> {
+    // Testing the Debug trait for the error type
+    let err = error::Error::Surf(anyhow::anyhow!("test"));
+    assert_eq!(format!("{:?}", &err), "Surf(test)",);
+    assert_eq!(err.to_string(), "Surf error: test".to_string(),);
+    Ok(())
+}
 
 #[cfg(feature = "manager-moka")]
 mod with_moka {
@@ -261,6 +271,39 @@ mod with_moka {
         // Construct Surf client with cache defaults
         let client = Client::new().with(Cache(HttpCache {
             mode: CacheMode::ForceCache,
+            manager: manager.clone(),
+            options: HttpCacheOptions::default(),
+        }));
+
+        // Should result in a cache miss and a remote request
+        let res = client.send(req.clone()).await?;
+        assert_eq!(res.header(XCACHELOOKUP).unwrap(), MISS);
+        assert_eq!(res.header(XCACHE).unwrap(), MISS);
+
+        // Try to load cached object
+        let data =
+            manager.get(&format!("{}:{}", GET, &Url::parse(&url)?)).await?;
+        assert!(data.is_some());
+
+        // Should result in a cache hit and no remote request
+        let res = client.send(req).await?;
+        assert_eq!(res.header(XCACHELOOKUP).unwrap(), HIT);
+        assert_eq!(res.header(XCACHE).unwrap(), HIT);
+        Ok(())
+    }
+
+    #[async_std::test]
+    async fn ignore_rules_mode() -> Result<()> {
+        let mock_server = MockServer::start().await;
+        let m = build_mock("no-store, max-age=0, public", TEST_BODY, 200, 1);
+        let _mock_guard = mock_server.register_as_scoped(m).await;
+        let url = format!("{}/", &mock_server.uri());
+        let manager = MokaManager::default();
+        let req = Request::new(Method::Get, Url::parse(&url)?);
+
+        // Construct Surf client with cache defaults
+        let client = Client::new().with(Cache(HttpCache {
+            mode: CacheMode::IgnoreRules,
             manager: manager.clone(),
             options: HttpCacheOptions::default(),
         }));

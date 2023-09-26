@@ -103,6 +103,18 @@ pub enum HttpVersion {
     H3,
 }
 
+impl fmt::Display for HttpVersion {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            HttpVersion::Http09 => write!(f, "HTTP/0.9"),
+            HttpVersion::Http10 => write!(f, "HTTP/1.0"),
+            HttpVersion::Http11 => write!(f, "HTTP/1.1"),
+            HttpVersion::H2 => write!(f, "HTTP/2.0"),
+            HttpVersion::H3 => write!(f, "HTTP/3.0"),
+        }
+    }
+}
+
 /// A basic generic type that represents an HTTP response
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct HttpResponse {
@@ -275,6 +287,11 @@ pub enum CacheMode {
     /// not paying attention to staleness. If there was no response,
     /// it returns a network error.
     OnlyIfCached,
+    /// Overrides the check that determines if a response can be cached to always return true on 200.
+    /// Uses any response in the HTTP cache matching the request,
+    /// not paying attention to staleness. If there was no response,
+    /// it creates a normal request and updates the HTTP cache with the response.
+    IgnoreRules,
 }
 
 impl TryFrom<http::Version> for HttpVersion {
@@ -398,9 +415,10 @@ impl<T: CacheManager> HttpCache<T> {
         &self,
         mut middleware: impl Middleware,
     ) -> Result<HttpResponse> {
-        let is_cacheable = middleware.is_method_get_head()
-            && self.mode != CacheMode::NoStore
-            && self.mode != CacheMode::Reload;
+        let is_cacheable = self.mode == CacheMode::IgnoreRules
+            || middleware.is_method_get_head()
+                && self.mode != CacheMode::NoStore
+                && self.mode != CacheMode::Reload;
         if !is_cacheable {
             return self.remote_fetch(&mut middleware).await;
         }
@@ -437,7 +455,9 @@ impl<T: CacheManager> HttpCache<T> {
                     res.cache_lookup_status(HitOrMiss::HIT);
                     Ok(res)
                 }
-                CacheMode::ForceCache | CacheMode::OnlyIfCached => {
+                CacheMode::ForceCache
+                | CacheMode::OnlyIfCached
+                | CacheMode::IgnoreRules => {
                     //   112 Disconnected operation
                     // SHOULD be included if the cache is intentionally disconnected from
                     // the rest of the network for a period of time.
@@ -484,11 +504,14 @@ impl<T: CacheManager> HttpCache<T> {
             None => middleware.policy(&res)?,
         };
         let is_get_head = middleware.is_method_get_head();
-        let is_cacheable = is_get_head
+        let mut is_cacheable = is_get_head
             && self.mode != CacheMode::NoStore
             && self.mode != CacheMode::Reload
             && res.status == 200
             && policy.is_storable();
+        if self.mode == CacheMode::IgnoreRules && res.status == 200 {
+            is_cacheable = true;
+        }
         if is_cacheable {
             Ok(self
                 .manager

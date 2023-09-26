@@ -1,4 +1,4 @@
-use crate::Cache;
+use crate::{error, Cache};
 use std::sync::Arc;
 
 use http_cache::*;
@@ -27,6 +27,20 @@ const GET: &str = "GET";
 const TEST_BODY: &[u8] = b"test";
 
 const CACHEABLE_PUBLIC: &str = "max-age=86400, public";
+
+#[test]
+#[allow(clippy::default_constructed_unit_structs)]
+fn test_errors() -> Result<()> {
+    // Testing the Debug, Default, and Clone traits for the error types
+    let br = error::BadRequest::default();
+    assert_eq!(format!("{:?}", br.clone()), "BadRequest",);
+    assert_eq!(
+        br.to_string(),
+        "Request object is not cloneable. Are you passing a streaming body?"
+            .to_string(),
+    );
+    Ok(())
+}
 
 #[tokio::test]
 async fn default_mode() -> Result<()> {

@@ -3,7 +3,7 @@ use crate::{CacheManager, HttpResponse, Result};
 use std::{fmt, sync::Arc};
 
 use http_cache_semantics::CachePolicy;
-use moka::future::{Cache, ConcurrentCacheExt};
+use moka::future::Cache;
 use serde::{Deserialize, Serialize};
 
 /// Implements [`CacheManager`] with [`moka`](https://github.com/moka-rs/moka) as the backend.
@@ -41,7 +41,7 @@ impl MokaManager {
     /// Clears out the entire cache.
     pub async fn clear(&self) -> Result<()> {
         self.cache.invalidate_all();
-        self.cache.sync();
+        self.cache.run_pending_tasks().await;
         Ok(())
     }
 }
@@ -52,7 +52,7 @@ impl CacheManager for MokaManager {
         &self,
         cache_key: &str,
     ) -> Result<Option<(HttpResponse, CachePolicy)>> {
-        let store: Store = match self.cache.get(cache_key) {
+        let store: Store = match self.cache.get(cache_key).await {
             Some(d) => bincode::deserialize(&d)?,
             None => return Ok(None),
         };
@@ -68,13 +68,13 @@ impl CacheManager for MokaManager {
         let data = Store { response: response.clone(), policy };
         let bytes = bincode::serialize(&data)?;
         self.cache.insert(cache_key, Arc::new(bytes)).await;
-        self.cache.sync();
+        self.cache.run_pending_tasks().await;
         Ok(response)
     }
 
     async fn delete(&self, cache_key: &str) -> Result<()> {
         self.cache.invalidate(cache_key).await;
-        self.cache.sync();
+        self.cache.run_pending_tasks().await;
         Ok(())
     }
 }

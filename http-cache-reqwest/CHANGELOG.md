@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.2] - 2023-09-26
+
+### Changed
+
+- Updated the minimum versions of the following dependencies:
+  - http-cache [0.15.0]
+
 ## [0.11.1] - 2023-07-28
 
 ### Changed

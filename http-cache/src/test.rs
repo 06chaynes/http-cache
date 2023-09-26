@@ -48,12 +48,13 @@ fn cache_options() -> Result<()> {
 }
 
 #[test]
+#[allow(clippy::default_constructed_unit_structs)]
 fn test_errors() -> Result<()> {
     // Testing the Debug, Default, Display and Clone traits for the error types
-    let bv = error::BadVersion;
+    let bv = error::BadVersion::default();
     assert_eq!(format!("{:?}", bv.clone()), "BadVersion",);
     assert_eq!(bv.to_string(), "Unknown HTTP version".to_string(),);
-    let bh = error::BadHeader;
+    let bh = error::BadHeader::default();
     assert_eq!(format!("{:?}", bh.clone()), "BadHeader",);
     assert_eq!(bh.to_string(), "Error parsing header value".to_string(),);
     Ok(())
@@ -94,7 +95,15 @@ fn response_methods_work() -> Result<()> {
 #[test]
 fn version_http() -> Result<()> {
     assert_eq!(format!("{:?}", HttpVersion::Http09), "Http09");
+    assert_eq!(format!("{}", HttpVersion::Http09), "HTTP/0.9");
+    assert_eq!(format!("{:?}", HttpVersion::Http10), "Http10");
+    assert_eq!(format!("{}", HttpVersion::Http10), "HTTP/1.0");
+    assert_eq!(format!("{:?}", HttpVersion::Http11), "Http11");
+    assert_eq!(format!("{}", HttpVersion::Http11), "HTTP/1.1");
     assert_eq!(format!("{:?}", HttpVersion::H2), "H2");
+    assert_eq!(format!("{}", HttpVersion::H2), "HTTP/2.0");
+    assert_eq!(format!("{:?}", HttpVersion::H3), "H3");
+    assert_eq!(format!("{}", HttpVersion::H3), "HTTP/3.0");
     Ok(())
 }
 
