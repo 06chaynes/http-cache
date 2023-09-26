@@ -1,6 +1,7 @@
 # Summary
 
 - [Introduction](./introduction.md)
+- [Cache Modes](./cache-modes.md)
 - [Development](./development/development.md)
   - [Supporting a Backend Cache Manager](./development/supporting-a-backend-cache-manager.md)
   - [Supporting an HTTP Client](./development/supporting-an-http-client.md)
