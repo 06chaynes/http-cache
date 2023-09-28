@@ -180,8 +180,9 @@ impl<T: CacheManager> surf::middleware::Middleware for Cache<T> {
             self.0.run_no_cache(&mut middleware).await.ok();
             let mut res =
                 middleware.next.run(middleware.req, middleware.client).await?;
-            res.append_header(XCACHE, HitOrMiss::MISS.to_string());
-            res.append_header(XCACHELOOKUP, HitOrMiss::MISS.to_string());
+            let miss = HitOrMiss::MISS.to_string();
+            res.append_header(XCACHE, miss.clone());
+            res.append_header(XCACHELOOKUP, miss);
             Ok(res)
         }
     }
