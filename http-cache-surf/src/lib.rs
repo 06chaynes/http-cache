@@ -177,7 +177,10 @@ impl<T: CacheManager> surf::middleware::Middleware for Cache<T> {
             converted.set_body(res.body);
             Ok(surf::Response::from(converted))
         } else {
-            self.0.run_no_cache(&mut middleware).await.ok();
+            self.0
+                .run_no_cache(&mut middleware)
+                .await
+                .map_err(to_http_types_error)?;
             let mut res =
                 middleware.next.run(middleware.req, middleware.client).await?;
             let miss = HitOrMiss::MISS.to_string();

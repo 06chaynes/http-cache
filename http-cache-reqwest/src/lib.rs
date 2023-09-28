@@ -207,7 +207,10 @@ impl<T: CacheManager> reqwest_middleware::Middleware for Cache<T> {
             let converted = convert_response(res)?;
             Ok(converted)
         } else {
-            self.0.run_no_cache(&mut middleware).await.ok();
+            self.0
+                .run_no_cache(&mut middleware)
+                .await
+                .map_err(from_box_error)?;
             let mut res = middleware
                 .next
                 .run(middleware.req, middleware.extensions)
