@@ -166,3 +166,36 @@ async fn custom_cache_key() -> Result<()> {
     assert!(data.is_some());
     Ok(())
 }
+
+#[tokio::test]
+async fn delete_after_non_get_head_method_request() -> Result<()> {
+    let mock_server = MockServer::start().await;
+    let m = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 1);
+    let _mock_guard = mock_server.register_as_scoped(m).await;
+    let url = format!("{}/", &mock_server.uri());
+    let manager = MokaManager::default();
+
+    // Construct reqwest client with cache defaults
+    let client = ClientBuilder::new(Client::new())
+        .with(Cache(HttpCache {
+            mode: CacheMode::Default,
+            manager: manager.clone(),
+            options: HttpCacheOptions::default(),
+        }))
+        .build();
+
+    // Cold pass to load cache
+    client.get(url.clone()).send().await?;
+
+    // Try to load cached object
+    let data = manager.get(&format!("{}:{}", GET, &Url::parse(&url)?)).await?;
+    assert!(data.is_some());
+
+    // Post request to make sure the cache object at the same resource was deleted
+    client.post(url.clone()).send().await?;
+
+    let data = manager.get(&format!("{}:{}", GET, &Url::parse(&url)?)).await?;
+    assert!(data.is_none());
+
+    Ok(())
+}

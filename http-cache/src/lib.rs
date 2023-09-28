@@ -410,15 +410,36 @@ pub struct HttpCache<T: CacheManager> {
 
 #[allow(dead_code)]
 impl<T: CacheManager> HttpCache<T> {
+    /// Determines if the request should be cached
+    pub fn can_cache_request(&self, middleware: &impl Middleware) -> bool {
+        self.mode == CacheMode::IgnoreRules
+            || middleware.is_method_get_head()
+                && self.mode != CacheMode::NoStore
+                && self.mode != CacheMode::Reload
+    }
+
+    /// Runs the actions to preform when the client middleware is running without the cache
+    pub async fn run_no_cache(
+        &self,
+        middleware: &mut impl Middleware,
+    ) -> Result<()> {
+        self.manager
+            .delete(
+                &self
+                    .options
+                    .create_cache_key(&middleware.parts()?, Some("GET")),
+            )
+            .await
+            .ok();
+        Ok(())
+    }
+
     /// Attempts to run the passed middleware along with the cache
     pub async fn run(
         &self,
         mut middleware: impl Middleware,
     ) -> Result<HttpResponse> {
-        let is_cacheable = self.mode == CacheMode::IgnoreRules
-            || middleware.is_method_get_head()
-                && self.mode != CacheMode::NoStore
-                && self.mode != CacheMode::Reload;
+        let is_cacheable = self.can_cache_request(&middleware);
         if !is_cacheable {
             return self.remote_fetch(&mut middleware).await;
         }
