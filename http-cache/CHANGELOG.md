@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.16.0] - 2023-09-28
+
+### Added
+
+- `can_cache_request` method to `HttpCache` struct. This can be used by client implementations to determine if the request should be cached.
+
+- `run_no_cache` method to `HttpCache` struct. This should be run by client implementations if the request is determined to not be cached.
+
+### Changed
+
+- MSRV is now 1.67.1
+
 ## [0.15.0] - 2023-09-26
 
 ### Added

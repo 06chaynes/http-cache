@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.11.3] - 2023-09-28
+
+### Changed
+
+- MSRV is now 1.67.1
+
+- Implemented check to determine if a request is cacheable before running, avoiding the core logic if not.
+
+- Updated the minimum versions of the following dependencies:
+  - http-cache [0.16.0]
+
 ## [0.11.2] - 2023-09-26
 
 ### Changed

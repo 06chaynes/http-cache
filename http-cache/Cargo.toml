@@ -1,6 +1,6 @@
 [package]
 name = "http-cache"
-version = "0.15.0"
+version = "0.16.0"
 description = "An HTTP caching middleware"
 authors = ["Christian Haynes <06chaynes@gmail.com>", "Kat Marchán <kzm@zkat.tech>"]
 repository = "https://github.com/06chaynes/http-cache"
@@ -13,7 +13,7 @@ categories = [
     "web-programming::http-client"
 ]
 edition = "2021"
-rust-version = "1.66.1"
+rust-version = "1.67.1"
 
 [dependencies]
 async-trait = "0.1.72"

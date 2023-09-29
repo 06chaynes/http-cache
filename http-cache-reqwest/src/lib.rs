@@ -51,7 +51,9 @@ use http::{
     header::{HeaderName, CACHE_CONTROL},
     HeaderValue, Method,
 };
-use http_cache::{Middleware, Result};
+use http_cache::{
+    BoxError, HitOrMiss, Middleware, Result, XCACHE, XCACHELOOKUP,
+};
 use http_cache_semantics::CachePolicy;
 use reqwest::{Request, Response, ResponseBuilderExt};
 use reqwest_middleware::{Error, Next};
@@ -183,6 +185,14 @@ fn convert_response(response: HttpResponse) -> anyhow::Result<Response> {
     Ok(Response::from(ret_res))
 }
 
+fn bad_header(e: reqwest::header::InvalidHeaderValue) -> Error {
+    Error::Middleware(anyhow!(e))
+}
+
+fn from_box_error(e: BoxError) -> Error {
+    Error::Middleware(anyhow!(e))
+}
+
 #[async_trait::async_trait]
 impl<T: CacheManager> reqwest_middleware::Middleware for Cache<T> {
     async fn handle(
@@ -191,13 +201,28 @@ impl<T: CacheManager> reqwest_middleware::Middleware for Cache<T> {
         extensions: &mut Extensions,
         next: Next<'_>,
     ) -> std::result::Result<Response, Error> {
-        let middleware = ReqwestMiddleware { req, next, extensions };
-        let res = match self.0.run(middleware).await {
-            Ok(r) => r,
-            Err(e) => return Err(Error::Middleware(anyhow::anyhow!(e))),
-        };
-        let converted = convert_response(res)?;
-        Ok(converted)
+        let mut middleware = ReqwestMiddleware { req, next, extensions };
+        if self.0.can_cache_request(&middleware) {
+            let res = self.0.run(middleware).await.map_err(from_box_error)?;
+            let converted = convert_response(res)?;
+            Ok(converted)
+        } else {
+            self.0
+                .run_no_cache(&mut middleware)
+                .await
+                .map_err(from_box_error)?;
+            let mut res = middleware
+                .next
+                .run(middleware.req, middleware.extensions)
+                .await?;
+
+            let miss =
+                HeaderValue::from_str(HitOrMiss::MISS.to_string().as_ref())
+                    .map_err(bad_header)?;
+            res.headers_mut().insert(XCACHE, miss.clone());
+            res.headers_mut().insert(XCACHELOOKUP, miss);
+            Ok(res)
+        }
     }
 }
 
