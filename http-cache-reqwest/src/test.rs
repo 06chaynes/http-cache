@@ -91,6 +91,7 @@ async fn default_mode_with_options() -> Result<()> {
                     shared: false,
                     ..Default::default()
                 }),
+                cache_mode_fn: None,
             },
         }))
         .build();
@@ -151,6 +152,7 @@ async fn custom_cache_key() -> Result<()> {
                     format!("{}:{}:{:?}:test", req.method, req.uri, req.version)
                 })),
                 cache_options: None,
+                cache_mode_fn: None,
             },
         }))
         .build();
@@ -164,6 +166,51 @@ async fn custom_cache_key() -> Result<()> {
         .await?;
 
     assert!(data.is_some());
+    Ok(())
+}
+
+#[tokio::test]
+async fn custom_cache_mode_fn() -> Result<()> {
+    let mock_server = MockServer::start().await;
+    let m = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 2);
+    let _mock_guard = mock_server.register_as_scoped(m).await;
+    let url = format!("{}/test.css", &mock_server.uri());
+    let manager = MokaManager::default();
+
+    // Construct reqwest client with cache defaults and custom cache mode
+    let client = ClientBuilder::new(Client::new())
+        .with(Cache(HttpCache {
+            mode: CacheMode::Default,
+            manager: manager.clone(),
+            options: HttpCacheOptions {
+                cache_key: None,
+                cache_options: None,
+                cache_mode_fn: Some(Arc::new(|req: &http::request::Parts| {
+                    if req.uri.path().ends_with(".css") {
+                        CacheMode::Default
+                    } else {
+                        CacheMode::NoStore
+                    }
+                })),
+            },
+        }))
+        .build();
+
+    // Remote request and should cache
+    client.get(url.clone()).send().await?;
+
+    // Try to load cached object
+    let data = manager.get(&format!("{}:{}", GET, &Url::parse(&url)?)).await?;
+    assert!(data.is_some());
+
+    let url = format!("{}/", &mock_server.uri());
+    // To verify our endpoint receives the request rather than a cache hit
+    client.get(url.clone()).send().await?;
+
+    // Check no cache object was created
+    let data = manager.get(&format!("{}:{}", GET, &Url::parse(&url)?)).await?;
+    assert!(data.is_none());
+
     Ok(())
 }
 
