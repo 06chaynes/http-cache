@@ -457,6 +457,20 @@ impl<T: CacheManager> HttpCache<T> {
             )
             .await
             .ok();
+
+        let cache_key =
+            self.options.create_cache_key(&middleware.parts()?, None);
+
+        if let Some(cache_bust) = &self.options.cache_bust {
+            for key_to_cache_bust in cache_bust(
+                &middleware.parts()?,
+                &self.options.cache_key,
+                &cache_key,
+            ) {
+                self.manager.delete(&key_to_cache_bust).await?;
+            }
+        }
+
         Ok(())
     }
 
