@@ -361,6 +361,14 @@ pub type CacheKey = Arc<dyn Fn(&request::Parts) -> String + Send + Sync>;
 /// A closure that takes [`http::request::Parts`] and returns a [`CacheMode`]
 pub type CacheModeFn = Arc<dyn Fn(&request::Parts) -> CacheMode + Send + Sync>;
 
+/// A closure that takes [`http::request::Parts`], [`Option<CacheKey>`], the default cache key ([`&str``]) and returns [`Vec<String>`] of keys to bust the cache for.
+/// An empty vector means that no cache busting will be performed.
+pub type CacheBust = Arc<
+    dyn Fn(&request::Parts, &Option<CacheKey>, &str) -> Vec<String>
+        + Send
+        + Sync,
+>;
+
 /// Can be used to override the default [`CacheOptions`] and cache key.
 /// The cache key is a closure that takes [`http::request::Parts`] and returns a [`String`].
 #[derive(Default, Clone)]
@@ -371,6 +379,8 @@ pub struct HttpCacheOptions {
     pub cache_key: Option<CacheKey>,
     /// Override the default cache mode.
     pub cache_mode_fn: Option<CacheModeFn>,
+    /// Bust the caches of the returned keys.
+    pub cache_bust: Option<CacheBust>,
 }
 
 impl Debug for HttpCacheOptions {
@@ -379,6 +389,7 @@ impl Debug for HttpCacheOptions {
             .field("cache_options", &self.cache_options)
             .field("cache_key", &"Fn(&request::Parts) -> String")
             .field("cache_mode_fn", &"Fn(&request::Parts) -> CacheMode")
+            .field("cache_bust", &"Fn(&request::Parts) -> Vec<String>")
             .finish()
     }
 }
@@ -446,6 +457,20 @@ impl<T: CacheManager> HttpCache<T> {
             )
             .await
             .ok();
+
+        let cache_key =
+            self.options.create_cache_key(&middleware.parts()?, None);
+
+        if let Some(cache_bust) = &self.options.cache_bust {
+            for key_to_cache_bust in cache_bust(
+                &middleware.parts()?,
+                &self.options.cache_key,
+                &cache_key,
+            ) {
+                self.manager.delete(&key_to_cache_bust).await?;
+            }
+        }
+
         Ok(())
     }
 
@@ -458,11 +483,21 @@ impl<T: CacheManager> HttpCache<T> {
         if !is_cacheable {
             return self.remote_fetch(&mut middleware).await;
         }
-        if let Some(store) = self
-            .manager
-            .get(&self.options.create_cache_key(&middleware.parts()?, None))
-            .await?
-        {
+
+        let cache_key =
+            self.options.create_cache_key(&middleware.parts()?, None);
+
+        if let Some(cache_bust) = &self.options.cache_bust {
+            for key_to_cache_bust in cache_bust(
+                &middleware.parts()?,
+                &self.options.cache_key,
+                &cache_key,
+            ) {
+                self.manager.delete(&key_to_cache_bust).await?;
+            }
+        }
+
+        if let Some(store) = self.manager.get(&cache_key).await? {
             let (mut res, policy) = store;
             res.cache_lookup_status(HitOrMiss::HIT);
             if let Some(warning_code) = res.warning_code() {

@@ -103,6 +103,7 @@ mod with_moka {
                     ..Default::default()
                 }),
                 cache_mode_fn: None,
+                cache_bust: None,
             },
         }));
 

@@ -92,6 +92,7 @@ async fn default_mode_with_options() -> Result<()> {
                     ..Default::default()
                 }),
                 cache_mode_fn: None,
+                cache_bust: None,
             },
         }))
         .build();
@@ -153,6 +154,7 @@ async fn custom_cache_key() -> Result<()> {
                 })),
                 cache_options: None,
                 cache_mode_fn: None,
+                cache_bust: None,
             },
         }))
         .build();
@@ -192,6 +194,7 @@ async fn custom_cache_mode_fn() -> Result<()> {
                         CacheMode::NoStore
                     }
                 })),
+                cache_bust: None,
             },
         }))
         .build();
@@ -208,6 +211,59 @@ async fn custom_cache_mode_fn() -> Result<()> {
     client.get(url.clone()).send().await?;
 
     // Check no cache object was created
+    let data = manager.get(&format!("{}:{}", GET, &Url::parse(&url)?)).await?;
+    assert!(data.is_none());
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn cache_bust() -> Result<()> {
+    let mock_server = MockServer::start().await;
+    let m = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 2);
+    let _mock_guard = mock_server.register_as_scoped(m).await;
+    let url = format!("{}/", &mock_server.uri());
+    let manager = MokaManager::default();
+
+    // Construct reqwest client with cache defaults and custom cache mode
+    let client = ClientBuilder::new(Client::new())
+        .with(Cache(HttpCache {
+            mode: CacheMode::Default,
+            manager: manager.clone(),
+            options: HttpCacheOptions {
+                cache_key: None,
+                cache_options: None,
+                cache_mode_fn: None,
+                cache_bust: Some(Arc::new(
+                    |req: &http::request::Parts, _, _| {
+                        if req.uri.path().ends_with("/bust-cache") {
+                            vec![format!(
+                                "{}:{}://{}:{}/",
+                                GET,
+                                req.uri.scheme_str().unwrap(),
+                                req.uri.host().unwrap(),
+                                req.uri.port_u16().unwrap_or(80)
+                            )]
+                        } else {
+                            Vec::new()
+                        }
+                    },
+                )),
+            },
+        }))
+        .build();
+
+    // Remote request and should cache
+    client.get(url.clone()).send().await?;
+
+    // Try to load cached object
+    let data = manager.get(&format!("{}:{}", GET, &Url::parse(&url)?)).await?;
+    assert!(data.is_some());
+
+    // To verify our endpoint receives the request rather than a cache hit
+    client.get(format!("{}/bust-cache", &mock_server.uri())).send().await?;
+
+    // Check cache object was busted
     let data = manager.get(&format!("{}:{}", GET, &Url::parse(&url)?)).await?;
     assert!(data.is_none());
 
