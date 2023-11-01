@@ -202,7 +202,11 @@ impl<T: CacheManager> reqwest_middleware::Middleware for Cache<T> {
         next: Next<'_>,
     ) -> std::result::Result<Response, Error> {
         let mut middleware = ReqwestMiddleware { req, next, extensions };
-        if self.0.can_cache_request(&middleware) {
+        if self
+            .0
+            .can_cache_request(&middleware)
+            .map_err(|e| Error::Middleware(anyhow!(e)))?
+        {
             let res = self.0.run(middleware).await.map_err(from_box_error)?;
             let converted = convert_response(res)?;
             Ok(converted)

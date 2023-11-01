@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.17.0] - 2023-11-01
+
+### Added
+
+- `cache_mode_fn` field to `HttpCacheOptions` struct. This is a closure that takes a `&http::request::Parts` and returns a `CacheMode` enum variant. This allows for the overriding of cache mode on a per-request basis.
+
+- `cache_bust` field to `HttpCacheOptions` struct. This is a closure that takes `http::request::Parts`, `Option<CacheKey>`, the default cache key (`&str`) and returns `Vec<String>` of keys to bust the cache for.
+
+### Changed
+
+- Updated the minimum versions of the following dependencies:
+  - cacache [12.0.0]
+
 ## [0.16.0] - 2023-09-28
 
 ### Added

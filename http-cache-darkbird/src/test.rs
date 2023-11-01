@@ -148,6 +148,8 @@ async fn default_mode_with_options() -> Result<()> {
                     shared: false,
                     ..Default::default()
                 }),
+                cache_mode_fn: None,
+                cache_bust: None,
             },
         }))
         .build();

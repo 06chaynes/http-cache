@@ -358,6 +358,17 @@ pub use http_cache_semantics::CacheOptions;
 /// By default, the cache key is a combination of the request method and uri with a colon in between.
 pub type CacheKey = Arc<dyn Fn(&request::Parts) -> String + Send + Sync>;
 
+/// A closure that takes [`http::request::Parts`] and returns a [`CacheMode`]
+pub type CacheModeFn = Arc<dyn Fn(&request::Parts) -> CacheMode + Send + Sync>;
+
+/// A closure that takes [`http::request::Parts`], [`Option<CacheKey>`], the default cache key ([`&str``]) and returns [`Vec<String>`] of keys to bust the cache for.
+/// An empty vector means that no cache busting will be performed.
+pub type CacheBust = Arc<
+    dyn Fn(&request::Parts, &Option<CacheKey>, &str) -> Vec<String>
+        + Send
+        + Sync,
+>;
+
 /// Can be used to override the default [`CacheOptions`] and cache key.
 /// The cache key is a closure that takes [`http::request::Parts`] and returns a [`String`].
 #[derive(Default, Clone)]
@@ -366,6 +377,10 @@ pub struct HttpCacheOptions {
     pub cache_options: Option<CacheOptions>,
     /// Override the default cache key generator.
     pub cache_key: Option<CacheKey>,
+    /// Override the default cache mode.
+    pub cache_mode_fn: Option<CacheModeFn>,
+    /// Bust the caches of the returned keys.
+    pub cache_bust: Option<CacheBust>,
 }
 
 impl Debug for HttpCacheOptions {
@@ -373,6 +388,8 @@ impl Debug for HttpCacheOptions {
         f.debug_struct("HttpCacheOptions")
             .field("cache_options", &self.cache_options)
             .field("cache_key", &"Fn(&request::Parts) -> String")
+            .field("cache_mode_fn", &"Fn(&request::Parts) -> CacheMode")
+            .field("cache_bust", &"Fn(&request::Parts) -> Vec<String>")
             .finish()
     }
 }
@@ -411,11 +428,20 @@ pub struct HttpCache<T: CacheManager> {
 #[allow(dead_code)]
 impl<T: CacheManager> HttpCache<T> {
     /// Determines if the request should be cached
-    pub fn can_cache_request(&self, middleware: &impl Middleware) -> bool {
-        self.mode == CacheMode::IgnoreRules
+    pub fn can_cache_request(
+        &self,
+        middleware: &impl Middleware,
+    ) -> Result<bool> {
+        let mode = if let Some(cache_mode_fn) = &self.options.cache_mode_fn {
+            cache_mode_fn(&middleware.parts()?)
+        } else {
+            self.mode
+        };
+
+        Ok(mode == CacheMode::IgnoreRules
             || middleware.is_method_get_head()
-                && self.mode != CacheMode::NoStore
-                && self.mode != CacheMode::Reload
+                && mode != CacheMode::NoStore
+                && mode != CacheMode::Reload)
     }
 
     /// Runs the actions to preform when the client middleware is running without the cache
@@ -431,6 +457,20 @@ impl<T: CacheManager> HttpCache<T> {
             )
             .await
             .ok();
+
+        let cache_key =
+            self.options.create_cache_key(&middleware.parts()?, None);
+
+        if let Some(cache_bust) = &self.options.cache_bust {
+            for key_to_cache_bust in cache_bust(
+                &middleware.parts()?,
+                &self.options.cache_key,
+                &cache_key,
+            ) {
+                self.manager.delete(&key_to_cache_bust).await?;
+            }
+        }
+
         Ok(())
     }
 
@@ -439,15 +479,25 @@ impl<T: CacheManager> HttpCache<T> {
         &self,
         mut middleware: impl Middleware,
     ) -> Result<HttpResponse> {
-        let is_cacheable = self.can_cache_request(&middleware);
+        let is_cacheable = self.can_cache_request(&middleware)?;
         if !is_cacheable {
             return self.remote_fetch(&mut middleware).await;
         }
-        if let Some(store) = self
-            .manager
-            .get(&self.options.create_cache_key(&middleware.parts()?, None))
-            .await?
-        {
+
+        let cache_key =
+            self.options.create_cache_key(&middleware.parts()?, None);
+
+        if let Some(cache_bust) = &self.options.cache_bust {
+            for key_to_cache_bust in cache_bust(
+                &middleware.parts()?,
+                &self.options.cache_key,
+                &cache_key,
+            ) {
+                self.manager.delete(&key_to_cache_bust).await?;
+            }
+        }
+
+        if let Some(store) = self.manager.get(&cache_key).await? {
             let (mut res, policy) = store;
             res.cache_lookup_status(HitOrMiss::HIT);
             if let Some(warning_code) = res.warning_code() {

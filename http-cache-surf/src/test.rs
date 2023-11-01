@@ -102,6 +102,8 @@ mod with_moka {
                     shared: false,
                     ..Default::default()
                 }),
+                cache_mode_fn: None,
+                cache_bust: None,
             },
         }));
 
