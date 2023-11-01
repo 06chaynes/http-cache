@@ -1,6 +1,6 @@
 [package]
 name = "http-cache-mokadeser"
-version = "0.1.1"
+version = "0.1.2"
 description = "http-cache manager implementation for moka stored deserialized"
 authors = ["Christian Haynes <06chaynes@gmail.com>", "Kat Marchán <kzm@zkat.tech>"]
 repository = "https://github.com/06chaynes/http-cache"
@@ -22,7 +22,7 @@ moka = { version = "0.12.0", features = ["future"]}
 
 [dependencies.http-cache]
 path = "../http-cache"
-version = "0.16.0"
+version = "0.17.0"
 default-features = false
 features = ["bincode"]
 
