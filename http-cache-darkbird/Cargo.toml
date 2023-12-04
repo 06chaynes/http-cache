@@ -18,7 +18,7 @@ rust-version = "1.67.1"
 [dependencies]
 async-trait = "0.1.72"
 darkbird = "6.1.8"
-http-cache-semantics = "1.0.1"
+http-cache-semantics = "2.0.1"
 serde = { version = "1.0.178", features = ["derive"] }
 thiserror = "1.0.44"
 
