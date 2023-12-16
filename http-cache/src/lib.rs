@@ -261,7 +261,7 @@ pub trait Middleware: Send {
 
 /// Similar to [make-fetch-happen cache options](https://github.com/npm/make-fetch-happen#--optscache).
 /// Passed in when the [`HttpCache`] struct is being built.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub enum CacheMode {
     /// Will inspect the HTTP cache on the way to the network.
     /// If there is a fresh response it will be used.
@@ -270,6 +270,7 @@ pub enum CacheMode {
     /// It then updates the HTTP cache with the response.
     /// If the revalidation request fails (for example, on a 500 or if you're offline),
     /// the stale response will be returned.
+    #[default]
     Default,
     /// Behaves as if there is no HTTP cache at all.
     NoStore,
