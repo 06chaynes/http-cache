@@ -174,7 +174,7 @@ fn convert_response(response: HttpResponse) -> anyhow::Result<Response> {
     let mut ret_res = http::Response::builder()
         .status(response.status)
         .url(response.url)
-        .version(response.version.try_into()?)
+        .version(response.version.into())
         .body(response.body)?;
     for header in response.headers {
         ret_res.headers_mut().insert(
