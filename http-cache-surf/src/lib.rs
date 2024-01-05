@@ -140,13 +140,7 @@ impl Middleware for SurfMiddleware<'_> {
         let status = res.status().into();
         let version = res.version().unwrap_or(Version::Http1_1);
         let body: Vec<u8> = res.body_bytes().await?;
-        Ok(HttpResponse {
-            body,
-            headers,
-            status,
-            url,
-            version: version.try_into()?,
-        })
+        Ok(HttpResponse { body, headers, status, url, version: version.into() })
     }
 }
 
