@@ -140,7 +140,13 @@ impl Middleware for SurfMiddleware<'_> {
         let status = res.status().into();
         let version = res.version().unwrap_or(Version::Http1_1);
         let body: Vec<u8> = res.body_bytes().await?;
-        Ok(HttpResponse { body, headers, status, url, version: version.into() })
+        Ok(HttpResponse {
+            body,
+            headers,
+            status,
+            url,
+            version: version.try_into()?,
+        })
     }
 }
 
@@ -171,7 +177,7 @@ impl<T: CacheManager> surf::middleware::Middleware for Cache<T> {
                 converted.insert_header(header.0.as_str(), val);
             }
             converted.set_status(res.status.try_into()?);
-            converted.set_version(Some(res.version.try_into()?));
+            converted.set_version(Some(res.version.into()));
             converted.set_body(res.body);
             Ok(surf::Response::from(converted))
         } else {
