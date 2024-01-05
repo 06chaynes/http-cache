@@ -235,6 +235,12 @@ pub trait CacheManager: Send + Sync + 'static {
 /// Describes the functionality required for interfacing with HTTP client middleware
 #[async_trait::async_trait]
 pub trait Middleware: Send {
+    /// Allows the cache mode to be overridden.
+    ///
+    /// This overrides any cache mode set in the configuration, including cache_mode_fn.
+    fn overridden_cache_mode(&self) -> Option<CacheMode> {
+        None
+    }
     /// Determines if the request method is either GET or HEAD
     fn is_method_get_head(&self) -> bool;
     /// Returns a new cache policy with default options
@@ -561,7 +567,9 @@ impl<T: CacheManager> HttpCache<T> {
     }
 
     fn cache_mode(&self, middleware: &impl Middleware) -> Result<CacheMode> {
-        Ok(if let Some(cache_mode_fn) = &self.options.cache_mode_fn {
+        Ok(if let Some(mode) = middleware.overridden_cache_mode() {
+            mode
+        } else if let Some(cache_mode_fn) = &self.options.cache_mode_fn {
             cache_mode_fn(&middleware.parts()?)
         } else {
             self.mode
