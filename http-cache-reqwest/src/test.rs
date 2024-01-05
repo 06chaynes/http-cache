@@ -182,7 +182,7 @@ async fn custom_cache_mode_fn() -> Result<()> {
     // Construct reqwest client with cache defaults and custom cache mode
     let client = ClientBuilder::new(Client::new())
         .with(Cache(HttpCache {
-            mode: CacheMode::Default,
+            mode: CacheMode::NoStore,
             manager: manager.clone(),
             options: HttpCacheOptions {
                 cache_key: None,

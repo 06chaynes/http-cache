@@ -433,11 +433,7 @@ impl<T: CacheManager> HttpCache<T> {
         &self,
         middleware: &impl Middleware,
     ) -> Result<bool> {
-        let mode = if let Some(cache_mode_fn) = &self.options.cache_mode_fn {
-            cache_mode_fn(&middleware.parts()?)
-        } else {
-            self.mode
-        };
+        let mode = self.cache_mode(middleware)?;
 
         Ok(mode == CacheMode::IgnoreRules
             || middleware.is_method_get_head()
@@ -517,7 +513,7 @@ impl<T: CacheManager> HttpCache<T> {
                 }
             }
 
-            match self.mode {
+            match self.cache_mode(&middleware)? {
                 CacheMode::Default => {
                     self.conditional_fetch(middleware, res, policy).await
                 }
@@ -545,7 +541,7 @@ impl<T: CacheManager> HttpCache<T> {
                 _ => self.remote_fetch(&mut middleware).await,
             }
         } else {
-            match self.mode {
+            match self.cache_mode(&middleware)? {
                 CacheMode::OnlyIfCached => {
                     // ENOTCACHED
                     let mut res = HttpResponse {
@@ -564,6 +560,14 @@ impl<T: CacheManager> HttpCache<T> {
         }
     }
 
+    fn cache_mode(&self, middleware: &impl Middleware) -> Result<CacheMode> {
+        Ok(if let Some(cache_mode_fn) = &self.options.cache_mode_fn {
+            cache_mode_fn(&middleware.parts()?)
+        } else {
+            self.mode
+        })
+    }
+
     async fn remote_fetch(
         &self,
         middleware: &mut impl Middleware,
@@ -576,12 +580,13 @@ impl<T: CacheManager> HttpCache<T> {
             None => middleware.policy(&res)?,
         };
         let is_get_head = middleware.is_method_get_head();
+        let mode = self.cache_mode(middleware)?;
         let mut is_cacheable = is_get_head
-            && self.mode != CacheMode::NoStore
-            && self.mode != CacheMode::Reload
+            && mode != CacheMode::NoStore
+            && mode != CacheMode::Reload
             && res.status == 200
             && policy.is_storable();
-        if self.mode == CacheMode::IgnoreRules && res.status == 200 {
+        if mode == CacheMode::IgnoreRules && res.status == 200 {
             is_cacheable = true;
         }
         if is_cacheable {
