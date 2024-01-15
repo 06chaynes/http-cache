@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.18.0] - 2024-01-15
+
+### Added
+
+- `overridden_cache_mode` method to `Middleware` trait. This method allows for overriding any cache mode set in the configuration, including `cache_mode_fn`.
+
+- Derive `Default` for the `CacheMode` enum with the mode `Default` selected to be used.
+
 ## [0.17.0] - 2023-11-01
 
 ### Added

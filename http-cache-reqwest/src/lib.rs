@@ -33,6 +33,18 @@
 //!     Ok(())
 //! }
 //! ```
+//!
+//! ## Overriding the cache mode
+//!
+//! The cache mode can be overridden on a per-request basis by making use of the
+//! `reqwest-middleware` extensions system.
+//!
+//! ```no_run
+//! client.get("https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching")
+//!     .with_extension(CacheMode::OnlyIfCached)
+//!     .send()
+//!     .await?;
+//! ```
 mod error;
 
 use anyhow::anyhow;
@@ -93,6 +105,9 @@ fn clone_req(request: &Request) -> std::result::Result<Request, Error> {
 
 #[async_trait::async_trait]
 impl Middleware for ReqwestMiddleware<'_> {
+    fn overridden_cache_mode(&self) -> Option<CacheMode> {
+        self.extensions.get().cloned()
+    }
     fn is_method_get_head(&self) -> bool {
         self.req.method() == Method::GET || self.req.method() == Method::HEAD
     }
@@ -174,7 +189,7 @@ fn convert_response(response: HttpResponse) -> anyhow::Result<Response> {
     let mut ret_res = http::Response::builder()
         .status(response.status)
         .url(response.url)
-        .version(response.version.try_into()?)
+        .version(response.version.into())
         .body(response.body)?;
     for header in response.headers {
         ret_res.headers_mut().insert(

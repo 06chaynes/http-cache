@@ -235,6 +235,12 @@ pub trait CacheManager: Send + Sync + 'static {
 /// Describes the functionality required for interfacing with HTTP client middleware
 #[async_trait::async_trait]
 pub trait Middleware: Send {
+    /// Allows the cache mode to be overridden.
+    ///
+    /// This overrides any cache mode set in the configuration, including cache_mode_fn.
+    fn overridden_cache_mode(&self) -> Option<CacheMode> {
+        None
+    }
     /// Determines if the request method is either GET or HEAD
     fn is_method_get_head(&self) -> bool;
     /// Returns a new cache policy with default options
@@ -261,7 +267,7 @@ pub trait Middleware: Send {
 
 /// Similar to [make-fetch-happen cache options](https://github.com/npm/make-fetch-happen#--optscache).
 /// Passed in when the [`HttpCache`] struct is being built.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub enum CacheMode {
     /// Will inspect the HTTP cache on the way to the network.
     /// If there is a fresh response it will be used.
@@ -270,6 +276,7 @@ pub enum CacheMode {
     /// It then updates the HTTP cache with the response.
     /// If the revalidation request fails (for example, on a 500 or if you're offline),
     /// the stale response will be returned.
+    #[default]
     Default,
     /// Behaves as if there is no HTTP cache at all.
     NoStore,
@@ -432,11 +439,7 @@ impl<T: CacheManager> HttpCache<T> {
         &self,
         middleware: &impl Middleware,
     ) -> Result<bool> {
-        let mode = if let Some(cache_mode_fn) = &self.options.cache_mode_fn {
-            cache_mode_fn(&middleware.parts()?)
-        } else {
-            self.mode
-        };
+        let mode = self.cache_mode(middleware)?;
 
         Ok(mode == CacheMode::IgnoreRules
             || middleware.is_method_get_head()
@@ -516,7 +519,7 @@ impl<T: CacheManager> HttpCache<T> {
                 }
             }
 
-            match self.mode {
+            match self.cache_mode(&middleware)? {
                 CacheMode::Default => {
                     self.conditional_fetch(middleware, res, policy).await
                 }
@@ -544,7 +547,7 @@ impl<T: CacheManager> HttpCache<T> {
                 _ => self.remote_fetch(&mut middleware).await,
             }
         } else {
-            match self.mode {
+            match self.cache_mode(&middleware)? {
                 CacheMode::OnlyIfCached => {
                     // ENOTCACHED
                     let mut res = HttpResponse {
@@ -563,6 +566,16 @@ impl<T: CacheManager> HttpCache<T> {
         }
     }
 
+    fn cache_mode(&self, middleware: &impl Middleware) -> Result<CacheMode> {
+        Ok(if let Some(mode) = middleware.overridden_cache_mode() {
+            mode
+        } else if let Some(cache_mode_fn) = &self.options.cache_mode_fn {
+            cache_mode_fn(&middleware.parts()?)
+        } else {
+            self.mode
+        })
+    }
+
     async fn remote_fetch(
         &self,
         middleware: &mut impl Middleware,
@@ -575,12 +588,13 @@ impl<T: CacheManager> HttpCache<T> {
             None => middleware.policy(&res)?,
         };
         let is_get_head = middleware.is_method_get_head();
+        let mode = self.cache_mode(middleware)?;
         let mut is_cacheable = is_get_head
-            && self.mode != CacheMode::NoStore
-            && self.mode != CacheMode::Reload
+            && mode != CacheMode::NoStore
+            && mode != CacheMode::Reload
             && res.status == 200
             && policy.is_storable();
-        if self.mode == CacheMode::IgnoreRules && res.status == 200 {
+        if mode == CacheMode::IgnoreRules && res.status == 200 {
             is_cacheable = true;
         }
         if is_cacheable {
