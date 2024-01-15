@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.13.0] - 2024-01-15
+
+### Added
+
+- Implemented `overridden_cache_mode` method from `Middleware` trait. This method allows for overriding any cache mode set in the configuration, including `cache_mode_fn`.
+
+### Changed
+
+- Updated the minimum versions of the following dependencies:
+  - http-cache [0.18.0]
+
 ## [0.12.0] - 2023-11-01
 
 ### Added
