@@ -1,0 +1,43 @@
+[package]
+name = "http-cache-tower"
+version = "0.1.0"
+description = "http-cache middleware implementation for tower"
+authors = ["Christian Haynes <06chaynes@gmail.com>", "Kat Marchán <kzm@zkat.tech>"]
+repository = "https://github.com/06chaynes/http-cache.git"
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+keywords = ["cache", "http", "middleware", "tower"]
+categories = [
+    "caching",
+    "web-programming::http-client"
+]
+edition = "2021"
+
+[dependencies]
+futures-core = "0.3.23"
+futures-util = { version = "0.3.23", default-features = false, features = [] }
+http = "1.0.0"
+http-body = "1.0.0"
+pin-project-lite = "0.2.9"
+tower-layer = "0.3.1"
+tower-service = "0.3.2"
+http-cache-semantics = "1.0.1"
+serde = { version = "1.0.144", features = ["derive"] }
+url = { version = "2.2.2", features = ["serde"] }
+tower = { version = "0.4.13", features = ["util"] }
+
+[dependencies.http-cache]
+path = "../http-cache"
+version = "0.18.0"
+
+[dev-dependencies]
+tokio = { version = "1.20.1", features = ["macros", "rt-multi-thread"] }
+
+[features]
+default = ["manager-cacache"]
+manager-cacache = ["http-cache/manager-cacache"]
+manager-moka = ["http-cache/manager-moka"]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
