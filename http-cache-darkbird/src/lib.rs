@@ -114,7 +114,6 @@ impl DarkbirdManager {
     }
 }
 
-#[async_trait::async_trait]
 impl CacheManager for DarkbirdManager {
     async fn get(
         &self,

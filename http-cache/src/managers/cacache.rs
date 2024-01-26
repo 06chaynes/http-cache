@@ -34,7 +34,6 @@ impl CACacheManager {
     }
 }
 
-#[async_trait::async_trait]
 impl CacheManager for CACacheManager {
     async fn get(
         &self,

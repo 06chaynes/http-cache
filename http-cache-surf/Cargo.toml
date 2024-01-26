@@ -16,7 +16,6 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.72"
-async-trait = "0.1.72"
 http = "0.2.9"
 http-cache-semantics = "1.0.1"
 http-types = "2.12.0"

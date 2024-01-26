@@ -214,26 +214,29 @@ impl HttpResponse {
 }
 
 /// A trait providing methods for storing, reading, and removing cache records.
-#[async_trait::async_trait]
 pub trait CacheManager: Send + Sync + 'static {
     /// Attempts to pull a cached response and related policy from cache.
-    async fn get(
+    fn get(
         &self,
         cache_key: &str,
-    ) -> Result<Option<(HttpResponse, CachePolicy)>>;
+    ) -> impl std::future::Future<
+        Output = Result<Option<(HttpResponse, CachePolicy)>>,
+    > + Send;
     /// Attempts to cache a response and related policy.
-    async fn put(
+    fn put(
         &self,
         cache_key: String,
         res: HttpResponse,
         policy: CachePolicy,
-    ) -> Result<HttpResponse>;
+    ) -> impl std::future::Future<Output = Result<HttpResponse>> + Send;
     /// Attempts to remove a record from cache.
-    async fn delete(&self, cache_key: &str) -> Result<()>;
+    fn delete(
+        &self,
+        cache_key: &str,
+    ) -> impl std::future::Future<Output = Result<()>> + Send;
 }
 
 /// Describes the functionality required for interfacing with HTTP client middleware
-#[async_trait::async_trait]
 pub trait Middleware: Send {
     /// Allows the cache mode to be overridden.
     ///
@@ -262,7 +265,9 @@ pub trait Middleware: Send {
     /// Attempts to determine the request method
     fn method(&self) -> Result<String>;
     /// Attempts to fetch an upstream resource and return an [`HttpResponse`]
-    async fn remote_fetch(&mut self) -> Result<HttpResponse>;
+    fn remote_fetch(
+        &mut self,
+    ) -> impl std::future::Future<Output = Result<HttpResponse>> + Send;
 }
 
 /// Similar to [make-fetch-happen cache options](https://github.com/npm/make-fetch-happen#--optscache).

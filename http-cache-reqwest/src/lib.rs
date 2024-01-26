@@ -103,7 +103,6 @@ fn clone_req(request: &Request) -> std::result::Result<Request, Error> {
     }
 }
 
-#[async_trait::async_trait]
 impl Middleware for ReqwestMiddleware<'_> {
     fn overridden_cache_mode(&self) -> Option<CacheMode> {
         self.extensions.get().cloned()

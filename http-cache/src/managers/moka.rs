@@ -46,7 +46,6 @@ impl MokaManager {
     }
 }
 
-#[async_trait::async_trait]
 impl CacheManager for MokaManager {
     async fn get(
         &self,
