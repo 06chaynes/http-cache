@@ -21,7 +21,7 @@ http-body = "1.0.0"
 pin-project-lite = "0.2.9"
 tower-layer = "0.3.1"
 tower-service = "0.3.2"
-http-cache-semantics = "1.0.1"
+http-cache-semantics = "2.0.1"
 serde = { version = "1.0.144", features = ["derive"] }
 url = { version = "2.2.2", features = ["serde"] }
 tower = { version = "0.4.13", features = ["util"] }
