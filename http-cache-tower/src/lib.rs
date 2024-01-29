@@ -109,6 +109,7 @@ where
             future: Either::Left(service.call(req)),
             service,
             cache: self.cache.clone(),
+            state: ResponseFutureState::Init,
         }
     }
 }
@@ -126,6 +127,7 @@ pin_project! {
         service: S,
         req: Request<B>,
         cache: HttpCache<T>,
+        state: ResponseFutureState<F>,
     }
 }
 
@@ -139,13 +141,35 @@ where
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let mut this = self.project();
-        let request_parts = this.req.clone().into_parts().0;
-        // TODO: figure out how to run an async methods here
-        // let action = this
-        //     .cache
-        //     .before_request(&request_parts)
-        //     .await;
-        let res = ready!(this.future.as_mut().poll(cx)?);
-        Poll::Ready(Ok(res))
+        let mut curr_state = this.state;
+        match this.state.as_mut().project() {
+            ResponseFutureProj::Init => {
+                let request_parts = this.req.clone().into_parts().0;
+                let fut = this.cache.before_request(&request_parts);
+                curr_state.set(ResponseFutureState::BeforeRequest { fut });
+                cx.waker().wake_by_ref();
+                Poll::Pending
+            }
+            ResponseFutureProj::BeforeRequest { fut } => {
+                let res = ready!(fut.poll(cx));
+                // TODO: What do we do with res here?
+                curr_state.set(ResponseFutureState::Inner);
+                cx.waker().wake_by_ref();
+                Poll::Pending
+            }
+            ResponseFutureProj::Inner => this.future.as_mut().poll(cx),
+        }
+    }
+}
+
+pin_project! {
+    #[project = ResponseFutureProj]
+    enum ResponseFutureState<F> {
+        Init,
+        BeforeRequest {
+            #[pin]
+            fut: F
+        },
+        Inner,
     }
 }
