@@ -32,7 +32,7 @@ default-features = false
 
 [dev-dependencies]
 tokio = { version = "1.29.1", features = ["macros", "rt-multi-thread"] }
-wiremock = "0.5.19"
+wiremock = "0.6.0"
 
 [features]
 default = ["manager-cacache"]

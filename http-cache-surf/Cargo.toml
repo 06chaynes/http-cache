@@ -34,7 +34,7 @@ features = ["with-http-types"]
 [dev-dependencies]
 async-std = { version = "1.12.0", features = ["attributes"] }
 surf = { version = "2.3.2", features = ["curl-client"] }
-wiremock = "0.5.19"
+wiremock = "0.6.0"
 
 [features]
 default = ["manager-cacache"]
