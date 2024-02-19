@@ -18,7 +18,7 @@ rust-version = "1.67.1"
 [dependencies]
 async-trait = "0.1.72"
 bincode = { version = "1.3.3", optional = true }
-cacache = { version = "12.0.0", default-features = false, features = ["mmap"], optional = true }
+cacache = { version = "13.0.0", default-features = false, features = ["mmap"], optional = true }
 http = "0.2.9"
 http-cache-semantics = "1.0.1"
 http-types = { version = "2.12.0", default-features = false, optional = true }
