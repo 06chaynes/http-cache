@@ -18,7 +18,7 @@ rust-version = "1.67.1"
 [dependencies]
 async-trait = "0.1.72"
 bincode = "1.3.3"
-http-cache-semantics = "1.0.1"
+http-cache-semantics = "2.1.0"
 serde = { version = "1.0.178", features = ["derive"] }
 url = { version = "2.4.0", features = ["serde"] }
 quick_cache = "0.4.0"

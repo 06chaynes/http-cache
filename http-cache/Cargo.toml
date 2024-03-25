@@ -20,7 +20,7 @@ async-trait = "0.1.72"
 bincode = { version = "1.3.3", optional = true }
 cacache = { version = "12.0.0", default-features = false, features = ["mmap"], optional = true }
 http = "0.2.9"
-http-cache-semantics = "1.0.1"
+http-cache-semantics = "2.1.0"
 http-types = { version = "2.12.0", default-features = false, optional = true }
 httpdate = "1.0.2"
 moka = { version = "0.12.0", features = ["future"], optional = true }
@@ -30,7 +30,7 @@ url = { version = "2.4.0", features = ["serde"] }
 [dev-dependencies]
 async-attributes = "1.1.2"
 async-std = { version = "1.12.0" }
-http-cache-semantics = "1.0.1"
+http-cache-semantics = "2.1.0"
 tokio = { version = "1.29.1", features = [ "macros", "rt", "rt-multi-thread" ] }
 
 [features]
