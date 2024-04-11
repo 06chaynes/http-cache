@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.13.0] - 2024-04-10
+
+### Changed
+
+- Updated the minimum versions of the following dependencies:
+  - http-cache [0.19.0]
+  - http-cache-semantics [2.1.0]
+  - http [1.1.0]
+
 ## [0.12.1] - 2024-01-15
 
 ### Changed

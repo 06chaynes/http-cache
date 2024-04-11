@@ -61,7 +61,7 @@ use std::{
 pub use http::request::Parts;
 use http::{
     header::{HeaderName, CACHE_CONTROL},
-    HeaderValue, Method,
+    HeaderValue, Method, Extensions,
 };
 use http_cache::{
     BoxError, HitOrMiss, Middleware, Result, XCACHE, XCACHELOOKUP,
@@ -69,7 +69,6 @@ use http_cache::{
 use http_cache_semantics::CachePolicy;
 use reqwest::{Request, Response, ResponseBuilderExt};
 use reqwest_middleware::{Error, Next};
-use task_local_extensions::Extensions;
 use url::Url;
 
 pub use http_cache::{
