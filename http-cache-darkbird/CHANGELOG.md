@@ -1,6 +1,17 @@
 
 # Changelog
 
+## [0.2.0] - 2024-04-10
+
+### Changed
+
+- Updated the minimum versions of the following dependencies:
+  - http-cache [0.19.0]
+  - http-cache-semantics [2.1.0]
+  - http [1.1.0]
+  - reqwest [0.12.3]
+  - reqwest-middleware [0.3.0]
+
 ## [0.1.5] - 2024-01-15
 
 ### Changed
