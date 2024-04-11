@@ -61,7 +61,7 @@ use std::{
 pub use http::request::Parts;
 use http::{
     header::{HeaderName, CACHE_CONTROL},
-    HeaderValue, Method, Extensions,
+    Extensions, HeaderValue, Method,
 };
 use http_cache::{
     BoxError, HitOrMiss, Middleware, Result, XCACHE, XCACHELOOKUP,
