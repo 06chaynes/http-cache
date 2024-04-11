@@ -5,6 +5,8 @@
 
 ### Changed
 
+- MSRV is now 1.71.1
+
 - Updated the minimum versions of the following dependencies:
   - http-cache [0.19.0]
   - http-cache-semantics [2.1.0]
