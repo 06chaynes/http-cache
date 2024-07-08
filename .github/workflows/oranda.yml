@@ -19,7 +19,7 @@ jobs:
           oranda build
 
       - name: Deploy to Github Pages
-        uses: JamesIves/github-pages-deploy-action@v4.5.0
+        uses: JamesIves/github-pages-deploy-action@v4.6.3
         if: ${{ github.ref == 'refs/heads/main' }}
         with:
           branch: gh-pages
