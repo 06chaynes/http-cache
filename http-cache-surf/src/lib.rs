@@ -10,6 +10,7 @@
     trivial_casts,
     trivial_numeric_casts
 )]
+#![allow(clippy::doc_lazy_continuation)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 //! The surf middleware implementation for http-cache.
 //! ```no_run

@@ -93,6 +93,7 @@ async fn default_mode_with_options() -> Result<()> {
                 }),
                 cache_mode_fn: None,
                 cache_bust: None,
+                cache_status_headers: true,
             },
         }))
         .build();
@@ -155,6 +156,7 @@ async fn custom_cache_key() -> Result<()> {
                 cache_options: None,
                 cache_mode_fn: None,
                 cache_bust: None,
+                cache_status_headers: true,
             },
         }))
         .build();
@@ -195,6 +197,7 @@ async fn custom_cache_mode_fn() -> Result<()> {
                     }
                 })),
                 cache_bust: None,
+                cache_status_headers: true,
             },
         }))
         .build();
@@ -235,6 +238,7 @@ async fn override_cache_mode() -> Result<()> {
                 cache_options: None,
                 cache_mode_fn: None,
                 cache_bust: None,
+                cache_status_headers: true,
             },
         }))
         .build();
@@ -253,6 +257,43 @@ async fn override_cache_mode() -> Result<()> {
     // Check no cache object was created
     let data = manager.get(&format!("{}:{}", GET, &Url::parse(&url)?)).await?;
     assert!(data.is_none());
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn no_status_headers() -> Result<()> {
+    let mock_server = MockServer::start().await;
+    let m = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 1);
+    let _mock_guard = mock_server.register_as_scoped(m).await;
+    let url = format!("{}/test.css", &mock_server.uri());
+    let manager = MokaManager::default();
+
+    // Construct reqwest client with cache defaults and custom cache mode
+    let client = ClientBuilder::new(Client::new())
+        .with(Cache(HttpCache {
+            mode: CacheMode::Default,
+            manager: manager.clone(),
+            options: HttpCacheOptions {
+                cache_key: None,
+                cache_options: None,
+                cache_mode_fn: None,
+                cache_bust: None,
+                cache_status_headers: false,
+            },
+        }))
+        .build();
+
+    // Remote request and should cache
+    let res = client.get(url.clone()).send().await?;
+
+    // Try to load cached object
+    let data = manager.get(&format!("{}:{}", GET, &Url::parse(&url)?)).await?;
+    assert!(data.is_some());
+
+    // Make sure the cache status headers aren't present in the response
+    assert!(res.headers().get(XCACHELOOKUP).is_none());
+    assert!(res.headers().get(XCACHE).is_none());
 
     Ok(())
 }
@@ -289,6 +330,7 @@ async fn cache_bust() -> Result<()> {
                         }
                     },
                 )),
+                cache_status_headers: true,
             },
         }))
         .build();

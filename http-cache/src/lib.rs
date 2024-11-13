@@ -10,6 +10,7 @@
     trivial_casts,
     trivial_numeric_casts
 )]
+#![allow(clippy::doc_lazy_continuation)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 //! A caching middleware that follows HTTP caching rules, thanks to
 //! [`http-cache-semantics`](https://github.com/kornelski/rusty-http-cache-semantics).
@@ -378,7 +379,7 @@ pub type CacheBust = Arc<
 
 /// Can be used to override the default [`CacheOptions`] and cache key.
 /// The cache key is a closure that takes [`http::request::Parts`] and returns a [`String`].
-#[derive(Default, Clone)]
+#[derive(Clone)]
 pub struct HttpCacheOptions {
     /// Override the default cache options.
     pub cache_options: Option<CacheOptions>,
@@ -388,6 +389,20 @@ pub struct HttpCacheOptions {
     pub cache_mode_fn: Option<CacheModeFn>,
     /// Bust the caches of the returned keys.
     pub cache_bust: Option<CacheBust>,
+    /// Determines if the cache status headers should be added to the response.
+    pub cache_status_headers: bool,
+}
+
+impl Default for HttpCacheOptions {
+    fn default() -> Self {
+        Self {
+            cache_options: None,
+            cache_key: None,
+            cache_mode_fn: None,
+            cache_bust: None,
+            cache_status_headers: true,
+        }
+    }
 }
 
 impl Debug for HttpCacheOptions {
@@ -397,6 +412,7 @@ impl Debug for HttpCacheOptions {
             .field("cache_key", &"Fn(&request::Parts) -> String")
             .field("cache_mode_fn", &"Fn(&request::Parts) -> CacheMode")
             .field("cache_bust", &"Fn(&request::Parts) -> Vec<String>")
+            .field("cache_status_headers", &self.cache_status_headers)
             .finish()
     }
 }
@@ -502,7 +518,9 @@ impl<T: CacheManager> HttpCache<T> {
 
         if let Some(store) = self.manager.get(&cache_key).await? {
             let (mut res, policy) = store;
-            res.cache_lookup_status(HitOrMiss::HIT);
+            if self.options.cache_status_headers {
+                res.cache_lookup_status(HitOrMiss::HIT);
+            }
             if let Some(warning_code) = res.warning_code() {
                 // https://tools.ietf.org/html/rfc7234#section-4.3.4
                 //
@@ -526,7 +544,9 @@ impl<T: CacheManager> HttpCache<T> {
                 CacheMode::NoCache => {
                     middleware.force_no_cache()?;
                     let mut res = self.remote_fetch(&mut middleware).await?;
-                    res.cache_lookup_status(HitOrMiss::HIT);
+                    if self.options.cache_status_headers {
+                        res.cache_lookup_status(HitOrMiss::HIT);
+                    }
                     Ok(res)
                 }
                 CacheMode::ForceCache
@@ -541,7 +561,9 @@ impl<T: CacheManager> HttpCache<T> {
                         112,
                         "Disconnected operation",
                     );
-                    res.cache_status(HitOrMiss::HIT);
+                    if self.options.cache_status_headers {
+                        res.cache_status(HitOrMiss::HIT);
+                    }
                     Ok(res)
                 }
                 _ => self.remote_fetch(&mut middleware).await,
@@ -557,8 +579,10 @@ impl<T: CacheManager> HttpCache<T> {
                         url: middleware.url()?,
                         version: HttpVersion::Http11,
                     };
-                    res.cache_status(HitOrMiss::MISS);
-                    res.cache_lookup_status(HitOrMiss::MISS);
+                    if self.options.cache_status_headers {
+                        res.cache_status(HitOrMiss::MISS);
+                        res.cache_lookup_status(HitOrMiss::MISS);
+                    }
                     Ok(res)
                 }
                 _ => self.remote_fetch(&mut middleware).await,
@@ -581,8 +605,10 @@ impl<T: CacheManager> HttpCache<T> {
         middleware: &mut impl Middleware,
     ) -> Result<HttpResponse> {
         let mut res = middleware.remote_fetch().await?;
-        res.cache_status(HitOrMiss::MISS);
-        res.cache_lookup_status(HitOrMiss::MISS);
+        if self.options.cache_status_headers {
+            res.cache_status(HitOrMiss::MISS);
+            res.cache_lookup_status(HitOrMiss::MISS);
+        }
         let policy = match self.options.cache_options {
             Some(options) => middleware.policy_with_options(&res, options)?,
             None => middleware.policy(&res)?,
@@ -632,8 +658,10 @@ impl<T: CacheManager> HttpCache<T> {
         match before_req {
             BeforeRequest::Fresh(parts) => {
                 cached_res.update_headers(&parts)?;
-                cached_res.cache_status(HitOrMiss::HIT);
-                cached_res.cache_lookup_status(HitOrMiss::HIT);
+                if self.options.cache_status_headers {
+                    cached_res.cache_status(HitOrMiss::HIT);
+                    cached_res.cache_lookup_status(HitOrMiss::HIT);
+                }
                 return Ok(cached_res);
             }
             BeforeRequest::Stale { request: parts, matches } => {
@@ -657,7 +685,9 @@ impl<T: CacheManager> HttpCache<T> {
                         111,
                         "Revalidation failed",
                     );
-                    cached_res.cache_status(HitOrMiss::HIT);
+                    if self.options.cache_status_headers {
+                        cached_res.cache_status(HitOrMiss::HIT);
+                    }
                     Ok(cached_res)
                 } else if cond_res.status == 304 {
                     let after_res = policy.after_response(
@@ -672,8 +702,10 @@ impl<T: CacheManager> HttpCache<T> {
                             cached_res.update_headers(&parts)?;
                         }
                     }
-                    cached_res.cache_status(HitOrMiss::HIT);
-                    cached_res.cache_lookup_status(HitOrMiss::HIT);
+                    if self.options.cache_status_headers {
+                        cached_res.cache_status(HitOrMiss::HIT);
+                        cached_res.cache_lookup_status(HitOrMiss::HIT);
+                    }
                     let res = self
                         .manager
                         .put(
@@ -690,8 +722,10 @@ impl<T: CacheManager> HttpCache<T> {
                             .policy_with_options(&cond_res, options)?,
                         None => middleware.policy(&cond_res)?,
                     };
-                    cond_res.cache_status(HitOrMiss::MISS);
-                    cond_res.cache_lookup_status(HitOrMiss::HIT);
+                    if self.options.cache_status_headers {
+                        cond_res.cache_status(HitOrMiss::MISS);
+                        cond_res.cache_lookup_status(HitOrMiss::HIT);
+                    }
                     let res = self
                         .manager
                         .put(
@@ -703,7 +737,9 @@ impl<T: CacheManager> HttpCache<T> {
                         .await?;
                     Ok(res)
                 } else {
-                    cached_res.cache_status(HitOrMiss::HIT);
+                    if self.options.cache_status_headers {
+                        cached_res.cache_status(HitOrMiss::HIT);
+                    }
                     Ok(cached_res)
                 }
             }
@@ -721,7 +757,9 @@ impl<T: CacheManager> HttpCache<T> {
                         111,
                         "Revalidation failed",
                     );
-                    cached_res.cache_status(HitOrMiss::HIT);
+                    if self.options.cache_status_headers {
+                        cached_res.cache_status(HitOrMiss::HIT);
+                    }
                     Ok(cached_res)
                 }
             }
