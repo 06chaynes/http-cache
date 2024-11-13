@@ -1,0 +1,399 @@
+<!DOCTYPE HTML>
+<html lang="en" class="sidebar-visible no-js oranda-dark">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Supporting an HTTP Client - http-cache</title>
+
+
+        <!-- Custom HTML head -->
+        
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff" />
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" href="../highlight.css">
+        <link rel="stylesheet" href="../tomorrow-night.css">
+        <link rel="stylesheet" href="../ayu-highlight.css">
+        <link rel="stylesheet" href="../oranda-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+    </head>
+    <body>
+    <div id="body-container">
+        <!-- Provide site root to javascript -->
+        <script>
+            var path_to_root = "../";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "oranda-dark" : "oranda-dark";
+        </script>
+
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                var theme = localStorage.getItem('orandamdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('orandamdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            var theme;
+            try { theme = localStorage.getItem('orandamdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            var html = document.querySelector('html');
+            html.classList.remove('no-js')
+            html.classList.remove('oranda-dark')
+            html.classList.add(theme);
+            html.classList.add('js');
+        </script>
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            var html = document.querySelector('html');
+            var sidebar = 'hidden';
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            }
+            html.classList.remove('sidebar-visible');
+            html.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <div class="sidebar-scrollbox">
+                <ol class="chapter"><li class="chapter-item expanded "><a href="../introduction.html"><strong aria-hidden="true">1.</strong> Introduction</a></li><li class="chapter-item expanded "><a href="../cache-modes.html"><strong aria-hidden="true">2.</strong> Cache Modes</a></li><li class="chapter-item expanded "><a href="../development/development.html"><strong aria-hidden="true">3.</strong> Development</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../development/supporting-a-backend-cache-manager.html"><strong aria-hidden="true">3.1.</strong> Supporting a Backend Cache Manager</a></li><li class="chapter-item expanded "><a href="../development/supporting-an-http-client.html" class="active"><strong aria-hidden="true">3.2.</strong> Supporting an HTTP Client</a></li></ol></li><li class="chapter-item expanded "><a href="../clients/clients.html"><strong aria-hidden="true">4.</strong> Client Implementations</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../clients/reqwest.html"><strong aria-hidden="true">4.1.</strong> reqwest</a></li><li class="chapter-item expanded "><a href="../clients/surf.html"><strong aria-hidden="true">4.2.</strong> surf</a></li></ol></li><li class="chapter-item expanded "><a href="../managers/managers.html"><strong aria-hidden="true">5.</strong> Backend Cache Manager Implementations</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../managers/cacache.html"><strong aria-hidden="true">5.1.</strong> cacache</a></li><li class="chapter-item expanded "><a href="../managers/moka.html"><strong aria-hidden="true">5.2.</strong> moka</a></li><li class="chapter-item expanded "><a href="../managers/quick-cache.html"><strong aria-hidden="true">5.3.</strong> quick_cache</a></li></ol></li></ol>
+            </div>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky bordered">
+                    <div class="left-buttons">
+                        <button id="sidebar-toggle" class="icon-button" type="button" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </button>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="oranda-dark">Axo Dark</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="oranda-light">Axo Light</button></li>
+
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">http-cache</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="supporting-an-http-client"><a class="header" href="#supporting-an-http-client">Supporting an HTTP Client</a></h1>
+<p>This section is intended for those who wish to add support for a new HTTP client to <code>http-cache</code>, or understand how the <a href="https://docs.rs/http-cache/latest/http_cache/trait.Middleware.html"><code>Middleware</code></a> trait works. If you are looking to use <code>http-cache</code> with an HTTP client that is already supported, please see the <a href="../clients/clients.html">Client Implementations</a> section.</p>
+<h2 id="the-middleware-trait"><a class="header" href="#the-middleware-trait">The <code>Middleware</code> trait</a></h2>
+<p>The <a href="https://docs.rs/http-cache/latest/http_cache/trait.Middleware.html"><code>Middleware</code></a> trait is the main trait that needs to be implemented to add support for a new HTTP client. It has nine methods that it requires:</p>
+<ul>
+<li><code>is_method_get_head</code>: returns <code>true</code> if the method of the request is <code>GET</code> or <code>HEAD</code>, <code>false</code> otherwise</li>
+<li><code>policy</code>: returns a <a href="https://docs.rs/http-cache-semantics/latest/http_cache_semantics/struct.CachePolicy.html"><code>CachePolicy</code></a> with default options for the given <code>HttpResponse</code></li>
+<li><code>policy_with_options</code>: returns a <a href="https://docs.rs/http-cache-semantics/latest/http_cache_semantics/struct.CachePolicy.html"><code>CachePolicy</code></a> with the provided <a href="https://docs.rs/http-cache-semantics/latest/http_cache_semantics/struct.CacheOptions.html"><code>CacheOptions</code></a> for the given <code>HttpResponse</code></li>
+<li><code>update_headers</code>: updates the request headers with the provided <a href="https://docs.rs/http/latest/http/request/struct.Parts.html"><code>http::request::Parts</code></a></li>
+<li><code>force_no_cache</code>: overrides the <code>Cache-Control</code> header to 'no-cache' derective</li>
+<li><code>parts</code>: returns the <a href="https://docs.rs/http/latest/http/request/struct.Parts.html"><code>http::request::Parts</code></a> from the request</li>
+<li><code>url</code>: returns the requested <a href="https://docs.rs/url/latest/url/struct.Url.html"><code>Url</code></a></li>
+<li><code>method</code>: returns the method of the request as a <code>String</code></li>
+<li><code>remote_fetch</code>: performs the request and returns the <code>HttpResponse</code></li>
+</ul>
+<p>Because the <code>remote_fetch</code> method is asynchronous, it currently requires <a href="https://github.com/dtolnay/async-trait"><code>async_trait</code></a> to be derived. This may change in the future.</p>
+<h3 id="the-is_method_get_head-method"><a class="header" href="#the-is_method_get_head-method">The <code>is_method_get_head</code> method</a></h3>
+<p>The <code>is_method_get_head</code> method is used to determine if the method of the request is <code>GET</code> or <code>HEAD</code>. It returns a <code>bool</code> where <code>true</code> indicates the method is <code>GET</code> or <code>HEAD</code>, and <code>false</code> if otherwise.</p>
+<h3 id="the-policy-and-policy_with_options-methods"><a class="header" href="#the-policy-and-policy_with_options-methods">The <code>policy</code> and <code>policy_with_options</code> methods</a></h3>
+<p>The <code>policy</code> method is used to generate the cache policy for the given <code>HttpResponse</code>. It returns a <a href="https://docs.rs/http-cache-semantics/latest/http_cache_semantics/struct.CachePolicy.html"><code>CachePolicy</code></a> with default options.</p>
+<p>The <code>policy_with_options</code> method is used to generate the cache policy for the given <code>HttpResponse</code> with the provided <a href="https://docs.rs/http-cache-semantics/latest/http_cache_semantics/struct.CacheOptions.html"><code>CacheOptions</code></a>. It returns a <a href="https://docs.rs/http-cache-semantics/latest/http_cache_semantics/struct.CachePolicy.html"><code>CachePolicy</code></a>.</p>
+<h3 id="the-update_headers-method"><a class="header" href="#the-update_headers-method">The <code>update_headers</code> method</a></h3>
+<p>The <code>update_headers</code> method is used to update the request headers with the provided <a href="https://docs.rs/http/latest/http/request/struct.Parts.html"><code>http::request::Parts</code></a>.</p>
+<h3 id="the-force_no_cache-method"><a class="header" href="#the-force_no_cache-method">The <code>force_no_cache</code> method</a></h3>
+<p>The <code>force_no_cache</code> method is used to override the <code>Cache-Control</code> header to 'no-cache' derective. This is used to allow caching but force revalidation before resuse.</p>
+<h3 id="the-parts-method"><a class="header" href="#the-parts-method">The <code>parts</code> method</a></h3>
+<p>The <code>parts</code> method is used to return the <a href="https://docs.rs/http/latest/http/request/struct.Parts.html"><code>http::request::Parts</code></a> from the request which eases working with the <code>http_cache_semantics</code> crate.</p>
+<h3 id="the-url-method"><a class="header" href="#the-url-method">The <code>url</code> method</a></h3>
+<p>The <code>url</code> method is used to return the requested <a href="https://docs.rs/url/latest/url/struct.Url.html"><code>Url</code></a> in a standard format.</p>
+<h3 id="the-method-method"><a class="header" href="#the-method-method">The <code>method</code> method</a></h3>
+<p>The <code>method</code> method is used to return the HTTP method of the request as a <code>String</code> to standardize the format.</p>
+<h3 id="the-remote_fetch-method"><a class="header" href="#the-remote_fetch-method">The <code>remote_fetch</code> method</a></h3>
+<p>The <code>remote_fetch</code> method is used to perform the request and return the <code>HttpResponse</code>. This goal here is to abstract away the HTTP client implementation and return a more generic response type.</p>
+<h2 id="how-to-implement-a-custom-http-client"><a class="header" href="#how-to-implement-a-custom-http-client">How to implement a custom HTTP client</a></h2>
+<p>This guide will use the <a href="https://github.com/http-rs/surf"><code>surf</code></a> HTTP client as an example. The full source can be found <a href="https://github.com/06chaynes/http-cache/blob/latest/http-cache-surf/src/lib.rs">here</a>. There are several ways to accomplish this, so feel free to experiment!</p>
+<h3 id="part-one-the-base-structs"><a class="header" href="#part-one-the-base-structs">Part One: The base structs</a></h3>
+<p>First we will create a wrapper for the <a href="https://docs.rs/http-cache/latest/http_cache/struct.HttpCache.html"><code>HttpCache</code></a> struct. This is required because we cannot implement a trait for a type declared in another crate, see <a href="https://doc.rust-lang.org/error_codes/E0117.html">docs</a> for more info. We will call it <code>Cache</code> in this case.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[derive(Debug)]
+pub struct Cache&lt;T: CacheManager&gt;(pub HttpCache&lt;T&gt;);
+<span class="boring">}</span></code></pre></pre>
+<p>Next we will create a struct to store the request and anything else we will need for our <code>surf::Middleware</code> implementation (more on that later). This struct will also implement the http-cache <a href="https://docs.rs/http-cache/latest/http_cache/trait.Middleware.html"><code>Middleware</code></a> trait. We'll call it <code>SurfMiddleware</code> in this case.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub(crate) struct SurfMiddleware&lt;'a&gt; {
+    pub req: Request,
+    pub client: Client,
+    pub next: Next&lt;'a&gt;,
+}
+<span class="boring">}</span></code></pre></pre>
+<h3 id="part-two-implementing-the-middleware-trait"><a class="header" href="#part-two-implementing-the-middleware-trait">Part Two: Implementing the <code>Middleware</code> trait</a></h3>
+<p>Now that we have our base structs, we can implement the <code>Middleware</code> trait for our <code>SurfMiddleware</code> struct. We'll start with the <code>is_method_get_head</code> method, but first we must make sure we derive async_trait.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[async_trait::async_trait]
+impl Middleware for SurfMiddleware&lt;'_&gt; {
+    ...
+<span class="boring">}</span></code></pre></pre>
+<p>The <code>is_method_get_head</code> will check the request stored in our <code>SurfMiddleware</code> struct and return <code>true</code> if the method is <code>GET</code> or <code>HEAD</code>, <code>false</code> otherwise.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>fn is_method_get_head(&amp;self) -&gt; bool {
+    self.req.method() == Method::Get || self.req.method() == Method::Head
+}
+<span class="boring">}</span></code></pre></pre>
+<p>Next we'll implement the <code>policy</code> method. This method accepts a reference to the <code>HttpResponse</code> and returns a <a href="https://docs.rs/http-cache-semantics/latest/http_cache_semantics/struct.CachePolicy.html"><code>CachePolicy</code></a> with default options. We'll use the <a href="https://docs.rs/http-cache-semantics/latest/http_cache_semantics/struct.CachePolicy.html#method.new"><code>http_cache_semantics::CachePolicy::new</code></a> method to generate the policy.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>fn policy(&amp;self, response: &amp;HttpResponse) -&gt; Result&lt;CachePolicy&gt; {
+    Ok(CachePolicy::new(&amp;self.parts()?, &amp;response.parts()?))
+}
+<span class="boring">}</span></code></pre></pre>
+<p>The <code>policy_with_options</code> method is similar to the <code>policy</code> method, but accepts a <a href="https://docs.rs/http-cache-semantics/latest/http_cache_semantics/struct.CacheOptions.html"><code>CacheOptions</code></a> struct to override the default options. We'll use the <a href="https://docs.rs/http-cache-semantics/latest/http_cache_semantics/struct.CachePolicy.html#method.new_options"><code>http_cache_semantics::CachePolicy::new_options</code></a> method to generate the policy.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>fn policy_with_options(
+    &amp;self,
+    response: &amp;HttpResponse,
+    options: CacheOptions,
+) -&gt; Result&lt;CachePolicy&gt; {
+    Ok(CachePolicy::new_options(
+        &amp;self.parts()?,
+        &amp;response.parts()?,
+        SystemTime::now(),
+        options,
+    ))
+}
+<span class="boring">}</span></code></pre></pre>
+<p>Next we'll implement the <code>update_headers</code> method. This method accepts a reference to the <a href="https://docs.rs/http/latest/http/request/struct.Parts.html"><code>http::request::Parts</code></a> and updates the request headers. We will iterate over the part headers and attempt to convert the header value to a <a href="https://docs.rs/http/latest/http/header/struct.HeaderValue.html"><code>HeaderValue</code></a> and set the header on the request. If the conversion fails, we will return an error.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>fn update_headers(&amp;mut self, parts: &amp;Parts) -&gt; Result&lt;()&gt; {
+    for header in parts.headers.iter() {
+        let value = match HeaderValue::from_str(header.1.to_str()?) {
+            Ok(v) =&gt; v,
+            Err(_e) =&gt; return Err(Box::new(BadHeader)),
+        };
+        self.req.set_header(header.0.as_str(), value);
+    }
+    Ok(())
+}
+<span class="boring">}</span></code></pre></pre>
+<p>The <code>force_no_cache</code> method is used to override the <code>Cache-Control</code> header in the request to 'no-cache' derective. This is used to allow caching but force revalidation before resuse.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>fn force_no_cache(&amp;mut self) -&gt; Result&lt;()&gt; {
+    self.req.insert_header(CACHE_CONTROL.as_str(), &quot;no-cache&quot;);
+    Ok(())
+}
+<span class="boring">}</span></code></pre></pre>
+<p>The <code>parts</code> method is used to return the <a href="https://docs.rs/http/latest/http/request/struct.Parts.html"><code>http::request::Parts</code></a> from the request which eases working with the <code>http_cache_semantics</code> crate.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>fn parts(&amp;self) -&gt; Result&lt;Parts&gt; {
+    let mut converted = request::Builder::new()
+        .method(self.req.method().as_ref())
+        .uri(self.req.url().as_str())
+        .body(())?;
+    {
+        let headers = converted.headers_mut();
+        for header in self.req.iter() {
+            headers.insert(
+                http::header::HeaderName::from_str(header.0.as_str())?,
+                http::HeaderValue::from_str(header.1.as_str())?,
+            );
+        }
+    }
+    Ok(converted.into_parts().0)
+}
+<span class="boring">}</span></code></pre></pre>
+<p>The <code>url</code> method is used to return the requested <a href="https://docs.rs/url/latest/url/struct.Url.html"><code>Url</code></a> in a standard format.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>fn url(&amp;self) -&gt; Result&lt;Url&gt; {
+    Ok(self.req.url().clone())
+}
+<span class="boring">}</span></code></pre></pre>
+<p>The <code>method</code> method is used to return the HTTP method of the request as a <code>String</code> to standardize the format.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>fn method(&amp;self) -&gt; Result&lt;String&gt; {
+    Ok(self.req.method().as_ref().to_string())
+}
+<span class="boring">}</span></code></pre></pre>
+<p>Finally, the <code>remote_fetch</code> method is used to perform the request and return the <code>HttpResponse</code>.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>async fn remote_fetch(&amp;mut self) -&gt; Result&lt;HttpResponse&gt; {
+    let url = self.req.url().clone();
+    let mut res =
+        self.next.run(self.req.clone(), self.client.clone()).await?;
+    let mut headers = HashMap::new();
+    for header in res.iter() {
+        headers.insert(
+            header.0.as_str().to_owned(),
+            header.1.as_str().to_owned(),
+        );
+    }
+    let status = res.status().into();
+    let version = res.version().unwrap_or(Version::Http1_1);
+    let body: Vec&lt;u8&gt; = res.body_bytes().await?;
+    Ok(HttpResponse {
+        body,
+        headers,
+        status,
+        url,
+        version: version.try_into()?,
+    })
+}
+<span class="boring">}</span></code></pre></pre>
+<p>Our <code>SurfMiddleware</code> struct now meets the requirements of the <code>Middleware</code> trait. We can now implement the <a href="https://docs.rs/surf/latest/surf/middleware/trait.Middleware.html"><code>surf::middleware::Middleware</code></a> trait for our <code>Cache</code> struct.</p>
+<h3 id="part-three-implementing-the-surfmiddlewaremiddleware-trait"><a class="header" href="#part-three-implementing-the-surfmiddlewaremiddleware-trait">Part Three: Implementing the <code>surf::middleware::Middleware</code> trait</a></h3>
+<p>We have our <code>Cache</code> struct that wraps our <code>HttpCache</code> struct, but we need to implement the <a href="https://docs.rs/surf/latest/surf/middleware/trait.Middleware.html"><code>surf::middleware::Middleware</code></a> trait for it. This is required to use our <code>Cache</code> struct as a middleware with <code>surf</code>. This part may differ depending on the HTTP client you are supporting.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[surf::utils::async_trait]
+impl&lt;T: CacheManager&gt; surf::middleware::Middleware for Cache&lt;T&gt; {
+    async fn handle(
+        &amp;self,
+        req: Request,
+        client: Client,
+        next: Next&lt;'_&gt;,
+    ) -&gt; std::result::Result&lt;surf::Response, http_types::Error&gt; {
+        let middleware = SurfMiddleware { req, client, next };
+        let res = self.0.run(middleware).await.map_err(to_http_types_error)?;
+        let mut converted = Response::new(StatusCode::Ok);
+        for header in &amp;res.headers {
+            let val = HeaderValue::from_bytes(header.1.as_bytes().to_vec())?;
+            converted.insert_header(header.0.as_str(), val);
+        }
+        converted.set_status(res.status.try_into()?);
+        converted.set_version(Some(res.version.try_into()?));
+        converted.set_body(res.body);
+        Ok(surf::Response::from(converted))
+    }
+}
+<span class="boring">}</span></code></pre></pre>
+<p>First we create a <a href="#part-two-implementing-the-middleware-trait"><code>SurfMiddleware</code></a> struct with the provided <code>req</code>, <code>client</code>, and <code>next</code> arguments. Then we call the <code>run</code> method on our <code>HttpCache</code> struct with our <code>SurfMiddleware</code> struct as the argument. This will perform the request and return the <code>HttpResponse</code>. We then convert the <code>HttpResponse</code> to a <code>surf::Response</code> and return it.</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../development/supporting-a-backend-cache-manager.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next" href="../clients/clients.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../development/supporting-a-backend-cache-manager.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next" href="../clients/clients.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+    </div>
+    </body>
+</html>
