@@ -1,6 +1,6 @@
 [package]
 name = "http-cache-mokadeser"
-version = "0.2.0"
+version = "0.3.0"
 description = "http-cache manager implementation for moka stored deserialized"
 authors = ["Christian Haynes <06chaynes@gmail.com>", "Kat Marchán <kzm@zkat.tech>"]
 repository = "https://github.com/06chaynes/http-cache"
@@ -22,14 +22,14 @@ moka = { version = "0.12.0", features = ["future"]}
 
 [dependencies.http-cache]
 path = "../http-cache"
-version = "0.19.0"
+version = "0.20.0"
 default-features = false
 features = ["bincode"]
 
 [dev-dependencies]
 http = "1.1.0"
 reqwest = { version = "0.12.3", default-features = false }
-reqwest-middleware = "0.3.0"
+reqwest-middleware = "0.4.0"
 tokio = { version = "1.29.1", features = [ "macros", "rt", "rt-multi-thread" ] }
 url = { version = "2.4.0", features = ["serde"] }
 wiremock = "0.6.0"

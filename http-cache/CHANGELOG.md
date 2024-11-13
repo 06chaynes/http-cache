@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.20.0] - 2024-11-12
+
+### Added
+
+- `cache_status_headers` field to `HttpCacheOptions` struct. This field is a boolean that determines if the cache status headers should be added to the response.
+
 ## [0.19.0] - 2024-04-10
 
 ### Changed

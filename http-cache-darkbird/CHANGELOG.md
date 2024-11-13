@@ -1,6 +1,16 @@
 
 # Changelog
 
+## [0.3.0] - 2024-11-12
+
+### Changed
+
+- MSRV is now 1.70.0
+
+- Updated the minimum versions of the following dependencies:
+  - http-cache [0.20.0]
+  - thiserror [2.0.3]
+
 ## [0.2.0] - 2024-04-10
 
 ### Changed

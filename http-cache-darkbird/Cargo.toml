@@ -1,6 +1,6 @@
 [package]
 name = "http-cache-darkbird"
-version = "0.2.0"
+version = "0.3.0"
 description = "http-cache manager implementation for darkbird"
 authors = ["Christian Haynes <06chaynes@gmail.com>", "Kat Marchán <kzm@zkat.tech>"]
 repository = "https://github.com/06chaynes/http-cache"
@@ -13,24 +13,24 @@ categories = [
     "web-programming::http-client"
 ]
 edition = "2021"
-rust-version = "1.67.1"
+rust-version = "1.70.0"
 
 [dependencies]
 async-trait = "0.1.72"
 darkbird = "6.1.8"
 http-cache-semantics = "2.1.0"
 serde = { version = "1.0.178", features = ["derive"] }
-thiserror = "1.0.44"
+thiserror = "2.0.3"
 
 [dependencies.http-cache]
 path = "../http-cache"
-version = "0.19.0"
+version = "0.20.0"
 default-features = false
 
 [dev-dependencies]
 http = "1.1.0"
 reqwest = { version = "0.12.3", default-features = false }
-reqwest-middleware = "0.3.0"
+reqwest-middleware = "0.4.0"
 tokio = { version = "1.29.1", features = [ "macros", "rt", "rt-multi-thread" ] }
 wiremock = "0.6.0"
 url = { version = "2.4.0", features = ["serde"] }

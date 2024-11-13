@@ -1,6 +1,14 @@
 
 # Changelog
 
+## [0.8.0] - 2024-11-12
+
+### Changed
+
+- Updated the minimum versions of the following dependencies:
+  - http-cache [0.20.0]
+  - quick_cache [0.6.9]
+
 ## [0.7.0] - 2024-04-10
 
 ### Changed

@@ -109,6 +109,7 @@ async fn default_mode_with_options() -> Result<()> {
                 }),
                 cache_mode_fn: None,
                 cache_bust: None,
+                cache_status_headers: true,
             },
         }))
         .build();
