@@ -137,6 +137,45 @@ async fn no_cache_mode() -> Result<()> {
 }
 
 #[tokio::test]
+async fn reload_mode() -> Result<()> {
+    let mock_server = MockServer::start().await;
+    let m = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 2);
+    let _mock_guard = mock_server.register_as_scoped(m).await;
+    let url = format!("{}/", &mock_server.uri());
+    let manager = MokaManager::default();
+
+    // Construct reqwest client with cache options override
+    let client = ClientBuilder::new(Client::new())
+        .with(Cache(HttpCache {
+            mode: CacheMode::Reload,
+            manager: manager.clone(),
+            options: HttpCacheOptions {
+                cache_key: None,
+                cache_options: Some(CacheOptions {
+                    shared: false,
+                    ..Default::default()
+                }),
+                cache_mode_fn: None,
+                cache_bust: None,
+                cache_status_headers: true,
+            },
+        }))
+        .build();
+
+    // Cold pass to load cache
+    client.get(url.clone()).send().await?;
+
+    // Try to load cached object
+    let data = manager.get(&format!("{}:{}", GET, &Url::parse(&url)?)).await?;
+    assert!(data.is_some());
+
+    // Another pass to make sure request is made to the endpoint
+    client.get(url).send().await?;
+
+    Ok(())
+}
+
+#[tokio::test]
 async fn custom_cache_key() -> Result<()> {
     let mock_server = MockServer::start().await;
     let m = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 1);
