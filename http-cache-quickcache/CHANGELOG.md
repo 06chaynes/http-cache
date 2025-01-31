@@ -1,5 +1,15 @@
-
 # Changelog
+
+## [0.8.1] - 2025-01-30
+
+### Changed
+
+- Updated the minimum versions of the following dependencies:
+  - http-cache [0.21.1]
+  - async-trait [0.1.85]
+  - darkbird [6.2.4]
+  - serde [1.0.217]
+  - url [2.5.4]
 
 ## [0.8.0] - 2024-11-12
 
