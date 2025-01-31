@@ -1,6 +1,6 @@
 [package]
 name = "http-cache-mokadeser"
-version = "0.3.0"
+version = "0.3.1"
 description = "http-cache manager implementation for moka stored deserialized"
 authors = ["Christian Haynes <06chaynes@gmail.com>", "Kat Marchán <kzm@zkat.tech>"]
 repository = "https://github.com/06chaynes/http-cache"
@@ -13,26 +13,26 @@ categories = [
     "web-programming::http-client"
 ]
 edition = "2021"
-rust-version = "1.67.1"
+rust-version = "1.71.1"
 
 [dependencies]
-async-trait = "0.1.72"
+async-trait = "0.1.85"
 http-cache-semantics = "2.1.0"
-moka = { version = "0.12.0", features = ["future"]}
+moka = { version = "0.12.10", features = ["future"]}
 
 [dependencies.http-cache]
 path = "../http-cache"
-version = "0.20.0"
+version = "0.20.1"
 default-features = false
 features = ["bincode"]
 
 [dev-dependencies]
-http = "1.1.0"
-reqwest = { version = "0.12.3", default-features = false }
+http = "1.2.0"
+reqwest = { version = "0.12.12", default-features = false }
 reqwest-middleware = "0.4.0"
-tokio = { version = "1.29.1", features = [ "macros", "rt", "rt-multi-thread" ] }
-url = { version = "2.4.0", features = ["serde"] }
-wiremock = "0.6.0"
+tokio = { version = "1.43.0", features = [ "macros", "rt", "rt-multi-thread" ] }
+url = { version = "2.5.4", features = ["serde"] }
+wiremock = "0.6.2"
 
 [dev-dependencies.http-cache-reqwest]
 path = "../http-cache-reqwest"

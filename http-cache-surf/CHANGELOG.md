@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.14.1] - 2025-01-30
+
+### Changed
+
+- Updated the minimum versions of the following dependencies:
+  - http-cache [0.21.1]
+  - anyhow [1.0.95]
+  - async-trait [0.1.85]
+  - http [1.2.0]
+  - serde [1.0.217]
+  - url [2.5.4]
+  - thiserror [2.0.11]
+
 ## [0.14.0] - 2024-11-12
 
 ### Changed

@@ -198,7 +198,7 @@ impl HttpResponse {
     /// Checks if the Cache-Control header contains the must-revalidate directive
     #[must_use]
     pub fn must_revalidate(&self) -> bool {
-        self.headers.get(CACHE_CONTROL.as_str()).map_or(false, |val| {
+        self.headers.get(CACHE_CONTROL.as_str()).is_some_and(|val| {
             val.as_str().to_lowercase().contains("must-revalidate")
         })
     }
@@ -458,9 +458,7 @@ impl<T: CacheManager> HttpCache<T> {
         let mode = self.cache_mode(middleware)?;
 
         Ok(mode == CacheMode::IgnoreRules
-            || middleware.is_method_get_head()
-                && mode != CacheMode::NoStore
-                && mode != CacheMode::Reload)
+            || middleware.is_method_get_head() && mode != CacheMode::NoStore)
     }
 
     /// Runs the actions to preform when the client middleware is running without the cache
@@ -617,7 +615,6 @@ impl<T: CacheManager> HttpCache<T> {
         let mode = self.cache_mode(middleware)?;
         let mut is_cacheable = is_get_head
             && mode != CacheMode::NoStore
-            && mode != CacheMode::Reload
             && res.status == 200
             && policy.is_storable();
         if mode == CacheMode::IgnoreRules && res.status == 200 {
