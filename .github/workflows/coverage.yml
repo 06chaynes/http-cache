@@ -29,7 +29,7 @@ jobs:
           cargo llvm-cov --no-report --package http-cache-surf --features manager-moka
           cargo llvm-cov --no-report --package http-cache-reqwest --features manager-moka
           cargo llvm-cov report --lcov --output-path lcov.info
-      - uses: codecov/codecov-action@v4
+      - uses: codecov/codecov-action@v5
         with:
           files: lcov.info
           fail_ci_if_error: false
