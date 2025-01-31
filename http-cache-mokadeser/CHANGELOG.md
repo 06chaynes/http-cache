@@ -1,5 +1,15 @@
-
 # Changelog
+
+## [0.3.1] - 2025-01-30
+
+### Changed
+
+- MSRV is now 1.71.1
+
+- Updated the minimum versions of the following dependencies:
+  - http-cache [0.21.1]
+  - aysnc-trait [0.1.85]
+  - moka [0.12.10]
 
 ## [0.3.0] - 2024-11-12
 
