@@ -1,5 +1,17 @@
-
 # Changelog
+
+## [0.3.1] - 2025-01-30
+
+### Changed
+
+- MSRV is now 1.71.1
+
+- Updated the minimum versions of the following dependencies:
+  - http-cache [0.21.1]
+  - aysnc-trait [0.1.85]
+  - darkbird [6.2.4]
+  - serde [1.0.217]
+  - thiserror [2.0.11]
 
 ## [0.3.0] - 2024-11-12
 
