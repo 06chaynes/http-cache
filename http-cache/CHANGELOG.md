@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.20.1] - 2025-01-30
+
+### Changed
+
+- Fixed missing implementation of CacheMode::Reload variant logic.
+
+- MSRV is now 1.71.1
+
+- Updated the minimum versions of the following dependencies:
+  - async-trait [0.1.85]
+  - cacache [13.1.0]
+  - httpdate [1.0.2]
+  - moka [0.12.10]
+  - serde [1.0.217]
+  - url [2.5.4]
+
 ## [0.20.0] - 2024-11-12
 
 ### Added
