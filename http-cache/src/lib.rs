@@ -118,9 +118,9 @@ impl fmt::Display for HttpVersion {
 
 /// A basic generic type that represents an HTTP response
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct HttpResponse {
+pub struct HttpResponse<T = Vec<u8>> {
     /// HTTP response body
-    pub body: Vec<u8>,
+    pub body: T,
     /// HTTP response headers
     pub headers: HashMap<String, String>,
     /// HTTP response status code
@@ -131,7 +131,48 @@ pub struct HttpResponse {
     pub version: HttpVersion,
 }
 
-impl HttpResponse {
+// FIXME: `HttpResponse` now looks very close to  http::Response but I'm hesitating to use it directly.
+
+/// HTTP response parts consists of status, version, response URL and headers.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct Parts {
+    /// HTTP response headers
+    pub headers: HashMap<String, String>,
+    /// HTTP response status code
+    pub status: u16,
+    /// HTTP response url
+    pub url: Url,
+    /// HTTP response version
+    pub version: HttpVersion,
+}
+
+// FIXME: `Parts` should probably be a field in HttpResponse
+
+impl<T> HttpResponse<T> {
+    /// Consumes the response returning the head and body parts.
+    pub fn into_parts(self) -> (Parts, T) {
+        (
+            Parts {
+                headers: self.headers,
+                status: self.status,
+                url: self.url,
+                version: self.version,
+            },
+            self.body,
+        )
+    }
+
+    /// Creates a new Response with the given head and body.
+    pub fn from_parts(parts: Parts, body: T) -> Self {
+        Self {
+            body,
+            headers: parts.headers,
+            status: parts.status,
+            url: parts.url,
+            version: parts.version,
+        }
+    }
+
     /// Returns `http::response::Parts`
     pub fn parts(&self) -> Result<response::Parts> {
         let mut converted =
@@ -215,20 +256,22 @@ impl HttpResponse {
 }
 
 /// A trait providing methods for storing, reading, and removing cache records.
+///
+/// Generic argument `R` defines the type of HTTP response body.
 #[async_trait::async_trait]
-pub trait CacheManager: Send + Sync + 'static {
+pub trait CacheManager<R = Vec<u8>>: Send + Sync + 'static {
     /// Attempts to pull a cached response and related policy from cache.
     async fn get(
         &self,
         cache_key: &str,
-    ) -> Result<Option<(HttpResponse, CachePolicy)>>;
+    ) -> Result<Option<(HttpResponse<R>, CachePolicy)>>;
     /// Attempts to cache a response and related policy.
     async fn put(
         &self,
         cache_key: String,
-        res: HttpResponse,
+        res: HttpResponse<R>,
         policy: CachePolicy,
-    ) -> Result<HttpResponse>;
+    ) -> Result<HttpResponse<R>>;
     /// Attempts to remove a record from cache.
     async fn delete(&self, cache_key: &str) -> Result<()>;
 }

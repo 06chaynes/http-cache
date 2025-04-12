@@ -207,23 +207,34 @@ mod with_cacache {
         manager
             .put(format!("{}:{}", GET, &url), http_res.clone(), policy.clone())
             .await?;
-        let data = manager.get(&format!("{}:{}", GET, &url)).await?;
+        let data: Option<(HttpResponse<Vec<u8>>, _)> =
+            manager.get(&format!("{}:{}", GET, &url)).await?;
         assert!(data.is_some());
         assert_eq!(data.unwrap().0.body, TEST_BODY);
         let clone = manager.clone();
-        let clonedata = clone.get(&format!("{}:{}", GET, &url)).await?;
+        let clonedata: Option<(HttpResponse<Vec<u8>>, _)> =
+            clone.get(&format!("{}:{}", GET, &url)).await?;
         assert!(clonedata.is_some());
         assert_eq!(clonedata.unwrap().0.body, TEST_BODY);
-        manager.delete(&format!("{}:{}", GET, &url)).await?;
-        let data = manager.get(&format!("{}:{}", GET, &url)).await?;
+        <CACacheManager as CacheManager>::delete(
+            &manager,
+            &format!("{}:{}", GET, &url),
+        )
+        .await?;
+        let data: Option<(HttpResponse<Vec<u8>>, _)> =
+            manager.get(&format!("{}:{}", GET, &url)).await?;
         assert!(data.is_none());
 
         manager.put(format!("{}:{}", GET, &url), http_res, policy).await?;
         manager.clear().await?;
-        let data = manager.get(&format!("{}:{}", GET, &url)).await?;
+        let data: Option<(HttpResponse<Vec<u8>>, _)> =
+            manager.get(&format!("{}:{}", GET, &url)).await?;
         assert!(data.is_none());
         std::fs::remove_dir_all("./http-cacache-test")?;
         Ok(())
+        // FIXME: looks like it will be pretty annoying to specify the type every time
+        // to distinguish between different CacheManager impls.
+        // Probably there is something I can do about it?
     }
 }
 
