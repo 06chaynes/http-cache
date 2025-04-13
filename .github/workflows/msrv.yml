@@ -23,7 +23,7 @@ jobs:
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-binstall
-      - run: cargo binstall --version 0.17.1 --no-confirm cargo-msrv
+      - run: cargo binstall --version 0.18.4 --no-confirm cargo-msrv
       - name: Run cargo msrv http-cache
         working-directory: ./http-cache
         run: cargo msrv verify
