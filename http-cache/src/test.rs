@@ -1,6 +1,6 @@
 use crate::{
     error, CacheMode, HitOrMiss, HttpCacheOptions, HttpResponse, HttpVersion,
-    Result,
+    Parts, Result,
 };
 use http::{header::CACHE_CONTROL, StatusCode};
 use http_cache_semantics::CacheOptions;
@@ -66,13 +66,15 @@ fn test_errors() -> Result<()> {
 fn response_methods_work() -> Result<()> {
     let url = Url::from_str("http://example.com")?;
     let mut res = HttpResponse {
-        body: TEST_BODY.to_vec(),
-        headers: HashMap::default(),
-        status: 200,
-        url: url.clone(),
-        version: HttpVersion::Http11,
+        body: TEST_BODY.to_vec().into(),
+        parts: Parts {
+            headers: HashMap::default(),
+            status: 200,
+            url: url.clone(),
+            version: HttpVersion::Http11,
+        },
     };
-    assert_eq!(format!("{:?}", res.clone()), "HttpResponse { body: [116, 101, 115, 116], headers: {}, status: 200, url: Url { scheme: \"http\", cannot_be_a_base: false, username: \"\", password: None, host: Some(Domain(\"example.com\")), port: None, path: \"/\", query: None, fragment: None }, version: Http11 }");
+    assert_eq!(format!("{:?}", res), "HttpResponse { body: Body { inner: Full(b\"test\") }, parts: Parts { headers: {}, status: 200, url: Url { scheme: \"http\", cannot_be_a_base: false, username: \"\", password: None, host: Some(Domain(\"example.com\")), port: None, path: \"/\", query: None, fragment: None }, version: Http11 } }");
     res.add_warning(&url, 112, "Test Warning");
     let code = res.warning_code();
     assert!(code.is_some());
@@ -89,7 +91,7 @@ fn response_methods_work() -> Result<()> {
     res.update_headers(&parts)?;
     assert!(res.must_revalidate());
     assert_eq!(res.parts()?.headers, cloned_headers);
-    res.headers.remove(CACHE_CONTROL.as_str());
+    res.parts.headers.remove(CACHE_CONTROL.as_str());
     assert!(!res.must_revalidate());
     Ok(())
 }
@@ -176,7 +178,7 @@ mod with_http_types {
 mod with_cacache {
 
     use super::*;
-    use crate::{CACacheManager, CacheManager};
+    use crate::{Body, CACacheManager, CacheManager, Parts};
 
     use http_cache_semantics::CachePolicy;
 
@@ -193,8 +195,7 @@ mod with_cacache {
             &format!("{:?}", manager),
             "CACacheManager { path: \"./http-cacache-test\" }"
         );
-        let http_res = HttpResponse {
-            body: TEST_BODY.to_vec(),
+        let parts = Parts {
             headers: Default::default(),
             status: 200,
             url: url.clone(),
@@ -205,36 +206,71 @@ mod with_cacache {
             http::Response::builder().status(200).body(TEST_BODY.to_vec())?;
         let policy = CachePolicy::new(&req, &res);
         manager
-            .put(format!("{}:{}", GET, &url), http_res.clone(), policy.clone())
+            .put(
+                format!("{}:{}", GET, &url),
+                HttpResponse::from_parts(
+                    parts.clone(),
+                    TEST_BODY.to_vec().into(),
+                ),
+                policy.clone(),
+            )
             .await?;
-        let data: Option<(HttpResponse<Vec<u8>>, _)> =
-            manager.get(&format!("{}:{}", GET, &url)).await?;
+        let data = manager.get(&format!("{}:{}", GET, &url)).await?;
         assert!(data.is_some());
-        assert_eq!(data.unwrap().0.body, TEST_BODY);
+        assert_eq!(data.unwrap().0.body.as_bytes().unwrap(), TEST_BODY);
         let clone = manager.clone();
-        let clonedata: Option<(HttpResponse<Vec<u8>>, _)> =
-            clone.get(&format!("{}:{}", GET, &url)).await?;
+        let clonedata = clone.get(&format!("{}:{}", GET, &url)).await?;
         assert!(clonedata.is_some());
-        assert_eq!(clonedata.unwrap().0.body, TEST_BODY);
-        <CACacheManager as CacheManager>::delete(
-            &manager,
-            &format!("{}:{}", GET, &url),
-        )
-        .await?;
-        let data: Option<(HttpResponse<Vec<u8>>, _)> =
-            manager.get(&format!("{}:{}", GET, &url)).await?;
+        assert_eq!(clonedata.unwrap().0.body.as_bytes().unwrap(), TEST_BODY);
+        manager.delete(&format!("{}:{}", GET, &url)).await?;
+        let data = manager.get(&format!("{}:{}", GET, &url)).await?;
         assert!(data.is_none());
 
-        manager.put(format!("{}:{}", GET, &url), http_res, policy).await?;
+        manager
+            .put(
+                format!("{}:{}", GET, &url),
+                HttpResponse::from_parts(parts, TEST_BODY.to_vec().into()),
+                policy,
+            )
+            .await?;
         manager.clear().await?;
-        let data: Option<(HttpResponse<Vec<u8>>, _)> =
-            manager.get(&format!("{}:{}", GET, &url)).await?;
+        let data = manager.get(&format!("{}:{}", GET, &url)).await?;
         assert!(data.is_none());
         std::fs::remove_dir_all("./http-cacache-test")?;
         Ok(())
-        // FIXME: looks like it will be pretty annoying to specify the type every time
-        // to distinguish between different CacheManager impls.
-        // Probably there is something I can do about it?
+    }
+
+    #[async_test]
+    async fn cacache_streaming() -> Result<()> {
+        let test_body_input: Vec<Result<_>> =
+            vec![Ok(&TEST_BODY[..2]), Ok(&TEST_BODY[2..])];
+        let test_body = futures_util::stream::iter(test_body_input);
+
+        let url = Url::parse("http://example.com")?;
+        let tmp = tempfile::tempdir().unwrap();
+        let manager = CACacheManager { path: tmp.path().to_path_buf() };
+        let parts = Parts {
+            headers: Default::default(),
+            status: 200,
+            url: url.clone(),
+            version: HttpVersion::Http11,
+        };
+        let req = http::Request::get("http://example.com").body(())?;
+        let res = http::Response::builder().status(200).body(())?;
+        let policy = CachePolicy::new(&req, &res);
+
+        manager
+            .put(
+                format!("{}:{}", GET, &url),
+                HttpResponse::from_parts(parts, Body::wrap_stream(test_body)),
+                policy.clone(),
+            )
+            .await?;
+        let data = manager.get(&format!("{}:{}", GET, &url)).await?;
+        assert!(data.is_some());
+        let result = data.unwrap().0.body.bytes().await?;
+        assert_eq!(result, TEST_BODY);
+        Ok(())
     }
 }
 

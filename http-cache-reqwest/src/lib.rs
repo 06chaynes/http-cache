@@ -73,8 +73,8 @@ use reqwest_middleware::{Error, Next};
 use url::Url;
 
 pub use http_cache::{
-    CacheManager, CacheMode, CacheOptions, HttpCache, HttpCacheOptions,
-    HttpResponse,
+    Body, CacheManager, CacheMode, CacheOptions, HttpCache, HttpCacheOptions,
+    HttpResponse, Parts as HttpParts,
 };
 
 #[cfg(feature = "manager-cacache")]
@@ -169,29 +169,25 @@ impl Middleware for ReqwestMiddleware<'_> {
         let url = res.url().clone();
         let status = res.status().into();
         let version = res.version();
-        let body: Vec<u8> = match res.bytes().await {
-            Ok(b) => b,
-            Err(e) => return Err(Box::new(e)),
-        }
-        .to_vec();
-        Ok(HttpResponse {
-            body,
-            headers,
-            status,
-            url,
-            version: version.try_into()?,
-        })
+        let parts =
+            HttpParts { headers, status, url, version: version.try_into()? };
+        Ok(HttpResponse::from_parts(
+            parts,
+            Body::wrap_stream(res.bytes_stream()),
+        ))
     }
 }
 
 // Converts an [`HttpResponse`] to a reqwest [`Response`]
 fn convert_response(response: HttpResponse) -> anyhow::Result<Response> {
+    let (parts, body) = response.into_parts();
+    let body = reqwest::Body::wrap_stream(body.into_data_stream());
     let mut ret_res = http::Response::builder()
-        .status(response.status)
-        .url(response.url)
-        .version(response.version.into())
-        .body(response.body)?;
-    for header in response.headers {
+        .status(parts.status)
+        .url(parts.url)
+        .version(parts.version.into())
+        .body(body)?;
+    for header in parts.headers {
         ret_res.headers_mut().insert(
             HeaderName::from_str(header.0.clone().as_str())?,
             HeaderValue::from_str(header.1.clone().as_str())?,

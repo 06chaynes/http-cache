@@ -40,7 +40,11 @@ use std::{
     time::SystemTime,
 };
 
+use bytes::{BufMut, Bytes};
+use futures::StreamExt;
 use http::{header::CACHE_CONTROL, request, response, StatusCode};
+use http_body_util::combinators::BoxBody;
+use http_body_util::{BodyDataStream, BodyExt, Full};
 use http_cache_semantics::{AfterResponse, BeforeRequest, CachePolicy};
 use serde::{Deserialize, Serialize};
 use url::Url;
@@ -117,23 +121,97 @@ impl fmt::Display for HttpVersion {
 }
 
 /// A basic generic type that represents an HTTP response
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct HttpResponse<T = Vec<u8>> {
+#[derive(Debug)]
+pub struct HttpResponse {
     /// HTTP response body
-    pub body: T,
-    /// HTTP response headers
-    pub headers: HashMap<String, String>,
-    /// HTTP response status code
-    pub status: u16,
-    /// HTTP response url
-    pub url: Url,
-    /// HTTP response version
-    pub version: HttpVersion,
+    body: Body,
+    /// HTTP response parts
+    parts: Parts,
 }
 
-// FIXME: `HttpResponse` now looks very close to  http::Response but I'm hesitating to use it directly.
+/// HTTP response body.
+#[derive(Debug)]
+pub struct Body {
+    inner: BodyInner,
+}
+
+#[derive(Debug)]
+enum BodyInner {
+    Full(Bytes),
+    Streaming(BoxBody<Bytes, BoxError>),
+}
+
+impl Body {
+    /// wrap stream
+    pub fn wrap_stream<S>(stream: S) -> Body
+    where
+        S: futures::stream::TryStream + Send + Sync + 'static,
+        S::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
+        Bytes: From<S::Ok>,
+    {
+        use futures_util::TryStreamExt;
+        use http_body::Frame;
+        use http_body_util::StreamBody;
+
+        let body = BoxBody::new(StreamBody::new(
+            stream.map_ok(|d| Frame::data(Bytes::from(d))).map_err(Into::into),
+        ));
+        Body { inner: BodyInner::Streaming(body) }
+    }
+
+    /// Get body bytes if body is full.
+    pub fn as_bytes(&self) -> Option<&[u8]> {
+        match &self.inner {
+            BodyInner::Full(bytes) => Some(bytes),
+            BodyInner::Streaming(_) => None,
+        }
+    }
+
+    /// Get all bytes of the response, collecting data stream if some.
+    pub async fn bytes(self) -> Result<Bytes> {
+        Ok(match self.inner {
+            BodyInner::Full(bytes) => bytes,
+            BodyInner::Streaming(boxed_body) => boxed_body
+                .into_data_stream()
+                .collect::<Vec<Result<_>>>()
+                .await
+                .into_iter()
+                .collect::<Result<Vec<_>>>()?
+                .into_iter()
+                .fold(bytes::BytesMut::new(), |mut acc, chunk| {
+                    acc.put(chunk);
+                    acc
+                })
+                .freeze(),
+        })
+    }
+
+    /// Into data stream
+    pub fn into_data_stream(self) -> BodyDataStream<BoxBody<Bytes, BoxError>> {
+        match self.inner {
+            BodyInner::Full(data) => {
+                Full::new(data).map_err(Into::into).boxed().into_data_stream()
+            }
+            BodyInner::Streaming(boxed_body) => boxed_body.into_data_stream(),
+        }
+    }
+}
+
+impl From<Vec<u8>> for Body {
+    fn from(value: Vec<u8>) -> Self {
+        Self { inner: BodyInner::Full(value.into()) }
+    }
+}
+
+impl From<Bytes> for Body {
+    fn from(value: Bytes) -> Self {
+        Self { inner: BodyInner::Full(value) }
+    }
+}
 
 /// HTTP response parts consists of status, version, response URL and headers.
+///
+/// Serializable alternative to [`http::response::Parts`].
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Parts {
     /// HTTP response headers
@@ -146,40 +224,24 @@ pub struct Parts {
     pub version: HttpVersion,
 }
 
-// FIXME: `Parts` should probably be a field in HttpResponse
-
-impl<T> HttpResponse<T> {
+impl HttpResponse {
     /// Consumes the response returning the head and body parts.
-    pub fn into_parts(self) -> (Parts, T) {
-        (
-            Parts {
-                headers: self.headers,
-                status: self.status,
-                url: self.url,
-                version: self.version,
-            },
-            self.body,
-        )
+    pub fn into_parts(self) -> (Parts, Body) {
+        (self.parts, self.body)
     }
 
     /// Creates a new Response with the given head and body.
-    pub fn from_parts(parts: Parts, body: T) -> Self {
-        Self {
-            body,
-            headers: parts.headers,
-            status: parts.status,
-            url: parts.url,
-            version: parts.version,
-        }
+    pub fn from_parts(parts: Parts, body: Body) -> Self {
+        Self { body, parts }
     }
 
     /// Returns `http::response::Parts`
     pub fn parts(&self) -> Result<response::Parts> {
         let mut converted =
-            response::Builder::new().status(self.status).body(())?;
+            response::Builder::new().status(self.parts.status).body(())?;
         {
             let headers = converted.headers_mut();
-            for header in &self.headers {
+            for header in &self.parts.headers {
                 headers.insert(
                     http::header::HeaderName::from_str(header.0.as_str())?,
                     http::HeaderValue::from_str(header.1.as_str())?,
@@ -192,7 +254,7 @@ impl<T> HttpResponse<T> {
     /// Returns the status code of the warning header if present
     #[must_use]
     pub fn warning_code(&self) -> Option<usize> {
-        self.headers.get("warning").and_then(|hdr| {
+        self.parts.headers.get("warning").and_then(|hdr| {
             hdr.as_str().chars().take(3).collect::<String>().parse().ok()
         })
     }
@@ -208,7 +270,7 @@ impl<T> HttpResponse<T> {
         // warn-text  = quoted-string
         // warn-date  = <"> HTTP-date <">
         // (https://tools.ietf.org/html/rfc2616#section-14.46)
-        self.headers.insert(
+        self.parts.headers.insert(
             "warning".to_string(),
             format!(
                 "{} {} {:?} \"{}\"",
@@ -222,13 +284,13 @@ impl<T> HttpResponse<T> {
 
     /// Removes a warning header from a response
     pub fn remove_warning(&mut self) {
-        self.headers.remove("warning");
+        self.parts.headers.remove("warning");
     }
 
     /// Update the headers from `http::response::Parts`
     pub fn update_headers(&mut self, parts: &response::Parts) -> Result<()> {
         for header in parts.headers.iter() {
-            self.headers.insert(
+            self.parts.headers.insert(
                 header.0.as_str().to_string(),
                 header.1.to_str()?.to_string(),
             );
@@ -239,39 +301,41 @@ impl<T> HttpResponse<T> {
     /// Checks if the Cache-Control header contains the must-revalidate directive
     #[must_use]
     pub fn must_revalidate(&self) -> bool {
-        self.headers.get(CACHE_CONTROL.as_str()).is_some_and(|val| {
+        self.parts.headers.get(CACHE_CONTROL.as_str()).is_some_and(|val| {
             val.as_str().to_lowercase().contains("must-revalidate")
         })
     }
 
     /// Adds the custom `x-cache` header to the response
     pub fn cache_status(&mut self, hit_or_miss: HitOrMiss) {
-        self.headers.insert(XCACHE.to_string(), hit_or_miss.to_string());
+        self.parts.headers.insert(XCACHE.to_string(), hit_or_miss.to_string());
     }
 
     /// Adds the custom `x-cache-lookup` header to the response
     pub fn cache_lookup_status(&mut self, hit_or_miss: HitOrMiss) {
-        self.headers.insert(XCACHELOOKUP.to_string(), hit_or_miss.to_string());
+        self.parts
+            .headers
+            .insert(XCACHELOOKUP.to_string(), hit_or_miss.to_string());
     }
 }
 
 /// A trait providing methods for storing, reading, and removing cache records.
 ///
-/// Generic argument `R` defines the type of HTTP response body.
+/// Generic argument `R` defines the type of HTTP response body which may be put into cache.
 #[async_trait::async_trait]
-pub trait CacheManager<R = Vec<u8>>: Send + Sync + 'static {
+pub trait CacheManager: Send + Sync + 'static {
     /// Attempts to pull a cached response and related policy from cache.
     async fn get(
         &self,
         cache_key: &str,
-    ) -> Result<Option<(HttpResponse<R>, CachePolicy)>>;
+    ) -> Result<Option<(HttpResponse, CachePolicy)>>;
     /// Attempts to cache a response and related policy.
     async fn put(
         &self,
         cache_key: String,
-        res: HttpResponse<R>,
+        res: HttpResponse,
         policy: CachePolicy,
-    ) -> Result<HttpResponse<R>>;
+    ) -> Result<HttpResponse>;
     /// Attempts to remove a record from cache.
     async fn delete(&self, cache_key: &str) -> Result<()>;
 }
@@ -598,7 +662,7 @@ impl<T: CacheManager> HttpCache<T> {
                     // the rest of the network for a period of time.
                     // (https://tools.ietf.org/html/rfc2616#section-14.46)
                     res.add_warning(
-                        &res.url.clone(),
+                        &res.parts.url.clone(),
                         112,
                         "Disconnected operation",
                     );
@@ -614,11 +678,13 @@ impl<T: CacheManager> HttpCache<T> {
                 CacheMode::OnlyIfCached => {
                     // ENOTCACHED
                     let mut res = HttpResponse {
-                        body: b"GatewayTimeout".to_vec(),
-                        headers: HashMap::default(),
-                        status: 504,
-                        url: middleware.url()?,
-                        version: HttpVersion::Http11,
+                        body: b"GatewayTimeout".to_vec().into(),
+                        parts: Parts {
+                            headers: HashMap::default(),
+                            status: 504,
+                            url: middleware.url()?,
+                            version: HttpVersion::Http11,
+                        },
                     };
                     if self.options.cache_status_headers {
                         res.cache_status(HitOrMiss::MISS);
@@ -658,9 +724,9 @@ impl<T: CacheManager> HttpCache<T> {
         let mode = self.cache_mode(middleware)?;
         let mut is_cacheable = is_get_head
             && mode != CacheMode::NoStore
-            && res.status == 200
+            && res.parts.status == 200
             && policy.is_storable();
-        if mode == CacheMode::IgnoreRules && res.status == 200 {
+        if mode == CacheMode::IgnoreRules && res.parts.status == 200 {
             is_cacheable = true;
         }
         if is_cacheable {
@@ -713,7 +779,7 @@ impl<T: CacheManager> HttpCache<T> {
         let req_url = middleware.url()?;
         match middleware.remote_fetch().await {
             Ok(mut cond_res) => {
-                let status = StatusCode::from_u16(cond_res.status)?;
+                let status = StatusCode::from_u16(cond_res.parts.status)?;
                 if status.is_server_error() && cached_res.must_revalidate() {
                     //   111 Revalidation failed
                     //   MUST be included if a cache returns a stale response
@@ -729,7 +795,7 @@ impl<T: CacheManager> HttpCache<T> {
                         cached_res.cache_status(HitOrMiss::HIT);
                     }
                     Ok(cached_res)
-                } else if cond_res.status == 304 {
+                } else if cond_res.parts.status == 304 {
                     let after_res = policy.after_response(
                         &middleware.parts()?,
                         &cond_res.parts()?,
@@ -756,7 +822,7 @@ impl<T: CacheManager> HttpCache<T> {
                         )
                         .await?;
                     Ok(res)
-                } else if cond_res.status == 200 {
+                } else if cond_res.parts.status == 200 {
                     let policy = match self.options.cache_options {
                         Some(options) => middleware
                             .policy_with_options(&cond_res, options)?,
