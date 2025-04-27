@@ -1,0 +1,291 @@
+<!DOCTYPE HTML>
+<html lang="en" class="sidebar-visible no-js oranda-dark">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Supporting a Backend Cache Manager - http-cache</title>
+
+
+        <!-- Custom HTML head -->
+        
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff" />
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" href="../highlight.css">
+        <link rel="stylesheet" href="../tomorrow-night.css">
+        <link rel="stylesheet" href="../ayu-highlight.css">
+        <link rel="stylesheet" href="../oranda-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+    </head>
+    <body>
+    <div id="body-container">
+        <!-- Provide site root to javascript -->
+        <script>
+            var path_to_root = "../";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "oranda-dark" : "oranda-dark";
+        </script>
+
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                var theme = localStorage.getItem('orandamdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('orandamdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            var theme;
+            try { theme = localStorage.getItem('orandamdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            var html = document.querySelector('html');
+            html.classList.remove('no-js')
+            html.classList.remove('oranda-dark')
+            html.classList.add(theme);
+            html.classList.add('js');
+        </script>
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            var html = document.querySelector('html');
+            var sidebar = 'hidden';
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            }
+            html.classList.remove('sidebar-visible');
+            html.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <div class="sidebar-scrollbox">
+                <ol class="chapter"><li class="chapter-item expanded "><a href="../introduction.html"><strong aria-hidden="true">1.</strong> Introduction</a></li><li class="chapter-item expanded "><a href="../cache-modes.html"><strong aria-hidden="true">2.</strong> Cache Modes</a></li><li class="chapter-item expanded "><a href="../development/development.html"><strong aria-hidden="true">3.</strong> Development</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../development/supporting-a-backend-cache-manager.html" class="active"><strong aria-hidden="true">3.1.</strong> Supporting a Backend Cache Manager</a></li><li class="chapter-item expanded "><a href="../development/supporting-an-http-client.html"><strong aria-hidden="true">3.2.</strong> Supporting an HTTP Client</a></li></ol></li><li class="chapter-item expanded "><a href="../clients/clients.html"><strong aria-hidden="true">4.</strong> Client Implementations</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../clients/reqwest.html"><strong aria-hidden="true">4.1.</strong> reqwest</a></li><li class="chapter-item expanded "><a href="../clients/surf.html"><strong aria-hidden="true">4.2.</strong> surf</a></li></ol></li><li class="chapter-item expanded "><a href="../managers/managers.html"><strong aria-hidden="true">5.</strong> Backend Cache Manager Implementations</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../managers/cacache.html"><strong aria-hidden="true">5.1.</strong> cacache</a></li><li class="chapter-item expanded "><a href="../managers/moka.html"><strong aria-hidden="true">5.2.</strong> moka</a></li><li class="chapter-item expanded "><a href="../managers/quick-cache.html"><strong aria-hidden="true">5.3.</strong> quick_cache</a></li></ol></li></ol>
+            </div>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky bordered">
+                    <div class="left-buttons">
+                        <button id="sidebar-toggle" class="icon-button" type="button" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </button>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="oranda-dark">Axo Dark</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="oranda-light">Axo Light</button></li>
+
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">http-cache</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="supporting-a-backend-cache-manager"><a class="header" href="#supporting-a-backend-cache-manager">Supporting a Backend Cache Manager</a></h1>
+<p>This section is intended for those looking to implement a custom backend cache manager, or understand how the <a href="https://docs.rs/http-cache/latest/http_cache/trait.CacheManager.html"><code>CacheManager</code></a> trait works.</p>
+<h2 id="the-cachemanager-trait"><a class="header" href="#the-cachemanager-trait">The <code>CacheManager</code> trait</a></h2>
+<p>The <a href="https://docs.rs/http-cache/latest/http_cache/trait.CacheManager.html"><code>CacheManager</code></a> trait is the main trait that needs to be implemented to support a new backend cache manager. It has three methods that it requires:</p>
+<ul>
+<li><code>get</code>: retrieve a cached response given the provided cache key</li>
+<li><code>put</code>: store a response and related policy object in the cache associated with the provided cache key</li>
+<li><code>delete</code>: remove a cached response from the cache associated with the provided cache key</li>
+</ul>
+<p>Because the methods are asynchronous, they currently require <a href="https://github.com/dtolnay/async-trait"><code>async_trait</code></a> to be derived. This may change in the future.</p>
+<h3 id="the-get-method"><a class="header" href="#the-get-method">The <code>get</code> method</a></h3>
+<p>The <code>get</code> method is used to retrieve a cached response given the provided cache key. It returns an <code>Result&lt;Option&lt;(HttpResponse, CachePolicy)&gt;, BoxError&gt;</code> where <code>HttpResponse</code> is the cached response and <a href="https://docs.rs/http-cache-semantics/latest/http_cache_semantics/struct.CachePolicy.html"><code>CachePolicy</code></a> is the associated cache policy object that provides us helpful metadata. If the cache key does not exist in the cache, <code>Ok(None)</code> is returned.</p>
+<h3 id="the-put-method"><a class="header" href="#the-put-method">The <code>put</code> method</a></h3>
+<p>The <code>put</code> method is used to store a response and related policy object in the cache associated with the provided cache key. It returns an <code>Result&lt;HttpResponse, BoxError&gt;</code> where <code>HttpResponse</code> is the passed response.</p>
+<h3 id="the-delete-method"><a class="header" href="#the-delete-method">The <code>delete</code> method</a></h3>
+<p>The <code>delete</code> method is used to remove a cached response from the cache associated with the provided cache key. It returns an <code>Result&lt;(), BoxError&gt;</code>.</p>
+<h2 id="how-to-implement-a-custom-backend-cache-manager"><a class="header" href="#how-to-implement-a-custom-backend-cache-manager">How to implement a custom backend cache manager</a></h2>
+<p>This guide will use the <a href="https://github.com/zkat/cacache-rs"><code>cacache</code></a> backend cache manager as an example. The full source can be found <a href="https://github.com/06chaynes/http-cache/blob/latest/http-cache/src/managers/cacache.rs">here</a>. There are several ways to accomplish this, so feel free to experiment!</p>
+<h3 id="part-one-the-base-structs"><a class="header" href="#part-one-the-base-structs">Part One: The base structs</a></h3>
+<p>The first step is to create a struct that will hold the cache manager's configuration or potentially the cache itself. This struct will implement the <code>CacheManager</code> trait. In this case, we'll call it <code>CACacheManager</code> and it will have a field to store the path for the cache directory.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[derive(Debug, Clone)]
+pub struct CACacheManager {
+    /// Directory where the cache will be stored.
+    pub path: PathBuf,
+}
+<span class="boring">}</span></code></pre></pre>
+<p>Next we will create a struct to store the response and accompanying policy object. This struct will be used to store the response and policy object in the cache. We'll call it <code>Store</code>. This isn't strictly necessary, but I find this easier to work with.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[derive(Debug, Deserialize, Serialize)]
+struct Store {
+    response: HttpResponse,
+    policy: CachePolicy,
+}
+<span class="boring">}</span></code></pre></pre>
+<p>This struct will also derive <a href="https://github.com/serde-rs/serde">serde</a> Deserialize and Serialize to ease the serialization and deserialization with <a href="https://github.com/bincode-org/bincode">bincode</a>.</p>
+<h3 id="part-two-implementing-the-cachemanager-trait"><a class="header" href="#part-two-implementing-the-cachemanager-trait">Part Two: Implementing the <code>CacheManager</code> trait</a></h3>
+<p>Now that we have our base structs, we can implement the <code>CacheManager</code> trait for our <code>CACacheManager</code> struct. We'll start with the <code>get</code> method, but first we must make sure we derive async_trait.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[async_trait::async_trait]
+impl CacheManager for CACacheManager {
+    ...
+<span class="boring">}</span></code></pre></pre>
+<p>The <code>get</code> method accepts a <code>&amp;str</code> as the cache key and returns an <code>Result&lt;Option&lt;(HttpResponse, CachePolicy)&gt;, BoxError&gt;</code>. We will <a href="https://docs.rs/cacache/latest/cacache/fn.read.html"><code>read</code></a> function from <code>cacache</code> to lookup the cache key in the cache directory. If the cache key does not exist, we'll return <code>Ok(None)</code>. The object we will be serializing and deserializing is our <code>Store</code> struct.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>...
+async fn get(
+    &amp;self,
+    cache_key: &amp;str,
+) -&gt; Result&lt;Option&lt;(HttpResponse, CachePolicy)&gt;&gt; {
+    let store: Store = match cacache::read(&amp;self.path, cache_key).await {
+        Ok(d) =&gt; bincode::deserialize(&amp;d)?,
+        Err(_e) =&gt; {
+            return Ok(None);
+        }
+    };
+    Ok(Some((store.response, store.policy)))
+}
+...
+<span class="boring">}</span></code></pre></pre>
+<p>Next we'll implement the <code>put</code> method. This method accepts a <code>String</code> as the cache key, a <code>HttpResponse</code> as the response, and a <code>CachePolicy</code> as the policy object. It returns an <code>Result&lt;HttpResponse, BoxError&gt;</code>. We will clone the response during our construction of the <code>Store</code> struct, then serialize the <code>Store</code> struct using <a href="https://docs.rs/bincode/latest/bincode/fn.serialize.html">serialize</a> and write it to the cache directory using <a href="https://docs.rs/cacache/latest/cacache/fn.write.html"><code>write</code></a> from <code>cacache</code>.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>...
+async fn put(
+    &amp;self,
+    cache_key: String,
+    response: HttpResponse,
+    policy: CachePolicy,
+) -&gt; Result&lt;HttpResponse&gt; {
+    let data = Store { response: response.clone(), policy };
+    let bytes = bincode::serialize(&amp;data)?;
+    cacache::write(&amp;self.path, cache_key, bytes).await?;
+    Ok(response)
+}
+...
+<span class="boring">}</span></code></pre></pre>
+<p>Finally we'll implement the <code>delete</code> method. This method accepts a <code>&amp;str</code> as the cache key and returns an <code>Result&lt;(), BoxError&gt;</code>. We will use <a href="https://docs.rs/cacache/latest/cacache/fn.remove.html"><code>remove</code></a> from <code>cacache</code> to remove the object from the cache directory.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>...
+async fn delete(&amp;self, cache_key: &amp;str) -&gt; Result&lt;()&gt; {
+    Ok(cacache::remove(&amp;self.path, cache_key).await?)
+}
+...
+<span class="boring">}</span></code></pre></pre>
+<p>Our <code>CACacheManager</code> struct now meets the requirements of the <code>CacheManager</code> trait and is ready for use!</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../development/development.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next" href="../development/supporting-an-http-client.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../development/development.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next" href="../development/supporting-an-http-client.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+    </div>
+    </body>
+</html>
