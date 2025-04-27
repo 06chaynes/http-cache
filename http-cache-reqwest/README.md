@@ -15,7 +15,7 @@ Uses [reqwest-middleware](https://github.com/TrueLayer/reqwest-middleware) for m
 
 ## Minimum Supported Rust Version (MSRV)
 
-1.71.1
+1.81.0
 
 ## Install
 

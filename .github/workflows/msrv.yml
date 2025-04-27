@@ -17,6 +17,15 @@ jobs:
   test:
     name: Verify MSRV
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        path:
+          - http-cache
+          - http-cache-darkbird
+          - http-cache-mokadeser
+          - http-cache-quickcache
+          - http-cache-reqwest
+          - http-cache-surf
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -24,18 +33,5 @@ jobs:
         with:
           tool: cargo-binstall
       - run: cargo binstall --version 0.18.4 --no-confirm cargo-msrv
-      - name: Run cargo msrv http-cache
-        working-directory: ./http-cache
-        run: cargo msrv verify
-      - name: Run cargo msrv http-cache-quickcache
-        working-directory: ./http-cache-quickcache
-        run: cargo msrv verify
-      - name: Run cargo msrv http-cache-darkbird
-        working-directory: ./http-cache-darkbird
-        run: cargo msrv verify
-      - name: Run cargo msrv http-cache-reqwest
-        working-directory: ./http-cache-reqwest
-        run: cargo msrv verify
-      - name: Run cargo msrv http-cache-surf
-        working-directory: ./http-cache-surf
-        run: cargo msrv verify
+      - name: cargo msrv verify ${{ matrix.path }}
+        run: cargo msrv verify --path ${{ matrix.path }}

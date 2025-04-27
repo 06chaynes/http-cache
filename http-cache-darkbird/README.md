@@ -12,7 +12,7 @@ An http-cache manager implementation for [darkbird](https://github.com/Rustixir/
 
 ## Minimum Supported Rust Version (MSRV)
 
-1.71.1
+1.81.0
 
 ## Install
 
