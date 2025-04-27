@@ -9,12 +9,17 @@ updates:
     schedule:
       interval: "weekly"
   - package-ecosystem: "cargo"
-    directory: "/"
-    target-branch: "develop"
+    directories:
+      - "/"
+      - "/http-cache"
+      - "/http-cache-darkbird"
+      - "/http-cache-mokadeser"
+      - "/http-cache-quickcache"
+      - "/http-cache-reqwest"
+      - "/http-cache-surf"
     schedule:
       interval: "weekly"
     ignore:
         # These are peer deps of Cargo and should not be automatically bumped
         - dependency-name: "semver"
         - dependency-name: "crates-io"
-    rebase-strategy: "disabled"
