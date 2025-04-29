@@ -6,16 +6,17 @@ use http_cache_semantics::CachePolicy;
 use serde::{Deserialize, Serialize};
 
 /// Implements [`CacheManager`] with [`cacache`](https://github.com/zkat/cacache-rs) as the backend.
-#[cfg_attr(docsrs, doc(cfg(feature = "manager-cacache")))]
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct CACacheManager {
     /// Directory where the cache will be stored.
     pub path: PathBuf,
+    /// Options for removing cache entries.
+    pub remove_opts: cacache::RemoveOpts,
 }
 
-impl Default for CACacheManager {
-    fn default() -> Self {
-        Self { path: "./http-cacache".into() }
+impl std::fmt::Debug for CACacheManager {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CACacheManager").field("path", &self.path).finish()
     }
 }
 
@@ -27,6 +28,14 @@ struct Store {
 
 #[allow(dead_code)]
 impl CACacheManager {
+    /// Creates a new [`CACacheManager`] with the given path.
+    pub fn new(path: PathBuf, remove_fully: bool) -> Self {
+        Self {
+            path,
+            remove_opts: cacache::RemoveOpts::new().remove_fully(remove_fully),
+        }
+    }
+
     /// Clears out the entire cache.
     pub async fn clear(&self) -> Result<()> {
         cacache::clear(&self.path).await?;
@@ -62,6 +71,7 @@ impl CacheManager for CACacheManager {
     }
 
     async fn delete(&self, cache_key: &str) -> Result<()> {
-        Ok(cacache::remove(&self.path, cache_key).await?)
+        self.remove_opts.clone().remove(&self.path, cache_key).await?;
+        Ok(())
     }
 }
