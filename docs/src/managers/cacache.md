@@ -26,12 +26,10 @@ First construct your manager instance. This example will use the default cache d
 let manager = CACacheManager::default();
 ```
 
-You can also specify the cache directory.
+You can also specify the cache directory and if you want the cache entries to be removed fully from disk.
 
 ```rust
-let manager = CACacheManager {
-    path: "./my-cache".into(),
-};
+let manager = CACacheManager::new("./my-cache".into(), true);
 ```
 
 You can attempt to retrieve a record from the cache using the `get` method. This method accepts a `&str` as the cache key and returns an `Result<Option<(HttpResponse, CachePolicy)>, BoxError>`.
