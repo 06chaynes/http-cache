@@ -188,11 +188,7 @@ mod with_cacache {
     #[async_test]
     async fn cacache() -> Result<()> {
         let url = Url::parse("http://example.com")?;
-        let manager = CACacheManager { path: "./http-cacache-test".into() };
-        assert_eq!(
-            &format!("{:?}", manager),
-            "CACacheManager { path: \"./http-cacache-test\" }"
-        );
+        let manager = CACacheManager::new("./http-cacache-test".into(), true);
         let http_res = HttpResponse {
             body: TEST_BODY.to_vec(),
             headers: Default::default(),
