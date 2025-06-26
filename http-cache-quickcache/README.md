@@ -10,10 +10,6 @@
 
 An http-cache manager implementation for [quick-cache](https://github.com/arthurprs/quick-cache).
 
-## Minimum Supported Rust Version (MSRV)
-
-1.81.0
-
 ## Install
 
 With [cargo add](https://github.com/killercup/cargo-edit#Installation) installed :

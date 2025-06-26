@@ -6,13 +6,15 @@
 
 - `remove_opts` field to `CACacheManager` struct. This field is an instance of `cacache::RemoveOpts` that allows for customization of the removal options when deleting items from the cache.
 
+- MSRV is now 1.82.0
+
 ## [0.20.1] - 2025-01-30
 
 ### Changed
 
 - Fixed missing implementation of CacheMode::Reload variant logic.
 
-- MSRV is now 1.71.1
+- MSRV is now 1.81.1
 
 - Updated the minimum versions of the following dependencies:
   - async-trait [0.1.85]
