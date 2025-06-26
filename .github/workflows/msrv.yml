@@ -21,9 +21,6 @@ jobs:
       matrix:
         path:
           - http-cache
-          - http-cache-darkbird
-          - http-cache-mokadeser
-          - http-cache-quickcache
           - http-cache-reqwest
           - http-cache-surf
     steps:
