@@ -28,7 +28,7 @@ fn cache_mode() -> Result<()> {
     // Testing the Debug and Clone traits for the CacheMode enum
     let mode = CacheMode::Default;
     assert_eq!(mode.clone(), CacheMode::Default);
-    assert_eq!(format!("{:?}", mode), "Default");
+    assert_eq!(format!("{mode:?}"), "Default");
     Ok(())
 }
 
@@ -43,9 +43,9 @@ fn cache_options() -> Result<()> {
     opts.cache_key = Some(std::sync::Arc::new(|req: &http::request::Parts| {
         format!("{}:{}:{:?}:test", req.method, req.uri, req.version)
     }));
-    assert_eq!(format!("{:?}", opts), "HttpCacheOptions { cache_options: None, cache_key: \"Fn(&request::Parts) -> String\", cache_mode_fn: \"Fn(&request::Parts) -> CacheMode\", cache_bust: \"Fn(&request::Parts) -> Vec<String>\", cache_status_headers: true }");
+    assert_eq!(format!("{opts:?}"), "HttpCacheOptions { cache_options: None, cache_key: \"Fn(&request::Parts) -> String\", cache_mode_fn: \"Fn(&request::Parts) -> CacheMode\", cache_bust: \"Fn(&request::Parts) -> Vec<String>\", cache_status_headers: true }");
     opts.cache_status_headers = false;
-    assert_eq!(format!("{:?}", opts), "HttpCacheOptions { cache_options: None, cache_key: \"Fn(&request::Parts) -> String\", cache_mode_fn: \"Fn(&request::Parts) -> CacheMode\", cache_bust: \"Fn(&request::Parts) -> Vec<String>\", cache_status_headers: false }");
+    assert_eq!(format!("{opts:?}"), "HttpCacheOptions { cache_options: None, cache_key: \"Fn(&request::Parts) -> String\", cache_mode_fn: \"Fn(&request::Parts) -> CacheMode\", cache_bust: \"Fn(&request::Parts) -> Vec<String>\", cache_status_headers: false }");
     Ok(())
 }
 
