@@ -1,6 +1,6 @@
 [package]
 name = "http-cache"
-version = "0.20.1"
+version = "0.21.0"
 description = "An HTTP caching middleware"
 authors = ["Christian Haynes <06chaynes@gmail.com>", "Kat Marchán <kzm@zkat.tech>"]
 repository = "https://github.com/06chaynes/http-cache"

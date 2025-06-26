@@ -1,11 +1,18 @@
 # Changelog
 
+## [0.14.2] - 2025-06-25
+
+### Changed
+
+- Updated the minimum versions of the following dependencies:
+  - http-cache [0.21.0]
+
 ## [0.14.1] - 2025-01-30
 
 ### Changed
 
 - Updated the minimum versions of the following dependencies:
-  - http-cache [0.21.1]
+  - http-cache [0.20.1]
   - anyhow [1.0.95]
   - async-trait [0.1.85]
   - http [1.2.0]
@@ -41,9 +48,9 @@
 
 ### Added
 
--  The following fields to `HttpCacheOptions` struct:
-  - `cache_mode_fn` field. This is a closure that takes a `&http::request::Parts` and returns a `CacheMode` enum variant. This allows for the overriding of cache mode on a per-request basis.
-  - `cache_bust` field. This is a closure that takes `http::request::Parts`, `Option<CacheKey>`, the default cache key (`&str`) and returns `Vec<String>` of keys to bust the cache for.
+- The following fields to `HttpCacheOptions` struct:
+- `cache_mode_fn` field. This is a closure that takes a `&http::request::Parts` and returns a `CacheMode` enum variant. This allows for the overriding of cache mode on a per-request basis.
+- `cache_bust` field. This is a closure that takes `http::request::Parts`, `Option<CacheKey>`, the default cache key (`&str`) and returns `Vec<String>` of keys to bust the cache for.
 
 ### Changed
 

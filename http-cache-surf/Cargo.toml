@@ -1,6 +1,6 @@
 [package]
 name = "http-cache-surf"
-version = "0.14.1"
+version = "0.14.2"
 description = "http-cache middleware implementation for surf"
 authors = ["Christian Haynes <06chaynes@gmail.com>", "Kat Marchán <kzm@zkat.tech>"]
 repository = "https://github.com/06chaynes/http-cache"
@@ -28,7 +28,7 @@ thiserror = "2.0.11"
 
 [dependencies.http-cache]
 path = "../http-cache"
-version = "0.20.1"
+version = "0.21.0"
 default-features = false
 features = ["with-http-types"]
 

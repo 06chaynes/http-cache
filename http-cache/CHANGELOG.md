@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.21.0] - 2025-06-25
+
+### Added
+
+- `remove_opts` field to `CACacheManager` struct. This field is an instance of `cacache::RemoveOpts` that allows for customization of the removal options when deleting items from the cache.
+
 ## [0.20.1] - 2025-01-30
 
 ### Changed
