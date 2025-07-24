@@ -1,18 +1,21 @@
-name: http-cache-mokadeser
+name: http-cache-tower
 
 on:
+  push:
+    branches: [main]
+  pull_request:
   workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
 
 concurrency:
-  group: ${{ github.ref }}-http-cache-mokadeser
+  group: ${{ github.ref }}-http-cache-tower
   cancel-in-progress: true
 
 defaults:
  run:
-  working-directory: ./http-cache-mokadeser
+  working-directory: ./http-cache-tower
 
 jobs:
   fmt:
@@ -40,6 +43,16 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - run: |
           cargo test --all-targets --all-features
+
+  examples:
+    name: Test examples
+    needs: [fmt]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: |
+          cargo run --example streaming_memory_profile --features streaming
 
   clippy:
     name: Check clippy

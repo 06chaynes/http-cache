@@ -55,6 +55,7 @@ The following features are available. By default `manager-cacache` is enabled.
 
 - `manager-cacache` (default): enable [cacache](https://github.com/zkat/cacache-rs), a high-performance disk cache, backend manager.
 - `manager-moka` (disabled): enable [moka](https://github.com/moka-rs/moka), a high-performance in-memory cache, backend manager.
+- `streaming` (disabled): enable streaming cache support with [tokio](https://github.com/tokio-rs/tokio) runtime.
 
 ## Documentation
 

@@ -12,7 +12,13 @@
 )]
 #![allow(clippy::doc_lazy_continuation)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
-//! The reqwest middleware implementation for http-cache.
+//! # http-cache-reqwest
+//!
+//! HTTP caching middleware for the [reqwest] HTTP client.
+//!
+//! This middleware implements HTTP caching according to RFC 7234 for the reqwest HTTP client library.
+//! It works as part of the [reqwest-middleware] ecosystem to provide caching capabilities.
+//!
 //! ```no_run
 //! use reqwest::Client;
 //! use reqwest_middleware::{ClientBuilder, Result};
@@ -23,34 +29,190 @@
 //!     let client = ClientBuilder::new(Client::new())
 //!         .with(Cache(HttpCache {
 //!             mode: CacheMode::Default,
-//!             manager: CACacheManager::default(),
+//!             manager: CACacheManager::new("./cache".into(), true),
 //!             options: HttpCacheOptions::default(),
 //!         }))
 //!         .build();
-//!     client
+//!     
+//!     // This request will be cached according to response headers
+//!     let response = client
 //!         .get("https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching")
 //!         .send()
 //!         .await?;
+//!     println!("Status: {}", response.status());
+//!     
+//!     // Subsequent identical requests may be served from cache
+//!     let cached_response = client
+//!         .get("https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching")
+//!         .send()
+//!         .await?;
+//!     println!("Cached status: {}", cached_response.status());
+//!     
 //!     Ok(())
 //! }
 //! ```
 //!
-//! ## Overriding the cache mode
+//! ## Streaming Support
 //!
-//! The cache mode can be overridden on a per-request basis by making use of the
-//! `reqwest-middleware` extensions system.
+//! Handle large responses without buffering them entirely in memory:
 //!
 //! ```no_run
-//! client.get("https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching")
-//!     .with_extension(CacheMode::OnlyIfCached)
-//!     .send()
-//!     .await?;
+//! use reqwest::Client;
+//! use reqwest_middleware::ClientBuilder;
+//! use http_cache_reqwest::{StreamingCache, CACacheManager, CacheMode};
+//!
+//! #[tokio::main]
+//! async fn main() -> reqwest_middleware::Result<()> {
+//!     let client = ClientBuilder::new(Client::new())
+//!         .with(StreamingCache::new(
+//!             CACacheManager::new("./cache".into(), true),
+//!             CacheMode::Default,
+//!         ))
+//!         .build();
+//!         
+//!     // Stream large responses
+//!     let response = client
+//!         .get("https://httpbin.org/stream/20")
+//!         .send()
+//!         .await?;
+//!     println!("Status: {}", response.status());
+//!     
+//!     // Process the streaming body
+//!     let body = response.text().await?;
+//!     println!("Body length: {}", body.len());
+//!     
+//!     Ok(())
+//! }
+//! ```
+//!
+//! ## Cache Modes
+//!
+//! Control caching behavior with different modes:
+//!
+//! ```no_run
+//! use reqwest::Client;
+//! use reqwest_middleware::ClientBuilder;
+//! use http_cache_reqwest::{Cache, CacheMode, CACacheManager, HttpCache, HttpCacheOptions};
+//!
+//! #[tokio::main]
+//! async fn main() -> reqwest_middleware::Result<()> {
+//!     let client = ClientBuilder::new(Client::new())
+//!         .with(Cache(HttpCache {
+//!             mode: CacheMode::ForceCache, // Cache everything, ignore headers
+//!             manager: CACacheManager::new("./cache".into(), true),
+//!             options: HttpCacheOptions::default(),
+//!         }))
+//!         .build();
+//!     
+//!     // This will be cached even if headers say not to cache
+//!     client.get("https://httpbin.org/uuid").send().await?;
+//!     Ok(())
+//! }
+//! ```
+//!
+//! ## Per-Request Cache Control
+//!
+//! Override the cache mode on individual requests:
+//!
+//! ```no_run
+//! use reqwest::Client;
+//! use reqwest_middleware::ClientBuilder;
+//! use http_cache_reqwest::{Cache, CacheMode, CACacheManager, HttpCache, HttpCacheOptions};
+//!
+//! #[tokio::main]
+//! async fn main() -> reqwest_middleware::Result<()> {
+//!     let client = ClientBuilder::new(Client::new())
+//!         .with(Cache(HttpCache {
+//!             mode: CacheMode::Default,
+//!             manager: CACacheManager::new("./cache".into(), true),
+//!             options: HttpCacheOptions::default(),
+//!         }))
+//!         .build();
+//!     
+//!     // Override cache mode for this specific request
+//!     let response = client.get("https://httpbin.org/uuid")
+//!         .with_extension(CacheMode::OnlyIfCached) // Only serve from cache
+//!         .send()
+//!         .await?;
+//!         
+//!     // This request bypasses cache completely
+//!     let fresh_response = client.get("https://httpbin.org/uuid")
+//!         .with_extension(CacheMode::NoStore)
+//!         .send()
+//!         .await?;
+//!         
+//!     Ok(())
+//! }
+//! ```
+//!
+//! ## Custom Cache Keys
+//!
+//! Customize how cache keys are generated:
+//!
+//! ```no_run
+//! use reqwest::Client;
+//! use reqwest_middleware::ClientBuilder;
+//! use http_cache_reqwest::{Cache, CacheMode, CACacheManager, HttpCache, HttpCacheOptions};
+//!
+//! #[tokio::main]
+//! async fn main() -> reqwest_middleware::Result<()> {
+//!     let options = HttpCacheOptions {
+//!         cache_key: Some(Box::new(|req| {
+//!             // Include query parameters in cache key
+//!             format!("{}:{}", req.method(), req.uri())
+//!         })),
+//!         ..Default::default()
+//!     };
+//!     
+//!     let client = ClientBuilder::new(Client::new())
+//!         .with(Cache(HttpCache {
+//!             mode: CacheMode::Default,
+//!             manager: CACacheManager::new("./cache".into(), true),
+//!             options,
+//!         }))
+//!         .build();
+//!         
+//!     Ok(())
+//! }
+//! ```
+//!
+//! ## In-Memory Caching
+//!
+//! Use the Moka in-memory cache:
+//!
+//! ```no_run
+//! # #[cfg(feature = "manager-moka")]
+//! use reqwest::Client;
+//! # #[cfg(feature = "manager-moka")]
+//! use reqwest_middleware::ClientBuilder;
+//! # #[cfg(feature = "manager-moka")]
+//! use http_cache_reqwest::{Cache, CacheMode, MokaManager, HttpCache, HttpCacheOptions};
+//! # #[cfg(feature = "manager-moka")]
+//! use moka::future::Cache as MokaCache;
+//!
+//! # #[cfg(feature = "manager-moka")]
+//! #[tokio::main]
+//! async fn main() -> reqwest_middleware::Result<()> {
+//!     let client = ClientBuilder::new(Client::new())
+//!         .with(Cache(HttpCache {
+//!             mode: CacheMode::Default,
+//!             manager: MokaManager::new(MokaCache::new(1000)), // Max 1000 entries
+//!             options: HttpCacheOptions::default(),
+//!         }))
+//!         .build();
+//!         
+//!     Ok(())
+//! }
+//! # #[cfg(not(feature = "manager-moka"))]
+//! # fn main() {}
 //! ```
 mod error;
 
-use anyhow::anyhow;
-
 pub use error::BadRequest;
+#[cfg(feature = "streaming")]
+pub use error::ReqwestStreamingError;
+
+use anyhow::anyhow;
 
 use std::{
     collections::HashMap,
@@ -77,6 +239,13 @@ pub use http_cache::{
     HttpResponse,
 };
 
+#[cfg(feature = "streaming")]
+// Re-export streaming types for future use
+pub use http_cache::{
+    HttpCacheStreamInterface, HttpStreamingCache, StreamingBody,
+    StreamingCacheManager,
+};
+
 #[cfg(feature = "manager-cacache")]
 #[cfg_attr(docsrs, doc(cfg(feature = "manager-cacache")))]
 pub use http_cache::CACacheManager;
@@ -88,6 +257,36 @@ pub use http_cache::{MokaCache, MokaCacheBuilder, MokaManager};
 /// Wrapper for [`HttpCache`]
 #[derive(Debug)]
 pub struct Cache<T: CacheManager>(pub HttpCache<T>);
+
+#[cfg(feature = "streaming")]
+/// Streaming cache wrapper that implements reqwest middleware for streaming responses
+#[derive(Debug, Clone)]
+pub struct StreamingCache<T: StreamingCacheManager> {
+    cache: HttpStreamingCache<T>,
+}
+
+#[cfg(feature = "streaming")]
+impl<T: StreamingCacheManager> StreamingCache<T> {
+    /// Create a new streaming cache with the given manager and mode
+    pub fn new(manager: T, mode: CacheMode) -> Self {
+        Self {
+            cache: HttpStreamingCache {
+                mode,
+                manager,
+                options: HttpCacheOptions::default(),
+            },
+        }
+    }
+
+    /// Create a new streaming cache with custom options
+    pub fn with_options(
+        manager: T,
+        mode: CacheMode,
+        options: HttpCacheOptions,
+    ) -> Self {
+        Self { cache: HttpStreamingCache { mode, manager, options } }
+    }
+}
 
 /// Implements ['Middleware'] for reqwest
 pub(crate) struct ReqwestMiddleware<'a> {
@@ -185,7 +384,7 @@ impl Middleware for ReqwestMiddleware<'_> {
 }
 
 // Converts an [`HttpResponse`] to a reqwest [`Response`]
-fn convert_response(response: HttpResponse) -> anyhow::Result<Response> {
+fn convert_response(response: HttpResponse) -> Result<Response> {
     let mut ret_res = http::Response::builder()
         .status(response.status)
         .url(response.url)
@@ -200,6 +399,78 @@ fn convert_response(response: HttpResponse) -> anyhow::Result<Response> {
     Ok(Response::from(ret_res))
 }
 
+#[cfg(feature = "streaming")]
+// Converts a reqwest Response to an http::Response with Full body for streaming cache processing
+async fn convert_reqwest_response_to_http_full_body(
+    response: Response,
+) -> Result<http::Response<http_body_util::Full<bytes::Bytes>>> {
+    let status = response.status();
+    let version = response.version();
+    let headers = response.headers().clone();
+    let body_bytes = response.bytes().await.map_err(BoxError::from)?;
+
+    let mut http_response =
+        http::Response::builder().status(status).version(version);
+
+    for (name, value) in headers.iter() {
+        http_response = http_response.header(name, value);
+    }
+
+    http_response
+        .body(http_body_util::Full::new(body_bytes))
+        .map_err(BoxError::from)
+}
+
+#[cfg(feature = "streaming")]
+// Converts reqwest Response to http response parts (for 304 handling)
+fn convert_reqwest_response_to_http_parts(
+    response: Response,
+) -> Result<(http::response::Parts, ())> {
+    let status = response.status();
+    let version = response.version();
+    let headers = response.headers().clone();
+
+    let mut http_response =
+        http::Response::builder().status(status).version(version);
+
+    for (name, value) in headers.iter() {
+        http_response = http_response.header(name, value);
+    }
+
+    let response = http_response.body(()).map_err(BoxError::from)?;
+    Ok(response.into_parts())
+}
+
+#[cfg(feature = "streaming")]
+// Converts a streaming response back to reqwest Response by buffering it
+async fn convert_streaming_response_to_reqwest_buffered<B>(
+    response: http::Response<B>,
+) -> Result<Response>
+where
+    B: http_body::Body + Send + 'static,
+{
+    use http_body_util::BodyExt;
+
+    let (parts, body) = response.into_parts();
+
+    // Collect the streaming body into bytes, handling errors generically
+    let body_bytes = match BodyExt::collect(body).await {
+        Ok(collected) => collected.to_bytes().to_vec(),
+        Err(_) => {
+            return Err(BoxError::from("Failed to collect streaming body"))
+        }
+    };
+
+    let mut http_response =
+        http::Response::builder().status(parts.status).version(parts.version);
+
+    for (name, value) in parts.headers.iter() {
+        http_response = http_response.header(name, value);
+    }
+
+    let response = http_response.body(body_bytes)?;
+    Ok(Response::from(response))
+}
 fn bad_header(e: reqwest::header::InvalidHeaderValue) -> Error {
     Error::Middleware(anyhow!(e))
 }
@@ -223,7 +494,8 @@ impl<T: CacheManager> reqwest_middleware::Middleware for Cache<T> {
             .map_err(|e| Error::Middleware(anyhow!(e)))?
         {
             let res = self.0.run(middleware).await.map_err(from_box_error)?;
-            let converted = convert_response(res)?;
+            let converted = convert_response(res)
+                .map_err(|e| Error::Middleware(anyhow!("{}", e)))?;
             Ok(converted)
         } else {
             self.0
@@ -242,6 +514,141 @@ impl<T: CacheManager> reqwest_middleware::Middleware for Cache<T> {
             res.headers_mut().insert(XCACHELOOKUP, miss);
             Ok(res)
         }
+    }
+}
+
+#[cfg(feature = "streaming")]
+#[async_trait::async_trait]
+impl<T: StreamingCacheManager> reqwest_middleware::Middleware
+    for StreamingCache<T>
+where
+    T::Body: Send + 'static,
+    <T::Body as http_body::Body>::Data: Send,
+    <T::Body as http_body::Body>::Error:
+        Into<http_cache::StreamingError> + Send + Sync + 'static,
+{
+    async fn handle(
+        &self,
+        req: Request,
+        extensions: &mut Extensions,
+        next: Next<'_>,
+    ) -> std::result::Result<Response, Error> {
+        use http_cache::HttpCacheStreamInterface;
+
+        // Convert reqwest Request to http::Request for analysis
+        let copied_req = clone_req(&req)?;
+        let http_req = match http::Request::try_from(copied_req) {
+            Ok(r) => r,
+            Err(e) => return Err(Error::Middleware(anyhow!(e))),
+        };
+        let (parts, _) = http_req.into_parts();
+
+        // Check for mode override from extensions
+        let mode_override = extensions.get::<CacheMode>().cloned();
+
+        // Analyze the request for caching behavior
+        let analysis = match self.cache.analyze_request(&parts, mode_override) {
+            Ok(a) => a,
+            Err(e) => return Err(Error::Middleware(anyhow!(e))),
+        };
+
+        // Check if we should bypass cache entirely
+        if !analysis.should_cache {
+            let response = next.run(req, extensions).await?;
+            return Ok(response);
+        }
+
+        // Look up cached response
+        if let Some((cached_response, policy)) = self
+            .cache
+            .lookup_cached_response(&analysis.cache_key)
+            .await
+            .map_err(|e| Error::Middleware(anyhow!(e)))?
+        {
+            // Check if cached response is still fresh
+            use http_cache_semantics::BeforeRequest;
+            let before_req = policy.before_request(&parts, SystemTime::now());
+            match before_req {
+                BeforeRequest::Fresh(_fresh_parts) => {
+                    // Convert cached streaming response back to reqwest Response
+                    // For now, we need to buffer it since reqwest middleware expects buffered responses
+                    return convert_streaming_response_to_reqwest_buffered(
+                        cached_response,
+                    )
+                    .await
+                    .map_err(|e| Error::Middleware(anyhow!(e)));
+                }
+                BeforeRequest::Stale { request: conditional_parts, .. } => {
+                    // Create conditional request
+                    let mut conditional_req = req;
+                    for (name, value) in conditional_parts.headers.iter() {
+                        conditional_req
+                            .headers_mut()
+                            .insert(name.clone(), value.clone());
+                    }
+
+                    let conditional_response =
+                        next.run(conditional_req, extensions).await?;
+
+                    if conditional_response.status() == 304 {
+                        // Convert reqwest response parts for handling not modified
+                        let (fresh_parts, _) =
+                            convert_reqwest_response_to_http_parts(
+                                conditional_response,
+                            )
+                            .map_err(|e| Error::Middleware(anyhow!("{}", e)))?;
+                        let updated_response = self
+                            .cache
+                            .handle_not_modified(cached_response, &fresh_parts)
+                            .await
+                            .map_err(|e| Error::Middleware(anyhow!(e)))?;
+
+                        return convert_streaming_response_to_reqwest_buffered(
+                            updated_response,
+                        )
+                        .await
+                        .map_err(|e| Error::Middleware(anyhow!(e)));
+                    } else {
+                        // Fresh response received, process it through the cache
+                        let http_response =
+                            convert_reqwest_response_to_http_full_body(
+                                conditional_response,
+                            )
+                            .await
+                            .map_err(|e| Error::Middleware(anyhow!("{}", e)))?;
+                        let cached_response = self
+                            .cache
+                            .process_response(analysis, http_response)
+                            .await
+                            .map_err(|e| Error::Middleware(anyhow!(e)))?;
+
+                        return convert_streaming_response_to_reqwest_buffered(
+                            cached_response,
+                        )
+                        .await
+                        .map_err(|e| Error::Middleware(anyhow!(e)));
+                    }
+                }
+            }
+        }
+
+        // Fetch fresh response from upstream
+        let response = next.run(req, extensions).await?;
+        let http_response =
+            convert_reqwest_response_to_http_full_body(response)
+                .await
+                .map_err(|e| Error::Middleware(anyhow!("{}", e)))?;
+
+        // Process and potentially cache the response
+        let cached_response = self
+            .cache
+            .process_response(analysis, http_response)
+            .await
+            .map_err(|e| Error::Middleware(anyhow!(e)))?;
+
+        convert_streaming_response_to_reqwest_buffered(cached_response)
+            .await
+            .map_err(|e| Error::Middleware(anyhow!(e)))
     }
 }
 

@@ -24,10 +24,12 @@ jobs:
       - uses: taiki-e/install-action@cargo-llvm-cov
       - run: |
           cargo llvm-cov clean --workspace
-          cargo llvm-cov --no-report --no-default-features --package http-cache --features manager-cacache,cacache-async-std,with-http-types,manager-moka
-          cargo llvm-cov --no-report --no-default-features --package http-cache --features manager-cacache,cacache-tokio
-          cargo llvm-cov --no-report --package http-cache-surf --features manager-moka
-          cargo llvm-cov --no-report --package http-cache-reqwest --features manager-moka
+          cargo llvm-cov --no-report --no-default-features --package http-cache --features manager-cacache,cacache-smol,with-http-types,manager-moka,streaming-smol
+          cargo llvm-cov --no-report --no-default-features --package http-cache --features manager-cacache,cacache-tokio,with-http-types,manager-moka,streaming-tokio
+          cargo llvm-cov --no-report --package http-cache-surf --all-features
+          cargo llvm-cov --no-report --package http-cache-reqwest --all-features
+          cargo llvm-cov --no-report --package http-cache-tower --all-features
+          cargo llvm-cov --no-report --package http-cache-quickcache --all-features
           cargo llvm-cov report --lcov --output-path lcov.info
       - uses: codecov/codecov-action@v5
         with:

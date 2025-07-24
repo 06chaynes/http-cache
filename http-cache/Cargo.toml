@@ -1,6 +1,6 @@
 [package]
 name = "http-cache"
-version = "0.21.0"
+version = "1.0.0-alpha.1"
 description = "An HTTP caching middleware"
 authors = ["Christian Haynes <06chaynes@gmail.com>", "Kat Marchán <kzm@zkat.tech>"]
 repository = "https://github.com/06chaynes/http-cache"
@@ -18,27 +18,42 @@ rust-version = "1.82.0"
 [dependencies]
 async-trait = "0.1.85"
 bincode = { version = "1.3.3", optional = true }
+bytes = "1.8.0"
 cacache = { version = "13.1.0", default-features = false, features = ["mmap"], optional = true }
+futures = "0.3.31"
+hex = "0.4.3"
 http = "1.2.0"
+http-body = "1.0.1"
+http-body-util = "0.1.2"
 http-cache-semantics = "2.1.0"
 http-types = { version = "2.12.0", default-features = false, optional = true }
 httpdate = "1.0.3"
 moka = { version = "0.12.10", features = ["future"], optional = true }
+pin-project-lite = "0.2"
 serde = { version = "1.0.217", features = ["derive"] }
+serde_json = { version = "1.0", optional = true }
+sha2 = "0.10.8"
+smol = { version = "2.0.2", optional = true }
+tokio = { version = "1.44.0", features = ["fs", "io-util"], optional = true }
 url = { version = "2.5.4", features = ["serde"] }
+uuid = { version = "1.11.0", features = ["v4"], optional = true }
+cfg-if = { version = "1.0", optional = true }
 
 [dev-dependencies]
-async-attributes = "1.1.2"
-async-std = { version = "1.13.0" }
+smol = "2.0.2"
 http-cache-semantics = "2.1.0"
 tokio = { version = "1.43.0", features = [ "macros", "rt", "rt-multi-thread" ] }
+tempfile = "3.13.0"
 
 [features]
-default = ["manager-cacache", "cacache-async-std"]
+default = ["manager-cacache", "cacache-smol"]
 manager-cacache = ["cacache", "bincode"]
-cacache-tokio = ["cacache/tokio-runtime"]
-cacache-async-std = ["cacache/async-std"]
+cacache-tokio = ["cacache/tokio-runtime", "tokio", "bincode"]  
+cacache-smol = ["cacache/async-std", "smol"]
 manager-moka = ["moka", "bincode"]
+streaming = ["uuid", "bincode", "cfg-if", "serde_json"]
+streaming-tokio = ["tokio", "streaming"]
+streaming-smol = ["smol", "streaming"]
 with-http-types = ["http-types"]
 
 [package.metadata.docs.rs]

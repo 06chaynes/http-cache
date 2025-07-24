@@ -1,6 +1,6 @@
 [package]
 name = "http-cache-quickcache"
-version = "0.9.0"
+version = "1.0.0-alpha.1"
 description = "http-cache manager implementation for quick-cache"
 authors = ["Christian Haynes <06chaynes@gmail.com>", "Kat Marchán <kzm@zkat.tech>"]
 repository = "https://github.com/06chaynes/http-cache"
@@ -13,6 +13,7 @@ categories = [
     "web-programming::http-client"
 ]
 edition = "2021"
+rust-version = "1.82.0"
 
 [dependencies]
 async-trait = "0.1.85"
@@ -21,10 +22,14 @@ http-cache-semantics = "2.1.0"
 serde = { version = "1.0.217", features = ["derive"] }
 url = { version = "2.5.4", features = ["serde"] }
 quick_cache = "0.6.9"
+bytes = "1.8.0"
+http = "1.2.0"
+http-body = "1.0.1"
+http-body-util = "0.1.2"
 
 [dependencies.http-cache]
 path = "../http-cache"
-version = "0.21.0"
+version = "1.0.0-alpha.1"
 default-features = false
 features = ["bincode"]
 
@@ -34,9 +39,20 @@ reqwest = { version = "0.12.12", default-features = false }
 reqwest-middleware = "0.4.0"
 tokio = { version = "1.43.0", features = [ "macros", "rt", "rt-multi-thread" ] }
 wiremock = "0.6.2"
+bytes = "1.8.0"
+http-body = "1.0.1"
+http-body-util = "0.1.2"
+futures = "0.3.31"
+tower = "0.5.1"
+tower-http = { version = "0.6.2", features = ["trace"] }
+tower-service = "0.3.3"
+hyper = "1.5.1"
 
 [dev-dependencies.http-cache-reqwest]
 path = "../http-cache-reqwest"
+
+[features]
+default = []
 
 [package.metadata.docs.rs]
 all-features = true

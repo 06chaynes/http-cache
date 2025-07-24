@@ -1,6 +1,6 @@
 # reqwest
 
-The [`http-cache-reqwest`](https://github.com/06chaynes/http-cache/tree/latest/http-cache-reqwest) crate provides a [`Middleware`](https://docs.rs/http-cache/latest/http_cache/trait.Middleware.html) implementation for the [`reqwest`](https://github.com/seanmonstar/reqwest) HTTP client. It accomplishes this by utilizing [`reqwest_middleware`](https://github.com/TrueLayer/reqwest-middleware).
+The [`http-cache-reqwest`](https://github.com/06chaynes/http-cache/tree/main/http-cache-reqwest) crate provides a [`Middleware`](https://docs.rs/http-cache/latest/http_cache/trait.Middleware.html) implementation for the [`reqwest`](https://github.com/seanmonstar/reqwest) HTTP client. It accomplishes this by utilizing [`reqwest_middleware`](https://github.com/TrueLayer/reqwest-middleware).
 
 ## Getting Started
 

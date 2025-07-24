@@ -8,6 +8,7 @@
 - [Client Implementations](./clients/clients.md)
   - [reqwest](./clients/reqwest.md)
   - [surf](./clients/surf.md)
+  - [tower](./clients/tower.md)
 - [Backend Cache Manager Implementations](./managers/managers.md)
   - [cacache](./managers/cacache.md)
   - [moka](./managers/moka.md)

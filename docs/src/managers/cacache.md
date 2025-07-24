@@ -1,10 +1,10 @@
 # cacache
 
-[`cacache`](https://github.com/zkat/cacache-rs) is a high-performance, concurrent, content-addressable disk cache, optimized for async APIs.
+[`cacache`](https://github.com/zkat/cacache-rs) is a high-performance, concurrent, content-addressable disk cache, optimized for async APIs. It supports both traditional caching and streaming operations for memory-efficient handling of large responses.
 
 ## Getting Started
 
-The `cacache` backend cache manager is provided by the `http-cache` crate and is enabled by default. Both the `http-cache-reqwest` and `http-cache-surf` crates expose the types so no need to pull in the `http-cache` directly unless you need to implement your own client.
+The `cacache` backend cache manager is provided by the `http-cache` crate and is enabled by default. The `http-cache-reqwest`, `http-cache-surf`, and `http-cache-tower` crates all expose the types so no need to pull in the `http-cache` directly unless you need to implement your own client.
 
 ### reqwest
 
@@ -16,6 +16,12 @@ cargo add http-cache-reqwest
 
 ```sh
 cargo add http-cache-surf
+```
+
+### tower
+
+```sh
+cargo add http-cache-tower
 ```
 
 ## Working with the manager directly

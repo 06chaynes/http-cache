@@ -1,6 +1,6 @@
 # surf
 
-The [`http-cache-surf`](https://github.com/06chaynes/http-cache/tree/latest/http-cache-surf) crate provides a [`Middleware`](https://docs.rs/http-cache/latest/http_cache/trait.Middleware.html) implementation for the [`surf`](https://github.com/http-rs/surf) HTTP client.
+The [`http-cache-surf`](https://github.com/06chaynes/http-cache/tree/main/http-cache-surf) crate provides a [`Middleware`](https://docs.rs/http-cache/latest/http_cache/trait.Middleware.html) implementation for the [`surf`](https://github.com/http-rs/surf) HTTP client.
 
 ## Getting Started
 
