@@ -236,24 +236,16 @@ impl<CM: CacheManager> StreamingCacheManager for StreamingCacheWrapper<CM> {
     > {
         if let Some((http_response, policy)) = self.inner.get(cache_key).await?
         {
-            // Convert HttpResponse to Response<StreamingBody>
-            let mut response_builder = Response::builder()
-                .status(http_response.status)
-                .version(http_response.version.into());
-
-            for (name, value) in &http_response.headers {
-                if let (Ok(header_name), Ok(header_value)) = (
-                    name.parse::<http::HeaderName>(),
-                    value.parse::<http::HeaderValue>(),
-                ) {
-                    response_builder =
-                        response_builder.header(header_name, header_value);
-                }
-            }
-
-            let body = StreamingBody::buffered(Bytes::from(http_response.body));
+            // Convert HttpResponse to Response<StreamingBody> using helper
+            let body = StreamingBody::buffered(Bytes::from(
+                http_response.body.clone(),
+            ));
             let response =
-                response_builder.body(body).map_err(StreamingError::new)?;
+                http_cache::HttpCacheOptions::http_response_to_response(
+                    &http_response,
+                    body,
+                )
+                .map_err(StreamingError::new)?;
 
             Ok(Some((response, policy)))
         } else {
@@ -284,13 +276,9 @@ impl<CM: CacheManager> StreamingCacheManager for StreamingCacheWrapper<CM> {
         // Use the provided request_url directly - this solves the URL reconstruction problem
         let http_response = http_cache::HttpResponse {
             body: body_bytes.clone(),
-            headers: parts
-                .headers
-                .iter()
-                .map(|(k, v)| {
-                    (k.to_string(), v.to_str().unwrap_or("").to_string())
-                })
-                .collect(),
+            headers: http_cache::HttpCacheOptions::headers_to_hashmap(
+                &parts.headers,
+            ),
             status: parts.status.as_u16(),
             url: request_url,
             version: parts.version.try_into()?,
@@ -300,24 +288,14 @@ impl<CM: CacheManager> StreamingCacheManager for StreamingCacheWrapper<CM> {
         let cached_response =
             self.inner.put(cache_key, http_response, policy).await?;
 
-        // Convert back to streaming response
-        let mut response_builder = Response::builder()
-            .status(cached_response.status)
-            .version(cached_response.version.into());
-
-        for (name, value) in &cached_response.headers {
-            if let (Ok(header_name), Ok(header_value)) = (
-                name.parse::<http::HeaderName>(),
-                value.parse::<http::HeaderValue>(),
-            ) {
-                response_builder =
-                    response_builder.header(header_name, header_value);
-            }
-        }
-
-        let body = StreamingBody::buffered(Bytes::from(cached_response.body));
-        let response =
-            response_builder.body(body).map_err(StreamingError::new)?;
+        // Convert back to streaming response using helper
+        let body =
+            StreamingBody::buffered(Bytes::from(cached_response.body.clone()));
+        let response = http_cache::HttpCacheOptions::http_response_to_response(
+            &cached_response,
+            body,
+        )
+        .map_err(StreamingError::new)?;
 
         Ok(response)
     }
@@ -762,9 +740,10 @@ where
             if !analysis.should_cache
                 && (parts.method != "GET" && parts.method != "HEAD")
             {
-                // Generate the cache key for a GET request to the same resource
-                // Default cache key format is "method:uri"
-                let get_cache_key = format!("GET:{}", parts.uri);
+                // Use the cache's options to generate consistent cache key for GET invalidation
+                let get_cache_key = cache
+                    .options
+                    .create_cache_key_for_invalidation(&parts, "GET");
                 // Ignore errors if the cache entry doesn't exist
                 let _ = cache.manager.delete(&get_cache_key).await;
             }
@@ -795,24 +774,13 @@ where
                     policy.before_request(&parts, std::time::SystemTime::now());
                 match before_req {
                     BeforeRequest::Fresh(_fresh_parts) => {
-                        // Return cached response
-                        let mut response_builder = Response::builder()
-                            .status(cached_response.status)
-                            .version(cached_response.version.into());
-
-                        for (name, value) in &cached_response.headers {
-                            if let (Ok(header_name), Ok(header_value)) = (
-                                name.parse::<http::HeaderName>(),
-                                value.parse::<http::HeaderValue>(),
-                            ) {
-                                response_builder = response_builder
-                                    .header(header_name, header_value);
-                            }
-                        }
-
-                        let response = response_builder
-                            .body(HttpCacheBody::Buffered(cached_response.body))
-                            .map_err(|e| HttpCacheError::HttpError(e.into()))?;
+                        // Return cached response using helper
+                        let body_clone = cached_response.body.clone();
+                        let response = http_cache::HttpCacheOptions::http_response_to_response(
+                            &cached_response,
+                            HttpCacheBody::Buffered(body_clone),
+                        )
+                        .map_err(HttpCacheError::HttpError)?;
                         return Ok(response);
                     }
                     BeforeRequest::Stale {
@@ -840,27 +808,12 @@ where
                                     HttpCacheError::CacheError(e.to_string())
                                 })?;
 
-                            let mut response_builder = Response::builder()
-                                .status(updated_response.status)
-                                .version(updated_response.version.into());
-
-                            for (name, value) in &updated_response.headers {
-                                if let (Ok(header_name), Ok(header_value)) = (
-                                    name.parse::<http::HeaderName>(),
-                                    value.parse::<http::HeaderValue>(),
-                                ) {
-                                    response_builder = response_builder
-                                        .header(header_name, header_value);
-                                }
-                            }
-
-                            let response = response_builder
-                                .body(HttpCacheBody::Buffered(
-                                    updated_response.body,
-                                ))
-                                .map_err(|e| {
-                                    HttpCacheError::HttpError(e.into())
-                                })?;
+                            let body_clone = updated_response.body.clone();
+                            let response = http_cache::HttpCacheOptions::http_response_to_response(
+                                &updated_response,
+                                HttpCacheBody::Buffered(body_clone),
+                            )
+                            .map_err(HttpCacheError::HttpError)?;
                             return Ok(response);
                         } else {
                             // Fresh response received, process it normally
@@ -993,9 +946,10 @@ where
             if !analysis.should_cache
                 && (parts.method != "GET" && parts.method != "HEAD")
             {
-                // Generate the cache key for a GET request to the same resource
-                // Default cache key format is "method:uri"
-                let get_cache_key = format!("GET:{}", parts.uri);
+                // Use the cache's options to generate consistent cache key for GET invalidation
+                let get_cache_key = cache
+                    .options
+                    .create_cache_key_for_invalidation(&parts, "GET");
                 // Ignore errors if the cache entry doesn't exist
                 let _ = cache.manager.delete(&get_cache_key).await;
             }

@@ -652,6 +652,8 @@ pub struct CacheAnalysis {
     pub cache_bust_keys: Vec<String>,
     /// The request parts for policy creation
     pub request_parts: request::Parts,
+    /// Whether this is a GET or HEAD request
+    pub is_get_head: bool,
 }
 
 /// Cache mode determines how the HTTP cache behaves for requests.
@@ -991,6 +993,48 @@ impl HttpCacheOptions {
         }
     }
 
+    /// Helper function for other crates to generate cache keys for invalidation
+    /// This ensures consistent cache key generation across all implementations
+    pub fn create_cache_key_for_invalidation(
+        &self,
+        parts: &request::Parts,
+        method_override: &str,
+    ) -> String {
+        self.create_cache_key(parts, Some(method_override))
+    }
+
+    /// Converts http::HeaderMap to HashMap<String, String> for HttpResponse
+    pub fn headers_to_hashmap(
+        headers: &http::HeaderMap,
+    ) -> HashMap<String, String> {
+        headers
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_str().unwrap_or("").to_string()))
+            .collect()
+    }
+
+    /// Converts HttpResponse to http::Response with the given body type
+    pub fn http_response_to_response<B>(
+        http_response: &HttpResponse,
+        body: B,
+    ) -> Result<Response<B>> {
+        let mut response_builder = Response::builder()
+            .status(http_response.status)
+            .version(http_response.version.into());
+
+        for (name, value) in &http_response.headers {
+            if let (Ok(header_name), Ok(header_value)) = (
+                name.parse::<http::HeaderName>(),
+                value.parse::<http::HeaderValue>(),
+            ) {
+                response_builder =
+                    response_builder.header(header_name, header_value);
+            }
+        }
+
+        Ok(response_builder.body(body)?)
+    }
+
     /// Converts response parts to HttpResponse format for cache mode evaluation
     fn parts_to_http_response(
         &self,
@@ -1029,6 +1073,23 @@ impl HttpCacheOptions {
         original_mode
     }
 
+    /// Creates a cache policy for the given request and response
+    fn create_cache_policy(
+        &self,
+        request_parts: &request::Parts,
+        response_parts: &response::Parts,
+    ) -> CachePolicy {
+        match self.cache_options {
+            Some(options) => CachePolicy::new_options(
+                request_parts,
+                response_parts,
+                SystemTime::now(),
+                options,
+            ),
+            None => CachePolicy::new(request_parts, response_parts),
+        }
+    }
+
     /// Determines if a response should be cached based on cache mode and HTTP semantics
     fn should_cache_response(
         &self,
@@ -1053,6 +1114,39 @@ impl HttpCacheOptions {
         } else {
             false
         }
+    }
+
+    /// Common request analysis logic shared between streaming and non-streaming implementations
+    fn analyze_request_internal(
+        &self,
+        parts: &request::Parts,
+        mode_override: Option<CacheMode>,
+        default_mode: CacheMode,
+    ) -> Result<CacheAnalysis> {
+        let effective_mode = mode_override
+            .or_else(|| self.cache_mode_fn.as_ref().map(|f| f(parts)))
+            .unwrap_or(default_mode);
+
+        let is_get_head = parts.method == "GET" || parts.method == "HEAD";
+        let should_cache = effective_mode == CacheMode::IgnoreRules
+            || (is_get_head && effective_mode != CacheMode::NoStore);
+
+        let cache_key = self.create_cache_key(parts, None);
+
+        let cache_bust_keys = if let Some(cache_bust) = &self.cache_bust {
+            cache_bust(parts, &self.cache_key, &cache_key)
+        } else {
+            Vec::new()
+        };
+
+        Ok(CacheAnalysis {
+            cache_key,
+            should_cache,
+            cache_mode: effective_mode,
+            cache_bust_keys,
+            request_parts: parts.clone(),
+            is_get_head,
+        })
     }
 }
 
@@ -1261,23 +1355,12 @@ impl<T: CacheManager> HttpCache<T> {
             }
         }
 
-        // HTTP status codes that are cacheable by default (RFC 7234)
-        let is_cacheable_status = matches!(
-            res.status,
-            200 | 203 | 204 | 206 | 300 | 301 | 404 | 405 | 410 | 414 | 501
+        let is_cacheable = self.options.should_cache_response(
+            mode,
+            &res,
+            is_get_head,
+            &policy,
         );
-
-        let mut is_cacheable = is_get_head
-            && mode != CacheMode::NoStore
-            && is_cacheable_status
-            && policy.is_storable();
-        if mode == CacheMode::IgnoreRules && is_cacheable_status {
-            is_cacheable = true;
-        }
-        // ForceCache mode overrides storable policy for successful responses
-        if mode == CacheMode::ForceCache && is_cacheable_status && is_get_head {
-            is_cacheable = true;
-        }
 
         if is_cacheable {
             Ok(self
@@ -1437,30 +1520,7 @@ where
         parts: &request::Parts,
         mode_override: Option<CacheMode>,
     ) -> Result<CacheAnalysis> {
-        let effective_mode = mode_override
-            .or_else(|| self.options.cache_mode_fn.as_ref().map(|f| f(parts)))
-            .unwrap_or(self.mode);
-
-        let is_get_head = parts.method == "GET" || parts.method == "HEAD";
-        let should_cache = effective_mode == CacheMode::IgnoreRules
-            || (is_get_head && effective_mode != CacheMode::NoStore);
-
-        let cache_key = self.options.create_cache_key(parts, None);
-
-        let cache_bust_keys = if let Some(cache_bust) = &self.options.cache_bust
-        {
-            cache_bust(parts, &self.options.cache_key, &cache_key)
-        } else {
-            Vec::new()
-        };
-
-        Ok(CacheAnalysis {
-            cache_key,
-            should_cache,
-            cache_mode: effective_mode,
-            cache_bust_keys,
-            request_parts: parts.clone(),
-        })
+        self.options.analyze_request_internal(parts, mode_override, self.mode)
     }
 
     async fn lookup_cached_response(
@@ -1516,28 +1576,16 @@ where
 
         // Create policy for the response
         let (parts, body) = response.into_parts();
-        let temp_response = Response::from_parts(parts.clone(), ());
-        let policy = match self.options.cache_options {
-            Some(options) => CachePolicy::new_options(
-                &analysis.request_parts,
-                &temp_response,
-                SystemTime::now(),
-                options,
-            ),
-            None => CachePolicy::new(&analysis.request_parts, &temp_response),
-        };
+        let policy =
+            self.options.create_cache_policy(&analysis.request_parts, &parts);
 
         // Reconstruct response for caching
         let response = Response::from_parts(parts, body);
 
-        // Determine if we should cache based on response-based mode
-        let is_get_head = analysis.request_parts.method == "GET"
-            || analysis.request_parts.method == "HEAD";
-
         let should_cache_response = self.options.should_cache_response(
             effective_cache_mode,
             &http_response,
-            is_get_head,
+            analysis.is_get_head,
             &policy,
         );
 
@@ -1589,30 +1637,7 @@ impl<T: CacheManager> HttpCacheInterface for HttpCache<T> {
         parts: &request::Parts,
         mode_override: Option<CacheMode>,
     ) -> Result<CacheAnalysis> {
-        let effective_mode = mode_override
-            .or_else(|| self.options.cache_mode_fn.as_ref().map(|f| f(parts)))
-            .unwrap_or(self.mode);
-
-        let is_get_head = parts.method == "GET" || parts.method == "HEAD";
-        let should_cache = effective_mode == CacheMode::IgnoreRules
-            || (is_get_head && effective_mode != CacheMode::NoStore);
-
-        let cache_key = self.options.create_cache_key(parts, None);
-
-        let cache_bust_keys = if let Some(cache_bust) = &self.options.cache_bust
-        {
-            cache_bust(parts, &self.options.cache_key, &cache_key)
-        } else {
-            Vec::new()
-        };
-
-        Ok(CacheAnalysis {
-            cache_key,
-            should_cache,
-            cache_mode: effective_mode,
-            cache_bust_keys,
-            request_parts: parts.clone(),
-        })
+        self.options.analyze_request_internal(parts, mode_override, self.mode)
     }
 
     async fn lookup_cached_response(
@@ -1657,26 +1682,15 @@ impl<T: CacheManager> HttpCacheInterface for HttpCache<T> {
         }
 
         // Create policy and determine if we should cache based on response-based mode
-        let policy = match self.options.cache_options {
-            Some(options) => CachePolicy::new_options(
-                &analysis.request_parts,
-                &http_response.parts()?,
-                SystemTime::now(),
-                options,
-            ),
-            None => CachePolicy::new(
-                &analysis.request_parts,
-                &http_response.parts()?,
-            ),
-        };
-
-        let is_get_head = analysis.request_parts.method == "GET"
-            || analysis.request_parts.method == "HEAD";
+        let policy = self.options.create_cache_policy(
+            &analysis.request_parts,
+            &http_response.parts()?,
+        );
 
         let should_cache_response = self.options.should_cache_response(
             effective_cache_mode,
             &http_response,
-            is_get_head,
+            analysis.is_get_head,
             &policy,
         );
 
