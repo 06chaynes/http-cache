@@ -101,6 +101,39 @@
 //! };
 //! ```
 //!
+//! ## Response-Based Cache Mode Override
+//!
+//! Override cache behavior based on the response you receive. This is useful for scenarios like
+//! forcing cache for successful responses even when headers say not to cache, or never caching
+//! error responses like rate limits:
+//!
+//! ```rust
+//! use http_cache::{HttpCacheOptions, CACacheManager, HttpCache, CacheMode};
+//! use std::sync::Arc;
+//!
+//! let manager = CACacheManager::new("./cache".into(), true);
+//!
+//! let options = HttpCacheOptions {
+//!     response_cache_mode_fn: Some(Arc::new(|_request_parts, response| {
+//!         match response.status {
+//!             // Force cache successful responses even if headers say not to cache
+//!             200..=299 => Some(CacheMode::ForceCache),
+//!             // Never cache rate-limited responses  
+//!             429 => Some(CacheMode::NoStore),
+//!             // Use default behavior for everything else
+//!             _ => None,
+//!         }
+//!     })),
+//!     ..Default::default()
+//! };
+//!
+//! let cache = HttpCache {
+//!     mode: CacheMode::Default,
+//!     manager,
+//!     options,
+//! };
+//! ```
+//!
 //! ## Streaming Support
 //!
 //! For handling large responses without full buffering, use the `FileCacheManager`:
@@ -798,6 +831,11 @@ pub type CacheKey = Arc<dyn Fn(&request::Parts) -> String + Send + Sync>;
 /// A closure that takes [`http::request::Parts`] and returns a [`CacheMode`]
 pub type CacheModeFn = Arc<dyn Fn(&request::Parts) -> CacheMode + Send + Sync>;
 
+/// A closure that takes [`http::request::Parts`], [`HttpResponse`] and returns a [`CacheMode`] to override caching behavior based on the response
+pub type ResponseCacheModeFn = Arc<
+    dyn Fn(&request::Parts, &HttpResponse) -> Option<CacheMode> + Send + Sync,
+>;
+
 /// A closure that takes [`http::request::Parts`], [`Option<CacheKey>`], the default cache key ([`&str`]) and returns [`Vec<String>`] of keys to bust the cache for.
 /// An empty vector means that no cache busting will be performed.
 pub type CacheBust = Arc<
@@ -845,6 +883,28 @@ pub type CacheBust = Arc<
 /// };
 /// ```
 ///
+/// ## Response-Based Cache Mode Override
+/// ```rust
+/// use http_cache::{HttpCacheOptions, ResponseCacheModeFn, CacheMode};
+/// use http::request::Parts;
+/// use http_cache::HttpResponse;
+/// use std::sync::Arc;
+///
+/// let options = HttpCacheOptions {
+///     response_cache_mode_fn: Some(Arc::new(|_parts: &Parts, response: &HttpResponse| {
+///         // Force cache 2xx responses even if headers say not to cache
+///         if response.status >= 200 && response.status < 300 {
+///             Some(CacheMode::ForceCache)
+///         } else if response.status == 429 { // Rate limited
+///             Some(CacheMode::NoStore) // Don't cache rate limit responses
+///         } else {
+///             None // Use default behavior
+///         }
+///     })),
+///     ..Default::default()
+/// };
+/// ```
+///
 /// ## Cache Busting for Related Resources
 /// ```rust
 /// use http_cache::{HttpCacheOptions, CacheBust, CacheKey};
@@ -873,6 +933,12 @@ pub struct HttpCacheOptions {
     pub cache_key: Option<CacheKey>,
     /// Override the default cache mode.
     pub cache_mode_fn: Option<CacheModeFn>,
+    /// Override cache behavior based on the response received.
+    /// This function is called after receiving a response and can override
+    /// the cache mode for that specific response. Returning `None` means
+    /// use the default cache mode. This allows fine-grained control over
+    /// caching behavior based on response status, headers, or content.
+    pub response_cache_mode_fn: Option<ResponseCacheModeFn>,
     /// Bust the caches of the returned keys.
     pub cache_bust: Option<CacheBust>,
     /// Determines if the cache status headers should be added to the response.
@@ -885,6 +951,7 @@ impl Default for HttpCacheOptions {
             cache_options: None,
             cache_key: None,
             cache_mode_fn: None,
+            response_cache_mode_fn: None,
             cache_bust: None,
             cache_status_headers: true,
         }
@@ -897,6 +964,10 @@ impl Debug for HttpCacheOptions {
             .field("cache_options", &self.cache_options)
             .field("cache_key", &"Fn(&request::Parts) -> String")
             .field("cache_mode_fn", &"Fn(&request::Parts) -> CacheMode")
+            .field(
+                "response_cache_mode_fn",
+                &"Fn(&request::Parts, &HttpResponse) -> Option<CacheMode>",
+            )
             .field("cache_bust", &"Fn(&request::Parts) -> Vec<String>")
             .field("cache_status_headers", &self.cache_status_headers)
             .finish()
@@ -917,6 +988,70 @@ impl HttpCacheOptions {
                 override_method.unwrap_or_else(|| parts.method.as_str()),
                 parts.uri
             )
+        }
+    }
+
+    /// Converts response parts to HttpResponse format for cache mode evaluation
+    fn parts_to_http_response(
+        &self,
+        parts: &response::Parts,
+        request_parts: &request::Parts,
+    ) -> Result<HttpResponse> {
+        Ok(HttpResponse {
+            body: vec![], // We don't need the full body for cache mode decision
+            headers: parts
+                .headers
+                .iter()
+                .map(|(k, v)| {
+                    (k.to_string(), v.to_str().unwrap_or("").to_string())
+                })
+                .collect(),
+            status: parts.status.as_u16(),
+            url: extract_url_from_request_parts(request_parts)?,
+            version: parts.version.try_into()?,
+        })
+    }
+
+    /// Evaluates response-based cache mode override
+    fn evaluate_response_cache_mode(
+        &self,
+        request_parts: &request::Parts,
+        http_response: &HttpResponse,
+        original_mode: CacheMode,
+    ) -> CacheMode {
+        if let Some(response_cache_mode_fn) = &self.response_cache_mode_fn {
+            if let Some(override_mode) =
+                response_cache_mode_fn(request_parts, http_response)
+            {
+                return override_mode;
+            }
+        }
+        original_mode
+    }
+
+    /// Determines if a response should be cached based on cache mode and HTTP semantics
+    fn should_cache_response(
+        &self,
+        effective_cache_mode: CacheMode,
+        http_response: &HttpResponse,
+        is_get_head: bool,
+        policy: &CachePolicy,
+    ) -> bool {
+        // HTTP status codes that are cacheable by default (RFC 7234)
+        let is_cacheable_status = matches!(
+            http_response.status,
+            200 | 203 | 204 | 206 | 300 | 301 | 404 | 405 | 410 | 414 | 501
+        );
+
+        if is_cacheable_status {
+            match effective_cache_mode {
+                CacheMode::ForceCache => is_get_head,
+                CacheMode::IgnoreRules => true,
+                CacheMode::NoStore => false,
+                _ => is_get_head && policy.is_storable(),
+            }
+        } else {
+            false
         }
     }
 }
@@ -1113,14 +1248,37 @@ impl<T: CacheManager> HttpCache<T> {
             None => middleware.policy(&res)?,
         };
         let is_get_head = middleware.is_method_get_head();
-        let mode = self.cache_mode(middleware)?;
+        let mut mode = self.cache_mode(middleware)?;
+
+        // Allow response-based cache mode override
+        if let Some(response_cache_mode_fn) =
+            &self.options.response_cache_mode_fn
+        {
+            if let Some(override_mode) =
+                response_cache_mode_fn(&middleware.parts()?, &res)
+            {
+                mode = override_mode;
+            }
+        }
+
+        // HTTP status codes that are cacheable by default (RFC 7234)
+        let is_cacheable_status = matches!(
+            res.status,
+            200 | 203 | 204 | 206 | 300 | 301 | 404 | 405 | 410 | 414 | 501
+        );
+
         let mut is_cacheable = is_get_head
             && mode != CacheMode::NoStore
-            && res.status == 200
+            && is_cacheable_status
             && policy.is_storable();
-        if mode == CacheMode::IgnoreRules && res.status == 200 {
+        if mode == CacheMode::IgnoreRules && is_cacheable_status {
             is_cacheable = true;
         }
+        // ForceCache mode overrides storable policy for successful responses
+        if mode == CacheMode::ForceCache && is_cacheable_status && is_get_head {
+            is_cacheable = true;
+        }
+
         if is_cacheable {
             Ok(self
                 .manager
@@ -1325,14 +1483,35 @@ where
         <T::Body as http_body::Body>::Error:
             Into<StreamingError> + Send + Sync + 'static,
     {
+        // For non-cacheable requests based on initial analysis, convert them to manager's body type
         if !analysis.should_cache {
-            // For non-cacheable responses, convert them to the manager's body type
             return self.manager.convert_body(response).await;
         }
 
         // Bust cache keys if needed
         for key in &analysis.cache_bust_keys {
             self.manager.delete(key).await?;
+        }
+
+        // Convert response to HttpResponse format for response-based cache mode evaluation
+        let (parts, body) = response.into_parts();
+        let http_response = self
+            .options
+            .parts_to_http_response(&parts, &analysis.request_parts)?;
+
+        // Check for response-based cache mode override
+        let effective_cache_mode = self.options.evaluate_response_cache_mode(
+            &analysis.request_parts,
+            &http_response,
+            analysis.cache_mode,
+        );
+
+        // Reconstruct response for further processing
+        let response = Response::from_parts(parts, body);
+
+        // If response-based override says NoStore, don't cache
+        if effective_cache_mode == CacheMode::NoStore {
+            return self.manager.convert_body(response).await;
         }
 
         // Create policy for the response
@@ -1351,14 +1530,30 @@ where
         // Reconstruct response for caching
         let response = Response::from_parts(parts, body);
 
-        // Extract URL from request parts for caching
-        let request_url =
-            extract_url_from_request_parts(&analysis.request_parts)?;
+        // Determine if we should cache based on response-based mode
+        let is_get_head = analysis.request_parts.method == "GET"
+            || analysis.request_parts.method == "HEAD";
 
-        // Cache the response using the streaming manager
-        self.manager
-            .put(analysis.cache_key, response, policy, request_url)
-            .await
+        let should_cache_response = self.options.should_cache_response(
+            effective_cache_mode,
+            &http_response,
+            is_get_head,
+            &policy,
+        );
+
+        if should_cache_response {
+            // Extract URL from request parts for caching
+            let request_url =
+                extract_url_from_request_parts(&analysis.request_parts)?;
+
+            // Cache the response using the streaming manager
+            self.manager
+                .put(analysis.cache_key, response, policy, request_url)
+                .await
+        } else {
+            // Don't cache, just convert to manager's body type
+            self.manager.convert_body(response).await
+        }
     }
 
     fn prepare_conditional_request(
@@ -1443,25 +1638,25 @@ impl<T: CacheManager> HttpCacheInterface for HttpCache<T> {
 
         // Convert response to HttpResponse format
         let (parts, body) = response.into_parts();
-        let http_response = HttpResponse {
-            body,
-            headers: parts
-                .headers
-                .iter()
-                .map(|(k, v)| {
-                    (k.to_string(), v.to_str().unwrap_or("").to_string())
-                })
-                .collect(),
-            status: parts.status.as_u16(),
-            url: Url::parse(&format!(
-                "http://localhost{}",
-                analysis.request_parts.uri
-            ))
-            .unwrap_or_else(|_| Url::parse("http://localhost/").unwrap()),
-            version: parts.version.try_into()?,
-        };
+        let mut http_response = self
+            .options
+            .parts_to_http_response(&parts, &analysis.request_parts)?;
+        http_response.body = body.clone(); // Include the body for buffered cache managers
 
-        // Create policy and cache the response
+        // Check for response-based cache mode override
+        let effective_cache_mode = self.options.evaluate_response_cache_mode(
+            &analysis.request_parts,
+            &http_response,
+            analysis.cache_mode,
+        );
+
+        // If response-based override says NoStore, don't cache
+        if effective_cache_mode == CacheMode::NoStore {
+            let response = Response::from_parts(parts, body);
+            return Ok(response);
+        }
+
+        // Create policy and determine if we should cache based on response-based mode
         let policy = match self.options.cache_options {
             Some(options) => CachePolicy::new_options(
                 &analysis.request_parts,
@@ -1475,20 +1670,38 @@ impl<T: CacheManager> HttpCacheInterface for HttpCache<T> {
             ),
         };
 
-        let cached_response =
-            self.manager.put(analysis.cache_key, http_response, policy).await?;
+        let is_get_head = analysis.request_parts.method == "GET"
+            || analysis.request_parts.method == "HEAD";
 
-        // Convert back to standard Response
-        let response_parts = cached_response.parts()?;
-        let mut response = Response::builder()
-            .status(response_parts.status)
-            .version(response_parts.version)
-            .body(cached_response.body)?;
+        let should_cache_response = self.options.should_cache_response(
+            effective_cache_mode,
+            &http_response,
+            is_get_head,
+            &policy,
+        );
 
-        // Copy headers from the response parts
-        *response.headers_mut() = response_parts.headers;
+        if should_cache_response {
+            let cached_response = self
+                .manager
+                .put(analysis.cache_key, http_response, policy)
+                .await?;
 
-        Ok(response)
+            // Convert back to standard Response
+            let response_parts = cached_response.parts()?;
+            let mut response = Response::builder()
+                .status(response_parts.status)
+                .version(response_parts.version)
+                .body(cached_response.body)?;
+
+            // Copy headers from the response parts
+            *response.headers_mut() = response_parts.headers;
+
+            Ok(response)
+        } else {
+            // Don't cache, return original response
+            let response = Response::from_parts(parts, body);
+            Ok(response)
+        }
     }
 
     fn prepare_conditional_request(

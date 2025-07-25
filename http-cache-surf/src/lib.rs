@@ -207,6 +207,7 @@ pub use http_cache::StreamingBody;
 pub use http_cache::CACacheManager;
 
 pub use http_cache::HttpCacheOptions;
+pub use http_cache::ResponseCacheModeFn;
 
 #[cfg(feature = "manager-moka")]
 #[cfg_attr(docsrs, doc(cfg(feature = "manager-moka")))]

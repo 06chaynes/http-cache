@@ -144,6 +144,7 @@ use http_cache::StreamingError;
 #[allow(unused_imports)]
 use http_cache::{
     CacheManager, CacheMode, HttpCache, HttpCacheInterface, HttpCacheOptions,
+    ResponseCacheModeFn,
 };
 #[cfg(feature = "streaming")]
 use http_cache::{

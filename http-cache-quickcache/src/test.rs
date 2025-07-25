@@ -9,6 +9,9 @@ use reqwest_middleware::ClientBuilder;
 use url::Url;
 use wiremock::{matchers::method, Mock, MockServer, ResponseTemplate};
 
+use macro_rules_attribute::apply;
+use smol_macros::test;
+
 pub(crate) fn build_mock(
     cache_control_val: &str,
     body: &[u8],
@@ -30,7 +33,7 @@ const TEST_BODY: &[u8] = b"test";
 
 const CACHEABLE_PUBLIC: &str = "max-age=86400, public";
 
-#[tokio::test]
+#[apply(test!)]
 async fn quickcache() -> Result<()> {
     // Added to test custom Debug impl
     assert_eq!(
@@ -119,6 +122,7 @@ async fn default_mode_with_options() -> Result<()> {
                     ..Default::default()
                 }),
                 cache_mode_fn: None,
+                response_cache_mode_fn: None,
                 cache_bust: None,
                 cache_status_headers: true,
             },

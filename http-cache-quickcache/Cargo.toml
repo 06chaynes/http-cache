@@ -38,6 +38,8 @@ http = "1.2.0"
 reqwest = { version = "0.12.12", default-features = false }
 reqwest-middleware = "0.4.0"
 tokio = { version = "1.43.0", features = [ "macros", "rt", "rt-multi-thread" ] }
+macro_rules_attribute = "0.2.0"
+smol-macros = "0.1.1"
 wiremock = "0.6.2"
 bytes = "1.8.0"
 http-body = "1.0.1"

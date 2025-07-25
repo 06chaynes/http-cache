@@ -236,7 +236,7 @@ use url::Url;
 
 pub use http_cache::{
     CacheManager, CacheMode, CacheOptions, HttpCache, HttpCacheOptions,
-    HttpResponse,
+    HttpResponse, ResponseCacheModeFn,
 };
 
 #[cfg(feature = "streaming")]

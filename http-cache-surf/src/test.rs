@@ -110,6 +110,7 @@ mod with_moka {
                 cache_mode_fn: None,
                 cache_bust: None,
                 cache_status_headers: true,
+                response_cache_mode_fn: None,
             },
         }));
 
@@ -517,6 +518,7 @@ mod with_moka {
                 cache_mode_fn: None,
                 cache_bust: None,
                 cache_status_headers: true,
+                response_cache_mode_fn: None,
             },
         }));
 
@@ -554,6 +556,7 @@ mod with_moka {
                 cache_mode_fn: None,
                 cache_bust: None,
                 cache_status_headers: true,
+                response_cache_mode_fn: None,
             },
         }));
 
@@ -593,6 +596,7 @@ mod with_moka {
                 })),
                 cache_bust: None,
                 cache_status_headers: true,
+                response_cache_mode_fn: None,
             },
         }));
 
@@ -634,6 +638,7 @@ mod with_moka {
                 cache_mode_fn: None,
                 cache_bust: None,
                 cache_status_headers: false,
+                response_cache_mode_fn: None,
             },
         }));
 
@@ -684,6 +689,7 @@ mod with_moka {
                     },
                 )),
                 cache_status_headers: true,
+                response_cache_mode_fn: None,
             },
         }));
 
@@ -1219,6 +1225,98 @@ mod streaming_tests {
         // Test body collection
         let collected = buffered_body.collect().await?.to_bytes();
         assert_eq!(collected, data);
+
+        Ok(())
+    }
+
+    #[apply(test!)]
+    async fn custom_response_cache_mode_fn() -> Result<()> {
+        let mock_server = MockServer::start().await;
+
+        // Mock endpoint that returns 200 with no-cache headers
+        let no_cache_mock = Mock::given(method(GET))
+            .and(wiremock::matchers::path("/api/data"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header(
+                        "cache-control",
+                        "no-cache, no-store, must-revalidate",
+                    )
+                    .insert_header("pragma", "no-cache")
+                    .set_body_bytes(TEST_BODY),
+            )
+            .expect(2);
+
+        // Mock endpoint that returns 429 with cacheable headers
+        let rate_limit_mock = Mock::given(method(GET))
+            .and(wiremock::matchers::path("/api/rate-limited"))
+            .respond_with(
+                ResponseTemplate::new(429)
+                    .insert_header("cache-control", "public, max-age=300")
+                    .insert_header("retry-after", "60")
+                    .set_body_bytes(b"Rate limit exceeded"),
+            )
+            .expect(2);
+
+        let _no_cache_guard =
+            mock_server.register_as_scoped(no_cache_mock).await;
+        let _rate_limit_guard =
+            mock_server.register_as_scoped(rate_limit_mock).await;
+
+        let manager = MokaManager::default();
+
+        // Configure cache with response-based mode override
+        let client = Client::new().with(Cache(HttpCache {
+            mode: CacheMode::Default,
+            manager: manager.clone(),
+            options: HttpCacheOptions {
+                cache_key: None,
+                cache_options: None,
+                cache_mode_fn: None,
+                cache_bust: None,
+                cache_status_headers: true,
+                response_cache_mode_fn: Some(Arc::new(
+                    |_request_parts, response| {
+                        match response.status {
+                            // Force cache 2xx responses even if headers say not to cache
+                            200..=299 => Some(CacheMode::ForceCache),
+                            // Never cache rate-limited responses
+                            429 => Some(CacheMode::NoStore),
+                            _ => None, // Use default behavior
+                        }
+                    },
+                )),
+            },
+        }));
+
+        // Test 1: Force cache 200 response despite no-cache headers
+        let success_url = format!("{}/api/data", &mock_server.uri());
+        let res = client.get(&success_url).send().await?;
+        assert_eq!(res.status(), 200);
+
+        // Verify it was cached despite no-cache headers
+        let cache_key = format!("{}:{}", GET, &Url::parse(&success_url)?);
+        let cached_data = manager.get(&cache_key).await?;
+        assert!(cached_data.is_some());
+        let (cached_response, _) = cached_data.unwrap();
+        assert_eq!(cached_response.body, TEST_BODY);
+
+        // Test 2: Don't cache 429 response despite cacheable headers
+        let rate_limit_url = format!("{}/api/rate-limited", &mock_server.uri());
+        let res = client.get(&rate_limit_url).send().await?;
+        assert_eq!(res.status(), 429);
+
+        // Verify it was NOT cached despite cacheable headers
+        let cache_key = format!("{}:{}", GET, &Url::parse(&rate_limit_url)?);
+        let cached_data = manager.get(&cache_key).await?;
+        assert!(cached_data.is_none());
+
+        // Test hitting the same endpoints again to verify cache behavior
+        let res = client.get(&success_url).send().await?;
+        assert_eq!(res.status(), 200);
+
+        let res = client.get(&rate_limit_url).send().await?;
+        assert_eq!(res.status(), 429);
 
         Ok(())
     }

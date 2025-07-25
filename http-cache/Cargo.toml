@@ -44,6 +44,8 @@ smol = "2.0.2"
 http-cache-semantics = "2.1.0"
 tokio = { version = "1.43.0", features = [ "macros", "rt", "rt-multi-thread" ] }
 tempfile = "3.13.0"
+macro_rules_attribute = "0.2.0"
+smol-macros = "0.1.1"
 
 [features]
 default = ["manager-cacache", "cacache-smol"]
