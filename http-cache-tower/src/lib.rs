@@ -69,19 +69,18 @@
 //!
 //! ### Streaming Support
 //!
-//! For handling large responses without buffering, use `StreamingCacheWrapper`:
+//! For handling large responses without buffering, use `StreamingManager`:
 //!
 //! ```rust
-//! use http_cache_tower::{HttpCacheStreamingLayer, StreamingCacheWrapper};
-//! use http_cache::CACacheManager;
+//! use http_cache_tower::HttpCacheStreamingLayer;
+//! use http_cache::StreamingManager;
 //! use std::path::PathBuf;
 //!
 //! # #[tokio::main]
 //! # async fn main() {
 //! // Create streaming cache setup
-//! let cache_manager = CACacheManager::new("./streaming-cache".into(), true);
-//! let streaming_cache = StreamingCacheWrapper::new(cache_manager);
-//! let streaming_layer = HttpCacheStreamingLayer::new(streaming_cache);
+//! let streaming_manager = StreamingManager::new("./streaming-cache".into());
+//! let streaming_layer = HttpCacheStreamingLayer::new(streaming_manager);
 //!
 //! // Use with your service
 //! // let service = streaming_layer.layer(your_service);
@@ -164,8 +163,7 @@ use http_cache::{
 };
 #[cfg(feature = "streaming")]
 use http_cache::{
-    HttpCacheStreamInterface, HttpStreamingCache, StreamingBody,
-    StreamingCacheManager,
+    HttpCacheStreamInterface, HttpStreamingCache, StreamingCacheManager,
 };
 use std::{
     pin::Pin,
@@ -186,179 +184,6 @@ where
 {
     let collected = BodyExt::collect(body).await?;
     Ok(collected.to_bytes().to_vec())
-}
-
-#[cfg(feature = "streaming")]
-/// A streaming cache wrapper that adapts regular cache managers to work with streaming responses.
-///
-/// This wrapper allows regular [`CacheManager`] implementations to work with Tower services
-/// that use streaming bodies, by handling the conversion between buffered cached content
-/// and streaming bodies.
-///
-/// # Example
-///
-/// ```rust
-/// use http_cache_tower::StreamingCacheWrapper;
-/// use http_cache::CACacheManager;
-///
-/// # #[tokio::main]
-/// # async fn main() {
-/// let cache_manager = CACacheManager::new("./cache".into(), true);
-/// let streaming_wrapper = StreamingCacheWrapper::new(cache_manager);
-/// # }
-/// ```
-#[derive(Debug, Clone)]
-pub struct StreamingCacheWrapper<CM: CacheManager> {
-    inner: CM,
-}
-
-#[cfg(feature = "streaming")]
-impl<CM: CacheManager> StreamingCacheWrapper<CM> {
-    /// Create a new streaming cache wrapper around a cache manager.
-    ///
-    /// # Arguments
-    ///
-    /// * `cache_manager` - The underlying cache manager to wrap
-    ///
-    /// # Example
-    ///
-    /// ```rust
-    /// use http_cache_tower::StreamingCacheWrapper;
-    /// use http_cache::CACacheManager;
-    ///
-    /// # #[tokio::main]
-    /// # async fn main() {
-    /// let cache_manager = CACacheManager::new("./cache".into(), true);
-    /// let wrapper = StreamingCacheWrapper::new(cache_manager);
-    /// # }
-    /// ```
-    pub fn new(cache_manager: CM) -> Self {
-        Self { inner: cache_manager }
-    }
-}
-
-#[cfg(feature = "streaming")]
-#[async_trait::async_trait]
-impl<CM: CacheManager> StreamingCacheManager for StreamingCacheWrapper<CM> {
-    type Body = StreamingBody<
-        http_body_util::combinators::BoxBody<Bytes, TowerStreamingError>,
-    >;
-
-    async fn get(
-        &self,
-        cache_key: &str,
-    ) -> http_cache::Result<
-        Option<(Response<Self::Body>, http_cache_semantics::CachePolicy)>,
-    > {
-        if let Some((http_response, policy)) = self.inner.get(cache_key).await?
-        {
-            // Convert HttpResponse to Response<StreamingBody> using helper
-            let body = StreamingBody::buffered(Bytes::from(
-                http_response.body.clone(),
-            ));
-            let response =
-                http_cache::HttpCacheOptions::http_response_to_response(
-                    &http_response,
-                    body,
-                )
-                .map_err(StreamingError::new)?;
-
-            Ok(Some((response, policy)))
-        } else {
-            Ok(None)
-        }
-    }
-
-    async fn put<B>(
-        &self,
-        cache_key: String,
-        response: Response<B>,
-        policy: http_cache_semantics::CachePolicy,
-        request_url: url::Url,
-    ) -> http_cache::Result<Response<Self::Body>>
-    where
-        B: Body + Send + 'static,
-        B::Data: Send,
-        B::Error: Into<StreamingError>,
-    {
-        let (parts, body) = response.into_parts();
-
-        // Collect the body into memory for caching
-        let body_bytes = collect_body(body)
-            .await
-            .map_err(|e| StreamingError::new(e.into()))?;
-
-        // Convert to HttpResponse format for the underlying cache manager
-        // Use the provided request_url directly - this solves the URL reconstruction problem
-        let http_response = http_cache::HttpResponse {
-            body: body_bytes.clone(),
-            headers: http_cache::HttpCacheOptions::headers_to_hashmap(
-                &parts.headers,
-            ),
-            status: parts.status.as_u16(),
-            url: request_url,
-            version: parts.version.try_into()?,
-        };
-
-        // Cache the response
-        let cached_response =
-            self.inner.put(cache_key, http_response, policy).await?;
-
-        // Convert back to streaming response using helper
-        let body =
-            StreamingBody::buffered(Bytes::from(cached_response.body.clone()));
-        let response = http_cache::HttpCacheOptions::http_response_to_response(
-            &cached_response,
-            body,
-        )
-        .map_err(StreamingError::new)?;
-
-        Ok(response)
-    }
-
-    async fn convert_body<B>(
-        &self,
-        response: Response<B>,
-    ) -> http_cache::Result<Response<Self::Body>>
-    where
-        B: Body + Send + 'static,
-        B::Data: Send,
-        B::Error: Into<StreamingError>,
-    {
-        let (parts, body) = response.into_parts();
-
-        // For non-cacheable responses, we need to collect the body and wrap it
-        // This is a limitation but necessary for the generic interface
-        let body_bytes = collect_body(body)
-            .await
-            .map_err(|e| StreamingError::new(e.into()))?;
-
-        let streaming_body = StreamingBody::buffered(Bytes::from(body_bytes));
-        let response = Response::from_parts(parts, streaming_body);
-
-        Ok(response)
-    }
-
-    async fn delete(&self, cache_key: &str) -> http_cache::Result<()> {
-        self.inner.delete(cache_key).await
-    }
-
-    #[cfg(feature = "streaming")]
-    fn body_to_bytes_stream(
-        body: Self::Body,
-    ) -> impl futures_util::Stream<
-        Item = std::result::Result<
-            bytes::Bytes,
-            Box<dyn std::error::Error + Send + Sync>,
-        >,
-    > + Send
-    where
-        <Self::Body as http_body::Body>::Data: Send,
-        <Self::Body as http_body::Body>::Error: Send + Sync + 'static,
-    {
-        // Use the StreamingBody's built-in conversion method
-        body.into_bytes_stream()
-    }
 }
 
 /// HTTP cache layer for Tower services.
@@ -514,7 +339,8 @@ where
 /// # Example
 ///
 /// ```rust
-/// use http_cache_tower::{HttpCacheStreamingLayer, StreamingCacheWrapper, CACacheManager};
+/// use http_cache_tower::HttpCacheStreamingLayer;
+/// use http_cache::StreamingManager;
 /// use tower::ServiceBuilder;
 /// use tower::service_fn;
 /// use http_cache::StreamingBody;
@@ -525,9 +351,8 @@ where
 ///
 /// # #[tokio::main]
 /// # async fn main() {
-/// let cache_manager = CACacheManager::new("./cache".into(), true);
-/// let streaming_wrapper = StreamingCacheWrapper::new(cache_manager);
-/// let streaming_layer = HttpCacheStreamingLayer::new(streaming_wrapper);
+/// let streaming_manager = StreamingManager::new("./cache".into());
+/// let streaming_layer = HttpCacheStreamingLayer::new(streaming_manager);
 ///
 /// // Use with ServiceBuilder
 /// let service = ServiceBuilder::new()
@@ -562,13 +387,13 @@ where
     /// # Example
     ///
     /// ```rust
-    /// use http_cache_tower::{HttpCacheStreamingLayer, StreamingCacheWrapper, CACacheManager};
+    /// use http_cache_tower::HttpCacheStreamingLayer;
+    /// use http_cache::StreamingManager;
     ///
     /// # #[tokio::main]
     /// # async fn main() {
-    /// let cache_manager = CACacheManager::new("./cache".into(), true);
-    /// let streaming_wrapper = StreamingCacheWrapper::new(cache_manager);
-    /// let layer = HttpCacheStreamingLayer::new(streaming_wrapper);
+    /// let streaming_manager = StreamingManager::new("./cache".into());
+    /// let layer = HttpCacheStreamingLayer::new(streaming_manager);
     /// # }
     /// ```
     pub fn new(cache_manager: CM) -> Self {
@@ -593,13 +418,12 @@ where
     /// # Example
     ///
     /// ```rust
-    /// use http_cache_tower::{HttpCacheStreamingLayer, StreamingCacheWrapper, CACacheManager};
-    /// use http_cache::HttpCacheOptions;
+    /// use http_cache_tower::HttpCacheStreamingLayer;
+    /// use http_cache::{StreamingManager, HttpCacheOptions};
     ///
     /// # #[tokio::main]
     /// # async fn main() {
-    /// let cache_manager = CACacheManager::new("./cache".into(), true);
-    /// let streaming_wrapper = StreamingCacheWrapper::new(cache_manager);
+    /// let streaming_manager = StreamingManager::new("./cache".into());
     ///
     /// let options = HttpCacheOptions {
     ///     cache_key: Some(std::sync::Arc::new(|req: &http::request::Parts| {
@@ -608,7 +432,7 @@ where
     ///     ..Default::default()
     /// };
     ///
-    /// let layer = HttpCacheStreamingLayer::with_options(streaming_wrapper, options);
+    /// let layer = HttpCacheStreamingLayer::with_options(streaming_manager, options);
     /// # }
     /// ```
     pub fn with_options(cache_manager: CM, options: HttpCacheOptions) -> Self {
@@ -632,17 +456,16 @@ where
     /// # Example
     ///
     /// ```rust
-    /// use http_cache_tower::{HttpCacheStreamingLayer, StreamingCacheWrapper, CACacheManager};
-    /// use http_cache::{HttpStreamingCache, CacheMode, HttpCacheOptions};
+    /// use http_cache_tower::HttpCacheStreamingLayer;
+    /// use http_cache::{StreamingManager, HttpStreamingCache, CacheMode, HttpCacheOptions};
     ///
     /// # #[tokio::main]
     /// # async fn main() {
-    /// let cache_manager = CACacheManager::new("./cache".into(), true);
-    /// let streaming_wrapper = StreamingCacheWrapper::new(cache_manager);
+    /// let streaming_manager = StreamingManager::new("./cache".into());
     ///
     /// let cache = HttpStreamingCache {
     ///     mode: CacheMode::ForceCache,
-    ///     manager: streaming_wrapper,
+    ///     manager: streaming_manager,
     ///     options: HttpCacheOptions::default(),
     /// };
     ///

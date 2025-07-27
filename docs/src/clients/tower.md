@@ -12,6 +12,7 @@ cargo add http-cache-tower
 
 - `manager-cacache`: (default) Enables the [`CACacheManager`](https://docs.rs/http-cache/latest/http_cache/struct.CACacheManager.html) backend cache manager.
 - `manager-moka`: Enables the [`MokaManager`](https://docs.rs/http-cache/latest/http_cache/struct.MokaManager.html) backend cache manager.
+- `streaming`: Enables streaming cache support for memory-efficient handling of large response bodies.
 
 ## Basic Usage
 
@@ -58,11 +59,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ## Streaming Usage
 
-For large responses or when memory efficiency is important, use the streaming cache layer:
+For large responses or when memory efficiency is important, use the streaming cache layer with the `streaming` feature:
+
+```toml
+[dependencies]
+http-cache-tower = { version = "1.0", features = ["streaming"] }
+```
 
 ```rust
-use http_cache_tower::{HttpCacheStreamingLayer, StreamingCacheWrapper};
-use http_cache::CACacheManager;
+use http_cache_tower::HttpCacheStreamingLayer;
+use http_cache::StreamingManager;
 use tower::{ServiceBuilder, ServiceExt};
 use http::{Request, Response};
 use http_body_util::Full;
@@ -72,11 +78,10 @@ use std::path::PathBuf;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create a streaming cache manager
-    let cache_manager = CACacheManager::new(PathBuf::from("./cache"), false);
-    let streaming_wrapper = StreamingCacheWrapper::new(cache_manager);
+    let streaming_manager = StreamingManager::new(PathBuf::from("./cache"));
 
     // Create the streaming cache layer
-    let cache_layer = HttpCacheStreamingLayer::new(streaming_wrapper);
+    let cache_layer = HttpCacheStreamingLayer::new(streaming_manager);
 
     // Build your service stack
     let service = ServiceBuilder::new()
