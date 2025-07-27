@@ -1,4 +1,4 @@
-//! Streaming memory profiling example
+//! Streaming memory profiling example for reqwest
 //!
 //! This example demonstrates and compares memory usage between buffered and streaming cache
 //! implementations when handling large responses. It's only available when the
@@ -8,17 +8,16 @@
 
 #![cfg(feature = "streaming")]
 
-use bytes::Bytes;
-use http::{Request, Response, StatusCode};
-use http_body_util::{BodyExt, Full};
 use http_cache::{CACacheManager, FileCacheManager};
-use http_cache_tower::{HttpCacheLayer, HttpCacheStreamingLayer};
+use http_cache_reqwest::{Cache, StreamingCache};
+use reqwest::Client;
+use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 use std::alloc::{GlobalAlloc, Layout, System};
-use std::future::Future;
-use std::pin::Pin;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::task::{Context, Poll};
-use tower::{Layer, Service, ServiceExt};
+use std::time::Duration;
+use tokio::time::sleep;
+use wiremock::matchers::{method, path};
+use wiremock::{Mock, MockServer, ResponseTemplate};
 
 // Memory tracking allocator
 struct MemoryTracker {
@@ -57,107 +56,69 @@ unsafe impl GlobalAlloc for MemoryTracker {
 #[global_allocator]
 static MEMORY_TRACKER: MemoryTracker = MemoryTracker::new();
 
-// Service that generates large responses
-#[derive(Clone)]
-struct LargeResponseService {
-    size: usize,
-}
+// Create a mock server that serves large responses
+async fn create_mock_server(payload_size: usize) -> MockServer {
+    let mock_server = MockServer::start().await;
 
-impl LargeResponseService {
-    fn new(size: usize) -> Self {
-        Self { size }
-    }
-}
+    let large_body = vec![b'X'; payload_size];
+    let response = ResponseTemplate::new(200)
+        .set_body_bytes(large_body)
+        .append_header("cache-control", "max-age=3600, public")
+        .append_header("content-type", "application/octet-stream");
 
-impl Service<Request<Full<Bytes>>> for LargeResponseService {
-    type Response = Response<Full<Bytes>>;
-    type Error = Box<dyn std::error::Error + Send + Sync>;
-    type Future = Pin<
-        Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>,
-    >;
+    Mock::given(method("GET"))
+        .and(path("/large-response"))
+        .respond_with(response)
+        .mount(&mock_server)
+        .await;
 
-    fn poll_ready(
-        &mut self,
-        _cx: &mut Context<'_>,
-    ) -> Poll<Result<(), Self::Error>> {
-        Poll::Ready(Ok(()))
-    }
-
-    fn call(&mut self, _req: Request<Full<Bytes>>) -> Self::Future {
-        let size = self.size;
-
-        Box::pin(async move {
-            // Create large response data
-            let data = vec![b'X'; size];
-
-            let response = Response::builder()
-                .status(StatusCode::OK)
-                .header("cache-control", "max-age=3600, public")
-                .header("content-type", "application/octet-stream")
-                .header("content-length", size.to_string())
-                .body(Full::new(Bytes::from(data)))
-                .map_err(|e| {
-                    Box::new(e) as Box<dyn std::error::Error + Send + Sync>
-                })?;
-
-            Ok(response)
-        })
-    }
+    mock_server
 }
 
 async fn measure_cache_hit_memory_usage(
     payload_size: usize,
     is_streaming: bool,
 ) -> (usize, usize, usize) {
-    // Create a temporary directory for the cache
-    let temp_dir = tempfile::tempdir().unwrap();
+    let mock_server = create_mock_server(payload_size).await;
+    let url = format!("{}/large-response", mock_server.uri());
 
     if is_streaming {
+        // Create streaming cache setup
+        let temp_dir = tempfile::tempdir().unwrap();
         let file_cache_manager =
             FileCacheManager::new(temp_dir.path().to_path_buf());
-        let streaming_layer = HttpCacheStreamingLayer::new(file_cache_manager);
-        let service = LargeResponseService::new(payload_size);
-        let cached_service = streaming_layer.layer(service);
+        let streaming_cache = StreamingCache::new(
+            file_cache_manager,
+            http_cache::CacheMode::Default,
+        );
+
+        let client: ClientWithMiddleware =
+            ClientBuilder::new(Client::new()).with(streaming_cache).build();
 
         // First request to populate cache
-        let request1 = Request::builder()
-            .uri("https://example.com/cache-hit-test")
-            .body(Full::new(Bytes::new()))
-            .unwrap();
-        let _ = cached_service
-            .clone()
-            .oneshot(request1)
-            .await
-            .unwrap()
-            .into_body()
-            .collect()
-            .await;
+        let _response1 = client.get(&url).send().await.unwrap();
+        let _body1 = _response1.bytes().await.unwrap();
+
+        // Wait a moment to ensure cache is written
+        sleep(Duration::from_millis(100)).await;
 
         // Reset memory tracking before cache hit test
         MEMORY_TRACKER.reset();
         let initial_memory = MEMORY_TRACKER.current_usage();
 
         // Second request (cache hit)
-        let request2 = Request::builder()
-            .uri("https://example.com/cache-hit-test")
-            .body(Full::new(Bytes::new()))
-            .unwrap();
-
-        let response = cached_service.oneshot(request2).await.unwrap();
+        let response2 = client.get(&url).send().await.unwrap();
         let peak_after_response = MEMORY_TRACKER.current_usage();
 
-        // Stream from cached file
-        let body = response.into_body();
+        // Stream response body
         let mut peak_during_streaming = peak_after_response;
+        let body_bytes = response2.bytes().await.unwrap();
 
-        let mut body_stream = std::pin::pin!(body);
-        while let Some(frame_result) = body_stream.frame().await {
-            let frame = frame_result.unwrap();
-            if let Some(_chunk) = frame.data_ref() {
-                let current_memory = MEMORY_TRACKER.current_usage();
-                peak_during_streaming =
-                    peak_during_streaming.max(current_memory);
-            }
+        // Simulate chunk processing to track memory during streaming
+        for chunk in body_bytes.chunks(8192) {
+            let _processed_chunk = chunk;
+            let current_memory = MEMORY_TRACKER.current_usage();
+            peak_during_streaming = peak_during_streaming.max(current_memory);
         }
 
         let peak_after_consumption = MEMORY_TRACKER.current_usage();
@@ -168,51 +129,43 @@ async fn measure_cache_hit_memory_usage(
             peak_after_consumption - initial_memory,
         )
     } else {
+        // Create buffered cache setup
+        let temp_dir = tempfile::tempdir().unwrap();
         let cache_manager =
             CACacheManager::new(temp_dir.path().to_path_buf(), false);
-        let cache_layer = HttpCacheLayer::new(cache_manager);
-        let service = LargeResponseService::new(payload_size);
-        let cached_service = cache_layer.layer(service);
+        let cache = Cache(http_cache::HttpCache {
+            mode: http_cache::CacheMode::Default,
+            manager: cache_manager,
+            options: http_cache::HttpCacheOptions::default(),
+        });
+
+        let client: ClientWithMiddleware =
+            ClientBuilder::new(Client::new()).with(cache).build();
 
         // First request to populate cache
-        let request1 = Request::builder()
-            .uri("https://example.com/cache-hit-test")
-            .body(Full::new(Bytes::new()))
-            .unwrap();
-        let _ = cached_service
-            .clone()
-            .oneshot(request1)
-            .await
-            .unwrap()
-            .into_body()
-            .collect()
-            .await;
+        let _response1 = client.get(&url).send().await.unwrap();
+        let _body1 = _response1.bytes().await.unwrap();
+
+        // Wait a moment to ensure cache is written
+        sleep(Duration::from_millis(100)).await;
 
         // Reset memory tracking before cache hit test
         MEMORY_TRACKER.reset();
         let initial_memory = MEMORY_TRACKER.current_usage();
 
         // Second request (cache hit)
-        let request2 = Request::builder()
-            .uri("https://example.com/cache-hit-test")
-            .body(Full::new(Bytes::new()))
-            .unwrap();
-
-        let response = cached_service.oneshot(request2).await.unwrap();
+        let response2 = client.get(&url).send().await.unwrap();
         let peak_after_response = MEMORY_TRACKER.current_usage();
 
-        // Stream cached response
-        let body = response.into_body();
+        // Read response body
         let mut peak_during_streaming = peak_after_response;
+        let body_bytes = response2.bytes().await.unwrap();
 
-        let mut body_stream = std::pin::pin!(body);
-        while let Some(frame_result) = body_stream.frame().await {
-            let frame = frame_result.unwrap();
-            if let Some(_chunk) = frame.data_ref() {
-                let current_memory = MEMORY_TRACKER.current_usage();
-                peak_during_streaming =
-                    peak_during_streaming.max(current_memory);
-            }
+        // Simulate chunk processing to track memory during streaming
+        for chunk in body_bytes.chunks(8192) {
+            let _processed_chunk = chunk;
+            let current_memory = MEMORY_TRACKER.current_usage();
+            peak_during_streaming = peak_during_streaming.max(current_memory);
         }
 
         let peak_after_consumption = MEMORY_TRACKER.current_usage();
@@ -227,8 +180,8 @@ async fn measure_cache_hit_memory_usage(
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    println!("Memory Usage Analysis: Buffered vs Streaming Cache");
-    println!("==================================================");
+    println!("Memory Usage Analysis: Buffered vs Streaming Cache (Reqwest)");
+    println!("============================================================");
     println!("This analysis measures memory efficiency differences between");
     println!("traditional buffered caching and file-based streaming caching.");
     println!("Measurements are taken during cache hits to compare memory usage patterns.\n");

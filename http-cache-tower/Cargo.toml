@@ -43,7 +43,7 @@ url = "2.5"
 tempfile = "3.13.0"
 hyper = { version = "1.6.0", features = ["full"] }
 tower = { version = "0.5.2", features = ["util"] }
-criterion = { version = "0.6", features = ["html_reports"] }
+criterion = { version = "0.7", features = ["html_reports"] }
 
 [[bench]]
 name = "streaming_benchmark"

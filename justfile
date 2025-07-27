@@ -50,10 +50,14 @@
     echo "\n----------\nTower middleware:\n"
     cd http-cache-tower && cargo criterion --all-features
 
-# Run the streaming memory profile example
+# Run the streaming memory profile examples
 @memory-profile:
-    echo "----------\nStreaming memory profile analysis:\n"
+    echo "----------\nTower streaming memory profile analysis:\n"
     cd http-cache-tower && cargo run --example streaming_memory_profile --features streaming
+    echo "\n----------\nReqwest streaming memory profile analysis:\n"
+    cd http-cache-reqwest && cargo run --example streaming_memory_profile --features streaming
+    echo "\n----------\nSurf streaming memory profile analysis:\n"
+    cd http-cache-surf && cargo run --example streaming_memory_profile --features streaming
 
 # Generate a changelog with git-cliff
 changelog TAG:
