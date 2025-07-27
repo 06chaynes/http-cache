@@ -18,10 +18,7 @@ rust-version = "1.82.0"
 [dependencies]
 anyhow = "1.0.95"
 async-trait = "0.1.85"
-bytes = "1.8.0"
 http = "1.2.0"
-http-body = "1.0.1"
-http-body-util = "0.1.2"
 http-cache-semantics = "2.1.0"
 http-types = "2.12.0"
 serde = { version = "1.0.217", features = ["derive"] }
@@ -42,14 +39,11 @@ tempfile = "3.13.0"
 macro_rules_attribute = "0.2.0"
 smol-macros = "0.1.1"
 tokio = { version = "1.46", features = ["net", "rt", "macros"] }
-bytes = "1.8.0"
-async-std = { version = "1.0", features = ["attributes"] }
 
 [features]
 default = ["manager-cacache"]
 manager-cacache = ["http-cache/manager-cacache", "http-cache/cacache-smol"]
 manager-moka = ["http-cache/manager-moka"]
-streaming = ["http-cache/streaming-smol"]
 
 [package.metadata.docs.rs]
 all-features = true

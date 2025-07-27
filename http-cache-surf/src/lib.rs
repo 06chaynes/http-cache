@@ -15,8 +15,7 @@
 //! HTTP caching middleware for the surf HTTP client.
 //!
 //! This crate provides middleware for the surf HTTP client that implements HTTP caching
-//! according to RFC 7234. It supports both traditional buffered responses and streaming
-//! responses for large payloads, with various cache modes and storage backends.
+//! according to RFC 7234. It supports various cache modes and storage backends.
 //!
 //! ## Basic Usage
 //!
@@ -45,32 +44,6 @@
 //!     let mut cached_res = client.get("https://httpbin.org/cache/60").await?;
 //!     println!("Cached response: {}", cached_res.body_string().await?);
 //!     
-//!     Ok(())
-//! }
-//! ```
-//!
-//! ## Streaming Support
-//!
-//! Handle large responses without buffering them entirely in memory:
-//!
-//! ```no_run
-//! use surf::Client;
-//! use http_cache_surf::StreamingCache;  
-//! use http_cache::{FileCacheManager, CacheMode};
-//! use macro_rules_attribute::apply;
-//! use smol_macros::main;
-//!
-//! #[apply(main!)]
-//! async fn main() -> surf::Result<()> {
-//!     let client = surf::Client::new()
-//!         .with(StreamingCache::new(
-//!             FileCacheManager::new("./cache".into()),
-//!             CacheMode::Default,
-//!         ));
-//!
-//!     // Stream large responses
-//!     let mut res = client.get("https://httpbin.org/stream/20").await?;
-//!     println!("Streaming response: {}", res.body_string().await?);
 //!     Ok(())
 //! }
 //! ```
@@ -175,18 +148,13 @@ use std::time::SystemTime;
 use std::{collections::HashMap, str::FromStr};
 
 use anyhow::anyhow;
-use bytes::Bytes;
 use http::{
     header::CACHE_CONTROL,
     request::{self, Parts},
 };
-use http_body::Body;
-use http_body_util::BodyExt;
-#[cfg(feature = "streaming")]
-pub use http_cache::StreamingCacheManager;
 use http_cache::{
     BadHeader, BoxError, CacheManager, CacheOptions, HitOrMiss, HttpResponse,
-    HttpStreamingCache, Middleware, Result, XCACHE, XCACHELOOKUP,
+    Middleware, Result, XCACHE, XCACHELOOKUP,
 };
 pub use http_cache::{CacheMode, HttpCache};
 use http_cache_semantics::CachePolicy;
@@ -197,10 +165,6 @@ use http_types::{
 };
 use http_types::{Method as HttpTypesMethod, Request, Url};
 use surf::{middleware::Next, Client};
-
-#[cfg(feature = "streaming")]
-// Re-export streaming types for convenience
-pub use http_cache::StreamingBody;
 
 // Re-export managers and cache types
 #[cfg(feature = "manager-cacache")]
@@ -217,40 +181,9 @@ pub use http_cache::{MokaCache, MokaCacheBuilder, MokaManager};
 #[derive(Debug, Clone)]
 pub struct Cache<T: CacheManager>(pub HttpCache<T>);
 
-#[cfg(feature = "streaming")]
-/// Streaming cache wrapper that implements [`surf::middleware::Middleware`] for streaming responses
-#[derive(Debug, Clone)]
-pub struct StreamingCache<T: StreamingCacheManager> {
-    cache: HttpStreamingCache<T>,
-}
-
-#[cfg(feature = "streaming")]
-impl<T: StreamingCacheManager> StreamingCache<T> {
-    /// Create a new streaming cache with the given manager and mode
-    pub fn new(manager: T, mode: CacheMode) -> Self {
-        Self {
-            cache: HttpStreamingCache {
-                mode,
-                manager,
-                options: Default::default(),
-            },
-        }
-    }
-
-    /// Create a new streaming cache with custom options
-    pub fn with_options(
-        manager: T,
-        mode: CacheMode,
-        options: HttpCacheOptions,
-    ) -> Self {
-        Self { cache: HttpStreamingCache { mode, manager, options } }
-    }
-}
 mod error;
 
 pub use error::BadRequest;
-#[cfg(feature = "streaming")]
-pub use error::SurfStreamingError;
 
 /// Implements ['Middleware'] for surf
 pub(crate) struct SurfMiddleware<'a> {
@@ -345,118 +278,6 @@ fn to_http_types_error(e: BoxError) -> http_types::Error {
     http_types::Error::from(anyhow!(e))
 }
 
-// Helper function to convert surf Request to http::Request for analysis
-fn convert_surf_request_to_http(
-    req: &Request,
-) -> anyhow::Result<http::Request<()>> {
-    let mut http_req = http::Request::builder()
-        .method(req.method().as_ref())
-        .uri(req.url().as_str());
-
-    for header in req.iter() {
-        http_req = http_req.header(header.0.as_str(), header.1.as_str());
-    }
-
-    Ok(http_req.body(())?)
-}
-
-// Helper function to convert surf Response to http::Response with Full body
-async fn convert_surf_response_to_http_full_body(
-    mut response: surf::Response,
-) -> anyhow::Result<http::Response<http_body_util::Full<Bytes>>> {
-    let status = response.status();
-    let version = response.version().unwrap_or(HttpTypesVersion::Http1_1);
-    let body_bytes = response
-        .body_bytes()
-        .await
-        .map_err(|e| anyhow::anyhow!("Failed to read body: {}", e))?;
-
-    let mut http_response = http::Response::builder()
-        .status(u16::from(status))
-        .version(match version {
-            HttpTypesVersion::Http1_0 => http::Version::HTTP_10,
-            HttpTypesVersion::Http1_1 => http::Version::HTTP_11,
-            // HttpTypesVersion::H2 not available in this version of http-types
-            _ => http::Version::HTTP_11, // Default fallback
-        });
-
-    for header in response.iter() {
-        http_response =
-            http_response.header(header.0.as_str(), header.1.as_str());
-    }
-
-    Ok(http_response
-        .body(http_body_util::Full::new(Bytes::from(body_bytes)))?)
-}
-
-// Helper function to convert streaming response back to surf Response by buffering it
-async fn convert_streaming_response_to_surf<B>(
-    response: http::Response<B>,
-) -> anyhow::Result<surf::Response>
-where
-    B: Body + Send + 'static,
-{
-    let (parts, body) = response.into_parts();
-
-    // Collect the streaming body into bytes, handling errors generically
-    let body_bytes = match BodyExt::collect(body).await {
-        Ok(collected) => collected.to_bytes(),
-        Err(_) => {
-            return Err(anyhow::anyhow!("Failed to collect streaming body"))
-        }
-    };
-
-    let mut surf_response = HttpTypesResponse::new(
-        HttpTypesStatusCode::try_from(parts.status.as_u16())
-            .map_err(|e| anyhow::anyhow!("Invalid status code: {}", e))?,
-    );
-
-    // Set headers
-    for (name, value) in parts.headers.iter() {
-        let surf_value =
-            HttpTypesHeaderValue::from_bytes(value.as_bytes().to_vec())
-                .map_err(|e| anyhow::anyhow!("Invalid header value: {}", e))?;
-        surf_response.insert_header(name.as_str(), surf_value);
-    }
-
-    // Set version and body
-    let surf_version = match parts.version {
-        http::Version::HTTP_10 => HttpTypesVersion::Http1_0,
-        http::Version::HTTP_11 => HttpTypesVersion::Http1_1,
-        // http::Version::HTTP_2 => HttpTypesVersion::H2, // H2 not available
-        _ => HttpTypesVersion::Http1_1, // Default fallback
-    };
-    surf_response.set_version(Some(surf_version));
-    surf_response.set_body(body_bytes.to_vec()); // Convert Bytes to Vec<u8>
-
-    Ok(surf::Response::from(surf_response))
-}
-
-// Helper function to convert surf response parts for 304 handling
-fn convert_surf_response_to_http_parts(
-    response: surf::Response,
-) -> anyhow::Result<(http::response::Parts, ())> {
-    let status = response.status();
-    let version = response.version().unwrap_or(HttpTypesVersion::Http1_1);
-
-    let mut http_response = http::Response::builder()
-        .status(u16::from(status))
-        .version(match version {
-            HttpTypesVersion::Http1_0 => http::Version::HTTP_10,
-            HttpTypesVersion::Http1_1 => http::Version::HTTP_11,
-            // HttpTypesVersion::H2 not available in this version of http-types
-            _ => http::Version::HTTP_11, // Default fallback
-        });
-
-    for header in response.iter() {
-        http_response =
-            http_response.header(header.0.as_str(), header.1.as_str());
-    }
-
-    let response = http_response.body(())?;
-    Ok(response.into_parts())
-}
-
 #[surf::utils::async_trait]
 impl<T: CacheManager> surf::middleware::Middleware for Cache<T> {
     async fn handle(
@@ -499,139 +320,6 @@ impl<T: CacheManager> surf::middleware::Middleware for Cache<T> {
             res.append_header(XCACHELOOKUP, miss);
             Ok(res)
         }
-    }
-}
-
-#[cfg(feature = "streaming")]
-#[surf::utils::async_trait]
-impl<T: StreamingCacheManager> surf::middleware::Middleware
-    for StreamingCache<T>
-where
-    T::Body: From<Bytes> + Send + 'static,
-    <T::Body as Body>::Data: Send,
-    <T::Body as Body>::Error:
-        Into<http_cache::StreamingError> + Send + Sync + 'static,
-{
-    async fn handle(
-        &self,
-        req: surf::Request,
-        client: Client,
-        next: Next<'_>,
-    ) -> surf::Result<surf::Response> {
-        use http_cache::HttpCacheStreamInterface;
-
-        let req: Request = req.into();
-
-        // Convert to http::Request for analysis
-        let http_request = convert_surf_request_to_http(&req)
-            .map_err(|e| http_types::Error::from(anyhow!(e)))?;
-
-        // Analyze the request
-        let analysis = self
-            .cache
-            .analyze_request(&http_request.into_parts().0, None)
-            .map_err(|e| http_types::Error::from(anyhow!(e)))?;
-
-        // Check if we should bypass cache entirely
-        if !analysis.should_cache {
-            return next.run(req.into(), client).await;
-        }
-
-        // Look up cached response
-        if let Some((cached_response, policy)) = self
-            .cache
-            .lookup_cached_response(&analysis.cache_key)
-            .await
-            .map_err(|e| http_types::Error::from(anyhow!(e)))?
-        {
-            // Check if cached response is still fresh
-            use http_cache_semantics::BeforeRequest;
-            let before_req = policy
-                .before_request(&analysis.request_parts, SystemTime::now());
-
-            match before_req {
-                BeforeRequest::Fresh(_fresh_parts) => {
-                    // Return cached response directly
-                    return convert_streaming_response_to_surf(cached_response)
-                        .await
-                        .map_err(|e| http_types::Error::from(anyhow!(e)));
-                }
-                BeforeRequest::Stale {
-                    request: conditional_request, ..
-                } => {
-                    // Create conditional request
-                    let mut conditional_surf_req = req.clone();
-                    for (name, value) in conditional_request.headers.iter() {
-                        let surf_value = HttpTypesHeaderValue::from_str(
-                            value.to_str().unwrap_or(""),
-                        )
-                        .map_err(|e| http_types::Error::from(anyhow!(e)))?;
-                        conditional_surf_req
-                            .insert_header(name.as_str(), surf_value);
-                    }
-
-                    let conditional_response = next
-                        .run(conditional_surf_req.into(), client.clone())
-                        .await?;
-
-                    if conditional_response.status() == 304u16 {
-                        // Handle not modified - return the cached response updated with fresh headers
-                        let (fresh_parts, _) =
-                            convert_surf_response_to_http_parts(
-                                conditional_response,
-                            )
-                            .map_err(|e| http_types::Error::from(anyhow!(e)))?;
-                        let updated_response = self
-                            .cache
-                            .handle_not_modified(cached_response, &fresh_parts)
-                            .await
-                            .map_err(|e| http_types::Error::from(anyhow!(e)))?;
-
-                        return convert_streaming_response_to_surf(
-                            updated_response,
-                        )
-                        .await
-                        .map_err(|e| http_types::Error::from(anyhow!(e)));
-                    } else {
-                        // Fresh response received, process it through the cache
-                        let http_response =
-                            convert_surf_response_to_http_full_body(
-                                conditional_response,
-                            )
-                            .await
-                            .map_err(|e| http_types::Error::from(anyhow!(e)))?;
-                        let cached_response = self
-                            .cache
-                            .process_response(analysis, http_response)
-                            .await
-                            .map_err(|e| http_types::Error::from(anyhow!(e)))?;
-
-                        return convert_streaming_response_to_surf(
-                            cached_response,
-                        )
-                        .await
-                        .map_err(|e| http_types::Error::from(anyhow!(e)));
-                    }
-                }
-            }
-        }
-
-        // Fetch fresh response from upstream (cache miss or no cached response)
-        let response = next.run(req.into(), client).await?;
-        let http_response = convert_surf_response_to_http_full_body(response)
-            .await
-            .map_err(|e| http_types::Error::from(anyhow!(e)))?;
-
-        // Process and potentially cache the response
-        let cached_response = self
-            .cache
-            .process_response(analysis, http_response)
-            .await
-            .map_err(|e| http_types::Error::from(anyhow!(e)))?;
-
-        convert_streaming_response_to_surf(cached_response)
-            .await
-            .map_err(|e| http_types::Error::from(anyhow!(e)))
     }
 }
 

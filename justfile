@@ -51,13 +51,10 @@
     cd http-cache-tower && cargo criterion --all-features
 
 # Run the streaming memory profile examples
-@memory-profile:
-    echo "----------\nTower streaming memory profile analysis:\n"
-    cd http-cache-tower && cargo run --example streaming_memory_profile --features streaming
-    echo "\n----------\nReqwest streaming memory profile analysis:\n"
-    cd http-cache-reqwest && cargo run --example streaming_memory_profile --features streaming
-    echo "\n----------\nSurf streaming memory profile analysis:\n"
-    cd http-cache-surf && cargo run --example streaming_memory_profile --features streaming
+# Run memory profiling example to compare streaming vs traditional caching
+memory-profile:
+    cd http-cache-tower && cargo run --release --example streaming_memory_profile --features streaming
+    cd http-cache-reqwest && cargo run --release --example streaming_memory_profile --features streaming
 
 # Generate a changelog with git-cliff
 changelog TAG:
