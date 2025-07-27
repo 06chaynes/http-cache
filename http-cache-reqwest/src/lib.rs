@@ -405,10 +405,8 @@ impl Middleware for ReqwestMiddleware<'_> {
     }
     fn parts(&self) -> Result<Parts> {
         let copied_req = clone_req(&self.req)?;
-        let converted = match http::Request::try_from(copied_req) {
-            Ok(r) => r,
-            Err(e) => return Err(Box::new(e)),
-        };
+        let converted =
+            http::Request::try_from(copied_req).map_err(BoxError::from)?;
         Ok(converted.into_parts().0)
     }
     fn url(&self) -> Result<Url> {
@@ -419,11 +417,12 @@ impl Middleware for ReqwestMiddleware<'_> {
     }
     async fn remote_fetch(&mut self) -> Result<HttpResponse> {
         let copied_req = clone_req(&self.req)?;
-        let res = match self.next.clone().run(copied_req, self.extensions).await
-        {
-            Ok(r) => r,
-            Err(e) => return Err(Box::new(e)),
-        };
+        let res = self
+            .next
+            .clone()
+            .run(copied_req, self.extensions)
+            .await
+            .map_err(BoxError::from)?;
         let mut headers = HashMap::new();
         for header in res.headers() {
             headers.insert(
@@ -434,11 +433,7 @@ impl Middleware for ReqwestMiddleware<'_> {
         let url = res.url().clone();
         let status = res.status().into();
         let version = res.version();
-        let body: Vec<u8> = match res.bytes().await {
-            Ok(b) => b,
-            Err(e) => return Err(Box::new(e)),
-        }
-        .to_vec();
+        let body: Vec<u8> = res.bytes().await.map_err(BoxError::from)?.to_vec();
         Ok(HttpResponse {
             body,
             headers,
@@ -458,8 +453,8 @@ fn convert_response(response: HttpResponse) -> Result<Response> {
         .body(response.body)?;
     for header in response.headers {
         ret_res.headers_mut().insert(
-            HeaderName::from_str(header.0.clone().as_str())?,
-            HeaderValue::from_str(header.1.clone().as_str())?,
+            HeaderName::from_str(&header.0)?,
+            HeaderValue::from_str(&header.1)?,
         );
     }
     Ok(Response::from(ret_res))
@@ -494,7 +489,7 @@ fn convert_reqwest_response_to_http_parts(
 ) -> Result<(http::response::Parts, ())> {
     let status = response.status();
     let version = response.version();
-    let headers = response.headers().clone();
+    let headers = response.headers();
 
     let mut http_response =
         http::Response::builder().status(status).version(version);

@@ -1,3 +1,4 @@
+use http_cache;
 use std::fmt;
 
 /// Errors that can occur during HTTP caching operations
@@ -33,8 +34,8 @@ impl std::error::Error for HttpCacheError {
     }
 }
 
-impl From<Box<dyn std::error::Error + Send + Sync>> for HttpCacheError {
-    fn from(error: Box<dyn std::error::Error + Send + Sync>) -> Self {
+impl From<http_cache::BoxError> for HttpCacheError {
+    fn from(error: http_cache::BoxError) -> Self {
         HttpCacheError::HttpError(error)
     }
 }

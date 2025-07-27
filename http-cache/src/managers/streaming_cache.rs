@@ -190,13 +190,9 @@ impl crate::StreamingCacheManager for StreamingManager {
                 Version::HTTP_3 => 3,
                 _ => 11,
             },
-            headers: parts
-                .headers
-                .iter()
-                .map(|(name, value)| {
-                    (name.to_string(), value.to_str().unwrap_or("").to_string())
-                })
-                .collect(),
+            headers: crate::HttpCacheOptions::headers_to_hashmap(
+                &parts.headers,
+            ),
             content_digest: content_digest.clone(),
             policy,
             created_at: std::time::SystemTime::now()

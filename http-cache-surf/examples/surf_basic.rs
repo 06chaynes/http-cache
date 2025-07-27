@@ -209,14 +209,5 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     )
     .await?;
 
-    println!("\n=== Summary ===");
-    println!("This example demonstrates:");
-    println!(
-        "- Automatic HTTP response caching based on Cache-Control headers"
-    );
-    println!("- Reduced response times for cached requests");
-    println!("- Different caching behaviors for different endpoints");
-    println!("- Debug headers showing cache status");
-
     Ok(())
 }

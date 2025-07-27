@@ -1147,21 +1147,18 @@ async fn options_request_not_cached() -> Result<()> {
     Ok(())
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "streaming"))]
 mod streaming_tests {
     use super::*;
-    #[cfg(feature = "streaming")]
     use crate::{HttpCacheStreamInterface, HttpStreamingCache, StreamingBody};
     use bytes::Bytes;
     use http::{Request, Response};
     use http_body::Body;
     use http_body_util::{BodyExt, Full};
-    #[cfg(feature = "streaming")]
     use http_cache::StreamingManager;
     use tempfile::TempDir;
 
     /// Helper function to create a streaming cache manager
-    #[cfg(feature = "streaming")]
     fn create_streaming_cache_manager() -> StreamingManager {
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
         let cache_path = temp_dir.path().to_path_buf();
@@ -1170,7 +1167,6 @@ mod streaming_tests {
         StreamingManager::new(cache_path)
     }
 
-    #[cfg(feature = "streaming")]
     #[tokio::test]
     async fn test_streaming_cache_basic_operations() -> Result<()> {
         let manager = create_streaming_cache_manager();
@@ -1229,7 +1225,6 @@ mod streaming_tests {
         Ok(())
     }
 
-    #[cfg(feature = "streaming")]
     #[tokio::test]
     async fn test_streaming_cache_large_response() -> Result<()> {
         let manager = create_streaming_cache_manager();
@@ -1275,7 +1270,6 @@ mod streaming_tests {
         Ok(())
     }
 
-    #[cfg(feature = "streaming")]
     #[tokio::test]
     async fn test_streaming_cache_empty_response() -> Result<()> {
         let manager = create_streaming_cache_manager();
@@ -1317,7 +1311,6 @@ mod streaming_tests {
         Ok(())
     }
 
-    #[cfg(feature = "streaming")]
     #[tokio::test]
     async fn test_streaming_cache_no_cache_mode() -> Result<()> {
         let manager = create_streaming_cache_manager();
@@ -1341,7 +1334,6 @@ mod streaming_tests {
         Ok(())
     }
 
-    #[cfg(feature = "streaming")]
     #[tokio::test]
     async fn test_streaming_body_operations() -> Result<()> {
         // Test buffered streaming body
@@ -1456,7 +1448,6 @@ mod streaming_tests {
         Ok(())
     }
 
-    #[cfg(feature = "streaming")]
     #[tokio::test]
     async fn streaming_with_different_cache_modes() -> Result<()> {
         let manager = create_streaming_cache_manager();
@@ -1502,7 +1493,6 @@ mod streaming_tests {
         Ok(())
     }
 
-    #[cfg(feature = "streaming")]
     #[tokio::test]
     async fn streaming_with_custom_cache_options() -> Result<()> {
         let manager = create_streaming_cache_manager();
@@ -1550,7 +1540,6 @@ mod streaming_tests {
         Ok(())
     }
 
-    #[cfg(feature = "streaming")]
     #[tokio::test]
     async fn streaming_error_handling() -> Result<()> {
         let manager = create_streaming_cache_manager();
@@ -1574,7 +1563,6 @@ mod streaming_tests {
         Ok(())
     }
 
-    #[cfg(feature = "streaming")]
     #[tokio::test]
     async fn streaming_concurrent_access() -> Result<()> {
         use tokio::task::JoinSet;
@@ -1618,7 +1606,6 @@ mod streaming_tests {
         Ok(())
     }
 
-    #[cfg(feature = "streaming")]
     #[tokio::test]
     async fn streaming_with_request_extensions() -> Result<()> {
         let manager = create_streaming_cache_manager();
@@ -1648,7 +1635,6 @@ mod streaming_tests {
         Ok(())
     }
 
-    #[cfg(feature = "streaming")]
     #[tokio::test]
     async fn streaming_cache_with_vary_headers() -> Result<()> {
         let manager = create_streaming_cache_manager();

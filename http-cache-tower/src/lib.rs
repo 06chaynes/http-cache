@@ -156,10 +156,8 @@ use http_body_util::BodyExt;
 pub use http_cache::CACacheManager;
 #[cfg(feature = "streaming")]
 use http_cache::StreamingError;
-#[allow(unused_imports)]
 use http_cache::{
     CacheManager, CacheMode, HttpCache, HttpCacheInterface, HttpCacheOptions,
-    ResponseCacheModeFn,
 };
 #[cfg(feature = "streaming")]
 use http_cache::{
@@ -176,6 +174,33 @@ pub mod error;
 pub use error::HttpCacheError;
 #[cfg(feature = "streaming")]
 pub use error::TowerStreamingError;
+
+/// Helper functions for error conversions
+trait HttpCacheErrorExt<T> {
+    fn cache_err(self) -> Result<T, HttpCacheError>;
+}
+
+trait HttpErrorExt<T> {
+    fn http_err(self) -> Result<T, HttpCacheError>;
+}
+
+impl<T, E> HttpCacheErrorExt<T> for Result<T, E>
+where
+    E: ToString,
+{
+    fn cache_err(self) -> Result<T, HttpCacheError> {
+        self.map_err(|e| HttpCacheError::CacheError(e.to_string()))
+    }
+}
+
+impl<T, E> HttpErrorExt<T> for Result<T, E>
+where
+    E: Into<Box<dyn std::error::Error + Send + Sync>>,
+{
+    fn http_err(self) -> Result<T, HttpCacheError> {
+        self.map_err(|e| HttpCacheError::HttpError(e.into()))
+    }
+}
 
 /// Helper function to collect a body into bytes
 async fn collect_body<B>(body: B) -> Result<Vec<u8>, B::Error>
@@ -343,11 +368,14 @@ where
 /// use http_cache::StreamingManager;
 /// use tower::ServiceBuilder;
 /// use tower::service_fn;
-/// use http_cache::StreamingBody;
 /// use http::{Request, Response};
 /// use http_body_util::Full;
 /// use bytes::Bytes;
 /// use std::convert::Infallible;
+///
+/// async fn handler(_req: Request<Full<Bytes>>) -> Result<Response<Full<Bytes>>, Infallible> {
+///     Ok(Response::new(Full::new(Bytes::from("Hello"))))
+/// }
 ///
 /// # #[tokio::main]
 /// # async fn main() {
@@ -357,9 +385,7 @@ where
 /// // Use with ServiceBuilder
 /// let service = ServiceBuilder::new()
 ///     .layer(streaming_layer)
-///     .service_fn(|_req: Request<Full<Bytes>>| async {
-///         Ok::<_, Infallible>(Response::new(StreamingBody::<http_body_util::combinators::BoxBody<Bytes, http_cache_tower::TowerStreamingError>>::buffered(Bytes::from("Hello"))))
-///     });
+///     .service_fn(handler);
 /// # }
 /// ```
 #[cfg(feature = "streaming")]
@@ -582,195 +608,138 @@ where
         let inner_service = self.inner.clone();
 
         Box::pin(async move {
-            // Analyze the request for caching behavior
-            let analysis = cache
-                .analyze_request(&parts, None)
-                .map_err(|e| HttpCacheError::CacheError(e.to_string()))?;
+            use http_cache_semantics::BeforeRequest;
 
-            // Bust cache keys if needed (this should happen regardless of whether the request is cacheable)
+            // Use the core library's cache interface for analysis
+            let analysis = cache.analyze_request(&parts, None).cache_err()?;
+
+            // Handle cache busting and non-cacheable requests
             for key in &analysis.cache_bust_keys {
-                cache
-                    .manager
-                    .delete(key)
-                    .await
-                    .map_err(|e| HttpCacheError::CacheError(e.to_string()))?;
+                cache.manager.delete(key).await.cache_err()?;
             }
 
-            // For non-GET/HEAD requests, invalidate cached GET responses for the same resource
-            if !analysis.should_cache
-                && (parts.method != "GET" && parts.method != "HEAD")
-            {
-                // Use the cache's options to generate consistent cache key for GET invalidation
+            // For non-GET/HEAD requests, invalidate cached GET responses
+            if !analysis.should_cache && !analysis.is_get_head {
                 let get_cache_key = cache
                     .options
                     .create_cache_key_for_invalidation(&parts, "GET");
-                // Ignore errors if the cache entry doesn't exist
                 let _ = cache.manager.delete(&get_cache_key).await;
             }
 
-            // Check if we should bypass cache entirely
+            // If not cacheable, just pass through
             if !analysis.should_cache {
                 let req = Request::from_parts(parts, body);
-                let response = inner_service
-                    .oneshot(req)
-                    .await
-                    .map_err(|e| HttpCacheError::HttpError(e.into()))?;
-                let (parts, body) = response.into_parts();
-                return Ok(Response::from_parts(
-                    parts,
-                    HttpCacheBody::Original(body),
-                ));
+                let response = inner_service.oneshot(req).await.http_err()?;
+                return Ok(response.map(HttpCacheBody::Original));
             }
 
-            // For Reload mode, always bypass cache and fetch fresh
+            // Special case for Reload mode: skip cache lookup but still cache response
             if analysis.cache_mode == CacheMode::Reload {
                 let req = Request::from_parts(parts, body);
-                let response = inner_service
-                    .oneshot(req)
-                    .await
-                    .map_err(|e| HttpCacheError::HttpError(e.into()))?;
+                let response = inner_service.oneshot(req).await.http_err()?;
+
                 let (res_parts, res_body) = response.into_parts();
+                let body_bytes = collect_body(res_body).await.http_err()?;
 
-                // Collect body for processing
-                let body_bytes = collect_body(res_body)
-                    .await
-                    .map_err(|e| HttpCacheError::HttpError(e.into()))?;
-
-                // Process and potentially cache the response
                 let cached_response = cache
                     .process_response(
                         analysis,
-                        Response::from_parts(
-                            res_parts.clone(),
-                            body_bytes.clone(),
-                        ),
+                        Response::from_parts(res_parts, body_bytes.clone()),
                     )
                     .await
-                    .map_err(|e| HttpCacheError::CacheError(e.to_string()))?;
+                    .cache_err()?;
 
-                let (final_parts, final_body) = cached_response.into_parts();
-                return Ok(Response::from_parts(
-                    final_parts,
-                    HttpCacheBody::Buffered(final_body),
-                ));
+                return Ok(cached_response.map(HttpCacheBody::Buffered));
             }
 
-            // Look up cached response
+            // Look up cached response using interface
             if let Some((cached_response, policy)) = cache
                 .lookup_cached_response(&analysis.cache_key)
                 .await
-                .map_err(|e| HttpCacheError::CacheError(e.to_string()))?
+                .cache_err()?
             {
-                // Check if cached response is still fresh
-                use http_cache_semantics::BeforeRequest;
                 let before_req =
                     policy.before_request(&parts, std::time::SystemTime::now());
                 match before_req {
-                    BeforeRequest::Fresh(_fresh_parts) => {
-                        // Return cached response using helper
-                        let body_clone = cached_response.body.clone();
+                    BeforeRequest::Fresh(_) => {
+                        // Return cached response
                         let response = http_cache::HttpCacheOptions::http_response_to_response(
                             &cached_response,
-                            HttpCacheBody::Buffered(body_clone),
-                        )
-                        .map_err(HttpCacheError::HttpError)?;
+                            HttpCacheBody::Buffered(cached_response.body.clone()),
+                        ).map_err(HttpCacheError::HttpError)?;
                         return Ok(response);
                     }
                     BeforeRequest::Stale {
                         request: conditional_parts, ..
                     } => {
-                        // Create conditional request using original body
+                        // Make conditional request
                         let conditional_req =
                             Request::from_parts(conditional_parts, body);
                         let conditional_response = inner_service
                             .oneshot(conditional_req)
                             .await
-                            .map_err(|e| HttpCacheError::HttpError(e.into()))?;
+                            .http_err()?;
 
                         if conditional_response.status() == 304 {
-                            // Use cached response but with updated headers from 304 response
-                            let (conditional_parts, _) =
+                            // Use cached response with updated headers
+                            let (fresh_parts, _) =
                                 conditional_response.into_parts();
                             let updated_response = cache
                                 .handle_not_modified(
                                     cached_response,
-                                    &conditional_parts,
+                                    &fresh_parts,
                                 )
                                 .await
-                                .map_err(|e| {
-                                    HttpCacheError::CacheError(e.to_string())
-                                })?;
+                                .cache_err()?;
 
-                            let body_clone = updated_response.body.clone();
                             let response = http_cache::HttpCacheOptions::http_response_to_response(
                                 &updated_response,
-                                HttpCacheBody::Buffered(body_clone),
-                            )
-                            .map_err(HttpCacheError::HttpError)?;
+                                HttpCacheBody::Buffered(updated_response.body.clone()),
+                            ).map_err(HttpCacheError::HttpError)?;
                             return Ok(response);
                         } else {
-                            // Fresh response received, process it normally
+                            // Process fresh response
                             let (parts, res_body) =
                                 conditional_response.into_parts();
-
-                            // Collect body and cache the response
                             let body_bytes =
-                                collect_body(res_body).await.map_err(|e| {
-                                    HttpCacheError::HttpError(e.into())
-                                })?;
+                                collect_body(res_body).await.http_err()?;
 
-                            // Process and cache the response
                             let cached_response = cache
                                 .process_response(
                                     analysis,
                                     Response::from_parts(
-                                        parts.clone(),
+                                        parts,
                                         body_bytes.clone(),
                                     ),
                                 )
                                 .await
-                                .map_err(|e| {
-                                    HttpCacheError::CacheError(e.to_string())
-                                })?;
+                                .cache_err()?;
 
-                            let (final_parts, final_body) =
-                                cached_response.into_parts();
-                            return Ok(Response::from_parts(
-                                final_parts,
-                                HttpCacheBody::Buffered(final_body),
-                            ));
+                            return Ok(
+                                cached_response.map(HttpCacheBody::Buffered)
+                            );
                         }
                     }
                 }
             }
 
-            // Fetch fresh response from upstream
+            // Fetch fresh response
             let req = Request::from_parts(parts, body);
-            let response = inner_service
-                .oneshot(req)
-                .await
-                .map_err(|e| HttpCacheError::HttpError(e.into()))?;
+            let response = inner_service.oneshot(req).await.http_err()?;
+
             let (res_parts, res_body) = response.into_parts();
+            let body_bytes = collect_body(res_body).await.http_err()?;
 
-            // Collect body for processing
-            let body_bytes = collect_body(res_body)
-                .await
-                .map_err(|e| HttpCacheError::HttpError(e.into()))?;
-
-            // Process and potentially cache the response
+            // Process and cache using interface
             let cached_response = cache
                 .process_response(
                     analysis,
-                    Response::from_parts(res_parts.clone(), body_bytes.clone()),
+                    Response::from_parts(res_parts, body_bytes.clone()),
                 )
                 .await
-                .map_err(|e| HttpCacheError::CacheError(e.to_string()))?;
+                .cache_err()?;
 
-            let (final_parts, final_body) = cached_response.into_parts();
-            Ok(Response::from_parts(
-                final_parts,
-                HttpCacheBody::Buffered(final_body),
-            ))
+            Ok(cached_response.map(HttpCacheBody::Buffered))
         })
     }
 }
@@ -848,116 +817,98 @@ where
         let inner_service = self.inner.clone();
 
         Box::pin(async move {
-            // Analyze the request for caching behavior
-            let analysis = cache
-                .analyze_request(&parts, None)
-                .map_err(|e| HttpCacheError::CacheError(e.to_string()))?;
+            use http_cache_semantics::BeforeRequest;
 
-            // Bust cache keys if needed (this should happen regardless of whether the request is cacheable)
+            // Use the core library's streaming cache interface
+            let analysis = cache.analyze_request(&parts, None).cache_err()?;
+
+            // Handle cache busting
             for key in &analysis.cache_bust_keys {
-                cache
-                    .manager
-                    .delete(key)
-                    .await
-                    .map_err(|e| HttpCacheError::CacheError(e.to_string()))?;
+                cache.manager.delete(key).await.cache_err()?;
             }
 
-            // For non-GET/HEAD requests, invalidate cached GET responses for the same resource
-            if !analysis.should_cache
-                && (parts.method != "GET" && parts.method != "HEAD")
-            {
-                // Use the cache's options to generate consistent cache key for GET invalidation
+            // For non-GET/HEAD requests, invalidate cached GET responses
+            if !analysis.should_cache && !analysis.is_get_head {
                 let get_cache_key = cache
                     .options
                     .create_cache_key_for_invalidation(&parts, "GET");
-                // Ignore errors if the cache entry doesn't exist
                 let _ = cache.manager.delete(&get_cache_key).await;
             }
 
-            // Check if we should bypass cache entirely
+            // If not cacheable, convert body type and return
             if !analysis.should_cache {
                 let req = Request::from_parts(parts, body);
-                let response = inner_service
-                    .oneshot(req)
-                    .await
-                    .map_err(|e| HttpCacheError::HttpError(e.into()))?;
-                // For non-cacheable responses, use the manager's convert_body method
-                let converted_response =
-                    cache.manager.convert_body(response).await.map_err(
-                        |e| HttpCacheError::CacheError(e.to_string()),
-                    )?;
-                return Ok(converted_response);
+                let response = inner_service.oneshot(req).await.http_err()?;
+                return cache.manager.convert_body(response).await.cache_err();
             }
 
-            // Look up cached response
+            // Special case for Reload mode: skip cache lookup but still cache response
+            if analysis.cache_mode == CacheMode::Reload {
+                let req = Request::from_parts(parts, body);
+                let response = inner_service.oneshot(req).await.http_err()?;
+
+                let cached_response = cache
+                    .process_response(analysis, response)
+                    .await
+                    .cache_err()?;
+
+                return Ok(cached_response);
+            }
+
+            // Look up cached response using interface
             if let Some((cached_response, policy)) = cache
                 .lookup_cached_response(&analysis.cache_key)
                 .await
-                .map_err(|e| HttpCacheError::CacheError(e.to_string()))?
+                .cache_err()?
             {
-                // Check if cached response is still fresh
-                use http_cache_semantics::BeforeRequest;
                 let before_req =
                     policy.before_request(&parts, std::time::SystemTime::now());
                 match before_req {
-                    BeforeRequest::Fresh(_fresh_parts) => {
-                        // Return cached response - it's already in the right format
+                    BeforeRequest::Fresh(_) => {
                         return Ok(cached_response);
                     }
                     BeforeRequest::Stale {
                         request: conditional_parts, ..
                     } => {
-                        // Create conditional request using original body
                         let conditional_req =
                             Request::from_parts(conditional_parts, body);
                         let conditional_response = inner_service
                             .oneshot(conditional_req)
                             .await
-                            .map_err(|e| HttpCacheError::HttpError(e.into()))?;
+                            .http_err()?;
 
                         if conditional_response.status() == 304 {
-                            // Use cached response with updated headers from 304 response
-                            let (conditional_parts, _) =
+                            let (fresh_parts, _) =
                                 conditional_response.into_parts();
                             let updated_response = cache
                                 .handle_not_modified(
                                     cached_response,
-                                    &conditional_parts,
+                                    &fresh_parts,
                                 )
                                 .await
-                                .map_err(|e| {
-                                    HttpCacheError::CacheError(e.to_string())
-                                })?;
+                                .cache_err()?;
                             return Ok(updated_response);
                         } else {
-                            // Fresh response received, process it normally
                             let cached_response = cache
                                 .process_response(
                                     analysis,
                                     conditional_response,
                                 )
                                 .await
-                                .map_err(|e| {
-                                    HttpCacheError::CacheError(e.to_string())
-                                })?;
+                                .cache_err()?;
                             return Ok(cached_response);
                         }
                     }
                 }
             }
 
-            // Fetch fresh response from upstream
+            // Fetch fresh response
             let req = Request::from_parts(parts, body);
-            let response = inner_service
-                .oneshot(req)
-                .await
-                .map_err(|e| HttpCacheError::HttpError(e.into()))?;
+            let response = inner_service.oneshot(req).await.http_err()?;
 
-            // Process and potentially cache the response
-            let cached_response = cache
-                .process_response(analysis, response)
-                .await
-                .map_err(|e| HttpCacheError::CacheError(e.to_string()))?;
+            // Process using streaming interface
+            let cached_response =
+                cache.process_response(analysis, response).await.cache_err()?;
 
             Ok(cached_response)
         })

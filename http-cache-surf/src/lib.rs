@@ -288,11 +288,7 @@ impl<T: CacheManager> surf::middleware::Middleware for Cache<T> {
     ) -> std::result::Result<surf::Response, http_types::Error> {
         let req: Request = req.into();
         let mut middleware = SurfMiddleware { req, client, next };
-        if self
-            .0
-            .can_cache_request(&middleware)
-            .map_err(|e| http_types::Error::from(anyhow!(e)))?
-        {
+        if self.0.can_cache_request(&middleware).map_err(to_http_types_error)? {
             let res =
                 self.0.run(middleware).await.map_err(to_http_types_error)?;
             let mut converted = HttpTypesResponse::new(HttpTypesStatusCode::Ok);

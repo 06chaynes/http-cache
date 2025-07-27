@@ -230,6 +230,8 @@ pub use moka::future::{Cache as MokaCache, CacheBuilder as MokaCacheBuilder};
 pub const XCACHE: &str = "x-cache";
 /// `x-cache-lookup` header: Value will be HIT if a response existed in cache, MISS if not
 pub const XCACHELOOKUP: &str = "x-cache-lookup";
+/// `warning` header: HTTP warning header as per RFC 7234
+const WARNING: &str = "warning";
 
 /// Represents a basic cache status
 /// Used in the custom headers `x-cache` and `x-cache-lookup`
@@ -287,7 +289,7 @@ impl fmt::Display for HttpVersion {
 ///
 /// This function reconstructs the full URL from the request parts, handling both
 /// HTTP and HTTPS schemes based on the connection type or explicit headers.
-pub fn extract_url_from_request_parts(parts: &request::Parts) -> Result<Url> {
+fn extract_url_from_request_parts(parts: &request::Parts) -> Result<Url> {
     // First check if the URI is already absolute
     if let Some(_scheme) = parts.uri.scheme() {
         // URI is absolute, use it directly
@@ -367,14 +369,14 @@ impl HttpResponse {
 
     /// Returns the status code of the warning header if present
     #[must_use]
-    pub fn warning_code(&self) -> Option<usize> {
-        self.headers.get("warning").and_then(|hdr| {
+    fn warning_code(&self) -> Option<usize> {
+        self.headers.get(WARNING).and_then(|hdr| {
             hdr.as_str().chars().take(3).collect::<String>().parse().ok()
         })
     }
 
     /// Adds a warning header to a response
-    pub fn add_warning(&mut self, url: &Url, code: usize, message: &str) {
+    fn add_warning(&mut self, url: &Url, code: usize, message: &str) {
         // warning    = "warning" ":" 1#warning-value
         // warning-value = warn-code SP warn-agent SP warn-text [SP warn-date]
         // warn-code  = 3DIGIT
@@ -385,7 +387,7 @@ impl HttpResponse {
         // warn-date  = <"> HTTP-date <">
         // (https://tools.ietf.org/html/rfc2616#section-14.46)
         self.headers.insert(
-            "warning".to_string(),
+            WARNING.to_string(),
             format!(
                 "{} {} {:?} \"{}\"",
                 code,
@@ -397,8 +399,8 @@ impl HttpResponse {
     }
 
     /// Removes a warning header from a response
-    pub fn remove_warning(&mut self) {
-        self.headers.remove("warning");
+    fn remove_warning(&mut self) {
+        self.headers.remove(WARNING);
     }
 
     /// Update the headers from `http::response::Parts`
@@ -414,7 +416,7 @@ impl HttpResponse {
 
     /// Checks if the Cache-Control header contains the must-revalidate directive
     #[must_use]
-    pub fn must_revalidate(&self) -> bool {
+    fn must_revalidate(&self) -> bool {
         self.headers.get(CACHE_CONTROL.as_str()).is_some_and(|val| {
             val.as_str().to_lowercase().contains("must-revalidate")
         })
@@ -1019,7 +1021,7 @@ impl HttpCacheOptions {
     }
 
     /// Converts http::HeaderMap to HashMap<String, String> for HttpResponse
-    pub fn headers_to_hashmap(
+    fn headers_to_hashmap(
         headers: &http::HeaderMap,
     ) -> HashMap<String, String> {
         headers
@@ -1058,13 +1060,7 @@ impl HttpCacheOptions {
     ) -> Result<HttpResponse> {
         Ok(HttpResponse {
             body: vec![], // We don't need the full body for cache mode decision
-            headers: parts
-                .headers
-                .iter()
-                .map(|(k, v)| {
-                    (k.to_string(), v.to_str().unwrap_or("").to_string())
-                })
-                .collect(),
+            headers: Self::headers_to_hashmap(&parts.headers),
             status: parts.status.as_u16(),
             url: extract_url_from_request_parts(request_parts)?,
             version: parts.version.try_into()?,
@@ -1209,24 +1205,19 @@ impl<T: CacheManager> HttpCache<T> {
         &self,
         middleware: &mut impl Middleware,
     ) -> Result<()> {
+        let parts = middleware.parts()?;
+
         self.manager
-            .delete(
-                &self
-                    .options
-                    .create_cache_key(&middleware.parts()?, Some("GET")),
-            )
+            .delete(&self.options.create_cache_key(&parts, Some("GET")))
             .await
             .ok();
 
-        let cache_key =
-            self.options.create_cache_key(&middleware.parts()?, None);
+        let cache_key = self.options.create_cache_key(&parts, None);
 
         if let Some(cache_bust) = &self.options.cache_bust {
-            for key_to_cache_bust in cache_bust(
-                &middleware.parts()?,
-                &self.options.cache_key,
-                &cache_key,
-            ) {
+            for key_to_cache_bust in
+                cache_bust(&parts, &self.options.cache_key, &cache_key)
+            {
                 self.manager.delete(&key_to_cache_bust).await?;
             }
         }
@@ -1358,14 +1349,13 @@ impl<T: CacheManager> HttpCache<T> {
         };
         let is_get_head = middleware.is_method_get_head();
         let mut mode = self.cache_mode(middleware)?;
+        let parts = middleware.parts()?;
 
         // Allow response-based cache mode override
         if let Some(response_cache_mode_fn) =
             &self.options.response_cache_mode_fn
         {
-            if let Some(override_mode) =
-                response_cache_mode_fn(&middleware.parts()?, &res)
-            {
+            if let Some(override_mode) = response_cache_mode_fn(&parts, &res) {
                 mode = override_mode;
             }
         }
@@ -1380,19 +1370,11 @@ impl<T: CacheManager> HttpCache<T> {
         if is_cacheable {
             Ok(self
                 .manager
-                .put(
-                    self.options.create_cache_key(&middleware.parts()?, None),
-                    res,
-                    policy,
-                )
+                .put(self.options.create_cache_key(&parts, None), res, policy)
                 .await?)
         } else if !is_get_head {
             self.manager
-                .delete(
-                    &self
-                        .options
-                        .create_cache_key(&middleware.parts()?, Some("GET")),
-                )
+                .delete(&self.options.create_cache_key(&parts, Some("GET")))
                 .await
                 .ok();
             Ok(res)
@@ -1407,8 +1389,8 @@ impl<T: CacheManager> HttpCache<T> {
         mut cached_res: HttpResponse,
         mut policy: CachePolicy,
     ) -> Result<HttpResponse> {
-        let before_req =
-            policy.before_request(&middleware.parts()?, SystemTime::now());
+        let parts = middleware.parts()?;
+        let before_req = policy.before_request(&parts, SystemTime::now());
         match before_req {
             BeforeRequest::Fresh(parts) => {
                 cached_res.update_headers(&parts)?;
@@ -1445,7 +1427,7 @@ impl<T: CacheManager> HttpCache<T> {
                     Ok(cached_res)
                 } else if cond_res.status == 304 {
                     let after_res = policy.after_response(
-                        &middleware.parts()?,
+                        &parts,
                         &cond_res.parts()?,
                         SystemTime::now(),
                     );
@@ -1463,8 +1445,7 @@ impl<T: CacheManager> HttpCache<T> {
                     let res = self
                         .manager
                         .put(
-                            self.options
-                                .create_cache_key(&middleware.parts()?, None),
+                            self.options.create_cache_key(&parts, None),
                             cached_res,
                             policy,
                         )
@@ -1483,8 +1464,7 @@ impl<T: CacheManager> HttpCache<T> {
                     let res = self
                         .manager
                         .put(
-                            self.options
-                                .create_cache_key(&middleware.parts()?, None),
+                            self.options.create_cache_key(&parts, None),
                             cond_res,
                             policy,
                         )

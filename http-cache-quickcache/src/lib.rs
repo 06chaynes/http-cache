@@ -133,7 +133,7 @@ pub struct QuickManager {
     ///
     /// This is wrapped in an `Arc` to allow sharing across threads while
     /// maintaining the `Clone` implementation for the manager.
-    pub cache: Arc<Cache<String, Arc<Vec<u8>>>>,
+    cache: Arc<Cache<String, Arc<Vec<u8>>>>,
 }
 
 impl fmt::Debug for QuickManager {
