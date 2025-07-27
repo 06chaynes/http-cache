@@ -1,6 +1,6 @@
 # quick_cache
 
-[`quick_cache`](https://github.com/arthurprs/quick-cache) is a lightweight and high performance concurrent cache optimized for low cache overhead. The `http-cache-quickcache` implementation provides both traditional and streaming caching capabilities.
+[`quick_cache`](https://github.com/arthurprs/quick-cache) is a lightweight and high performance concurrent cache optimized for low cache overhead. The `http-cache-quickcache` implementation provides traditional buffered caching capabilities.
 
 ## Getting Started
 
@@ -50,61 +50,6 @@ impl Service<Request<Full<Bytes>>> for CachingService {
 }
 ```
 
-## Streaming Support
-
-For large responses, use the streaming capabilities:
-
-```rust
-use http_cache_quickcache::QuickManager;
-use http_cache::StreamingCacheManager;
-use http::{Request, Response, StatusCode};
-use http_body_util::Full;
-use bytes::Bytes;
-use http_cache_semantics::CachePolicy;
-use url::Url;
-
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let manager = QuickManager::default();
-    
-    // Create a sample response for caching
-    let response = Response::builder()
-        .status(StatusCode::OK)
-        .header("cache-control", "max-age=3600")
-        .body(Full::new(Bytes::from("Hello, streaming world!")))?;
-    
-    // Create request for policy
-    let request = Request::builder()
-        .method("GET")
-        .uri("https://example.com/data")
-        .body(())?;
-    
-    let policy = CachePolicy::new(&request, &Response::builder()
-        .status(200)
-        .body(b"Hello, streaming world!".to_vec())?);
-    
-    // Cache the streaming response
-    let url = Url::parse("https://example.com/data")?;
-    let cached = StreamingCacheManager::put(
-        &manager,
-        "GET:https://example.com/data".to_string(),
-        response,
-        policy,
-        url,
-    ).await?;
-    
-    println!("Cached response status: {}", cached.status());
-    
-    // Retrieve from cache
-    let retrieved = StreamingCacheManager::get(&manager, "GET:https://example.com/data").await?;
-    if let Some((response, _policy)) = retrieved {
-        println!("Retrieved cached response with status: {}", response.status());
-    }
-    
-    Ok(())
-}
-```
-
 ## Working with the manager directly
 
 First construct your manager instance. This example will use the default cache configuration.
@@ -151,7 +96,3 @@ You can remove a record from the cache using the `delete` method. This method ac
 ```rust
 manager.delete("my-cache-key").await?;
 ```
-
-### Streaming Cache Operations  
-
-The QuickManager also supports streaming operations through the `StreamingCacheManager` trait, allowing for memory-efficient handling of large responses without full buffering.

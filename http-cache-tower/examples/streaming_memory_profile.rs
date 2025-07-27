@@ -11,7 +11,7 @@
 use bytes::Bytes;
 use http::{Request, Response, StatusCode};
 use http_body_util::{BodyExt, Full};
-use http_cache::{CACacheManager, FileCacheManager};
+use http_cache::{CACacheManager, StreamingManager};
 use http_cache_tower::{HttpCacheLayer, HttpCacheStreamingLayer};
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::future::Future;
@@ -114,7 +114,7 @@ async fn measure_cache_hit_memory_usage(
 
     if is_streaming {
         let file_cache_manager =
-            FileCacheManager::new(temp_dir.path().to_path_buf());
+            StreamingManager::new(temp_dir.path().to_path_buf());
         let streaming_layer = HttpCacheStreamingLayer::new(file_cache_manager);
         let service = LargeResponseService::new(payload_size);
         let cached_service = streaming_layer.layer(service);

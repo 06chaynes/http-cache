@@ -84,7 +84,7 @@
 //! # #[cfg(feature = "manager-moka")]
 //! use http_cache_surf::{Cache, MokaManager, HttpCache, CacheMode};
 //! # #[cfg(feature = "manager-moka")]
-//! use moka::future::Cache as MokaCache;
+//! use http_cache_surf::MokaCache;
 //! # #[cfg(feature = "manager-moka")]
 //! use macro_rules_attribute::apply;
 //! # #[cfg(feature = "manager-moka")]

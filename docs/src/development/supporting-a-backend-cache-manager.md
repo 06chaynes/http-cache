@@ -36,7 +36,7 @@ The streaming approach is particularly useful for large responses where you don'
 
 ## How to implement a custom backend cache manager
 
-This guide shows examples of implementing both traditional and streaming cache managers. We'll use the [`CACacheManager`](https://github.com/06chaynes/http-cache/blob/main/http-cache/src/managers/cacache.rs) as an example of implementing the `CacheManager` trait for traditional disk-based caching, and the [`FileCacheManager`](https://github.com/06chaynes/http-cache/blob/main/http-cache/src/managers/streaming_cache.rs) as an example of implementing the `StreamingCacheManager` trait for true streaming support that stores response metadata and body content separately to enable memory-efficient handling of large responses. There are several ways to accomplish this, so feel free to experiment!
+This guide shows examples of implementing both traditional and streaming cache managers. We'll use the [`CACacheManager`](https://github.com/06chaynes/http-cache/blob/main/http-cache/src/managers/cacache.rs) as an example of implementing the `CacheManager` trait for traditional disk-based caching, and the [`StreamingManager`](https://github.com/06chaynes/http-cache/blob/main/http-cache/src/managers/streaming_cache.rs) as an example of implementing the `StreamingManager` trait for streaming support that stores response metadata and body content separately to enable memory-efficient handling of large responses. There are several ways to accomplish this, so feel free to experiment!
 
 ### Part One: The base structs
 
@@ -60,7 +60,7 @@ For streaming caching, we'll use a struct that stores the root path for the cach
 ```rust
 /// File-based streaming cache manager
 #[derive(Debug, Clone)]
-pub struct FileCacheManager {
+pub struct StreamingManager {
     root_path: PathBuf,
 }
 ```
@@ -148,7 +148,7 @@ For streaming caching that handles large responses without buffering them entire
 
 ```rust
 #[async_trait::async_trait]
-impl StreamingCacheManager for FileCacheManager {
+impl StreamingCacheManager for StreamingManager {
     type Body = StreamingBody<Empty<Bytes>>;
     ...
 ```
@@ -158,7 +158,7 @@ impl StreamingCacheManager for FileCacheManager {
 First, let's implement some helper methods that our cache will need:
 
 ```rust
-impl FileCacheManager {
+impl StreamingManager {
     /// Create a new streaming cache manager
     pub fn new(root_path: PathBuf) -> Self {
         Self { root_path }
@@ -333,4 +333,4 @@ async fn delete(&self, cache_key: &str) -> Result<()> {
 }
 ```
 
-Our `FileCacheManager` struct now meets the requirements of both the `CacheManager` and `StreamingCacheManager` traits and provides true streaming support without buffering large response bodies in memory!
+Our `StreamingManager` struct now meets the requirements of both the `CacheManager` and `StreamingCacheManager` traits and provides streaming support without buffering large response bodies in memory!

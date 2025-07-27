@@ -1,6 +1,6 @@
 # moka
 
-[`moka`](https://github.com/moka-rs/moka) is a fast, concurrent cache library inspired by the Caffeine library for Java. The moka manager supports traditional caching operations and can be used with streaming cache wrappers for memory-efficient handling of large responses.
+[`moka`](https://github.com/moka-rs/moka) is a fast, concurrent cache library inspired by the Caffeine library for Java. The moka manager provides traditional buffered caching operations for fast in-memory access.
 
 ## Getting Started
 

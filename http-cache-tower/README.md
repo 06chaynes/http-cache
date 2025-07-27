@@ -30,8 +30,7 @@ The following features are available. By default `manager-cacache` is enabled.
 
 - `manager-cacache` (default): enable [cacache](https://github.com/zkat/cacache-rs), a high-performance disk cache, backend manager.
 - `manager-moka` (disabled): enable [moka](https://github.com/moka-rs/moka), a high-performance in-memory cache, backend manager.
-- `streaming` (disabled): enable streaming cache support with [tokio](https://github.com/tokio-rs/tokio) runtime.
-- `streaming` (disabled): enable streaming cache support for memory-efficient handling of large responses.
+- `streaming` (disabled): enable streaming cache support for memory-efficient handling of large responses. When enabled, provides `StreamingCacheManager` for optimal streaming performance and `StreamingCacheWrapper` for adding streaming capabilities to any cache manager.
 
 ## Example
 
@@ -78,21 +77,28 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ## Streaming HTTP Cache
 
-For large responses or when memory efficiency is important, use the streaming cache layer. The Tower implementation provides **full streaming support** with memory-efficient handling:
+For large responses or when memory efficiency is important, use the streaming cache layer. While any cache manager can be wrapped with `StreamingCacheWrapper`, for optimal streaming performance use `StreamingCacheManager`:
 
 ```rust
+# #[cfg(feature = "streaming")]
 use http_cache_tower::{HttpCacheStreamingLayer, StreamingCacheWrapper};
-use http_cache::CACacheManager;
+# #[cfg(feature = "streaming")]
+use http_cache::StreamingCacheManager;
+# #[cfg(feature = "streaming")]
 use tower::{ServiceBuilder, ServiceExt};
+# #[cfg(feature = "streaming")]
 use http::{Request, Response};
+# #[cfg(feature = "streaming")]
 use http_body_util::Full;
+# #[cfg(feature = "streaming")]
 use bytes::Bytes;
 use std::path::PathBuf;
 
+# #[cfg(feature = "streaming")]
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Create a streaming cache manager
-    let cache_manager = CACacheManager::new(PathBuf::from("./cache"), false);
+    // StreamingCacheManager provides optimal streaming with no buffering
+    let cache_manager = StreamingCacheManager::new(PathBuf::from("./cache"));
     let streaming_wrapper = StreamingCacheWrapper::new(cache_manager);
 
     // Create the streaming cache layer
@@ -118,7 +124,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     Ok(())
 }
+
+# #[cfg(not(feature = "streaming"))]
+# fn main() {}
 ```
+
+**Note**: `CACacheManager` and `MokaManager` can also be used with `StreamingCacheWrapper` but will buffer responses in memory, while `StreamingCacheManager` provides optimal streaming performance.
 
 ## Cache Backends
 

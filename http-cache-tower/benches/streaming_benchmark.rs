@@ -2,7 +2,7 @@ use bytes::Bytes;
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use http::{Request, Response, StatusCode};
 use http_body_util::{BodyExt, Full};
-use http_cache::{CACacheManager, FileCacheManager};
+use http_cache::{CACacheManager, StreamingManager};
 use http_cache_tower::{HttpCacheLayer, HttpCacheStreamingLayer};
 use std::future::Future;
 use std::hint::black_box;
@@ -120,7 +120,7 @@ fn bench_cache_miss_comparison(c: &mut Criterion) {
 
                         for i in 0..iters {
                             let temp_dir = tempfile::tempdir().unwrap();
-                            let cache_manager = FileCacheManager::new(
+                            let cache_manager = StreamingManager::new(
                                 temp_dir.path().to_path_buf(),
                             );
                             let layer =
@@ -221,7 +221,7 @@ fn bench_cache_hit_comparison(c: &mut Criterion) {
                 let rt = tokio::runtime::Runtime::new().unwrap();
                 let temp_dir = tempfile::tempdir().unwrap();
                 let cache_manager =
-                    FileCacheManager::new(temp_dir.path().to_path_buf());
+                    StreamingManager::new(temp_dir.path().to_path_buf());
                 let layer = HttpCacheStreamingLayer::new(cache_manager);
                 let service = TestResponseService::new(size);
                 let mut cached_service = layer.layer(service);
@@ -278,7 +278,7 @@ fn bench_streaming_throughput(c: &mut Criterion) {
             |b, &concurrent| {
                 let rt = tokio::runtime::Runtime::new().unwrap();
                 let temp_dir = tempfile::tempdir().unwrap();
-                let cache_manager = FileCacheManager::new(
+                let cache_manager = StreamingManager::new(
                     temp_dir.path().to_path_buf(),
                 );
                 let layer = HttpCacheStreamingLayer::new(cache_manager);

@@ -8,16 +8,20 @@
 
 #![cfg(feature = "streaming")]
 
-use http_cache::{CACacheManager, FileCacheManager};
+use futures_util::StreamExt;
+use http_cache::{CACacheManager, StreamingManager};
 use http_cache_reqwest::{Cache, StreamingCache};
 use reqwest::Client;
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
+use tempfile::tempdir;
 use tokio::time::sleep;
-use wiremock::matchers::{method, path};
-use wiremock::{Mock, MockServer, ResponseTemplate};
+use wiremock::{
+    matchers::{method, path},
+    Mock, MockServer, ResponseTemplate,
+};
 
 // Memory tracking allocator
 struct MemoryTracker {
@@ -56,19 +60,18 @@ unsafe impl GlobalAlloc for MemoryTracker {
 #[global_allocator]
 static MEMORY_TRACKER: MemoryTracker = MemoryTracker::new();
 
-// Create a mock server that serves large responses
 async fn create_mock_server(payload_size: usize) -> MockServer {
     let mock_server = MockServer::start().await;
-
     let large_body = vec![b'X'; payload_size];
-    let response = ResponseTemplate::new(200)
-        .set_body_bytes(large_body)
-        .append_header("cache-control", "max-age=3600, public")
-        .append_header("content-type", "application/octet-stream");
 
     Mock::given(method("GET"))
         .and(path("/large-response"))
-        .respond_with(response)
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_bytes(large_body)
+                .append_header("cache-control", "max-age=3600, public")
+                .append_header("content-type", "application/octet-stream"),
+        )
         .mount(&mock_server)
         .await;
 
@@ -83,17 +86,19 @@ async fn measure_cache_hit_memory_usage(
     let url = format!("{}/large-response", mock_server.uri());
 
     if is_streaming {
-        // Create streaming cache setup
-        let temp_dir = tempfile::tempdir().unwrap();
-        let file_cache_manager =
-            FileCacheManager::new(temp_dir.path().to_path_buf());
+        // Create TRUE streaming cache setup using StreamingManager
+        // This uses the StreamingCache middleware which supports file-based streaming
+        let temp_dir = tempdir().unwrap();
+        let streaming_manager =
+            StreamingManager::new(temp_dir.path().to_path_buf());
         let streaming_cache = StreamingCache::new(
-            file_cache_manager,
+            streaming_manager,
             http_cache::CacheMode::Default,
         );
 
-        let client: ClientWithMiddleware =
-            ClientBuilder::new(Client::new()).with(streaming_cache).build();
+        let client = ClientBuilder::new(reqwest::Client::new())
+            .with(streaming_cache)
+            .build();
 
         // First request to populate cache
         let _response1 = client.get(&url).send().await.unwrap();
@@ -110,13 +115,12 @@ async fn measure_cache_hit_memory_usage(
         let response2 = client.get(&url).send().await.unwrap();
         let peak_after_response = MEMORY_TRACKER.current_usage();
 
-        // Stream response body
+        // Stream response body properly using bytes_stream()
+        let mut body_stream = response2.bytes_stream();
         let mut peak_during_streaming = peak_after_response;
-        let body_bytes = response2.bytes().await.unwrap();
 
-        // Simulate chunk processing to track memory during streaming
-        for chunk in body_bytes.chunks(8192) {
-            let _processed_chunk = chunk;
+        while let Some(chunk_result) = body_stream.next().await {
+            let _chunk = chunk_result.unwrap();
             let current_memory = MEMORY_TRACKER.current_usage();
             peak_during_streaming = peak_during_streaming.max(current_memory);
         }
@@ -130,7 +134,7 @@ async fn measure_cache_hit_memory_usage(
         )
     } else {
         // Create buffered cache setup
-        let temp_dir = tempfile::tempdir().unwrap();
+        let temp_dir = tempdir().unwrap();
         let cache_manager =
             CACacheManager::new(temp_dir.path().to_path_buf(), false);
         let cache = Cache(http_cache::HttpCache {
@@ -157,11 +161,11 @@ async fn measure_cache_hit_memory_usage(
         let response2 = client.get(&url).send().await.unwrap();
         let peak_after_response = MEMORY_TRACKER.current_usage();
 
-        // Read response body
-        let mut peak_during_streaming = peak_after_response;
+        // Buffer response body (non-streaming test)
         let body_bytes = response2.bytes().await.unwrap();
+        let mut peak_during_streaming = peak_after_response;
 
-        // Simulate chunk processing to track memory during streaming
+        // Simulate chunk processing to track memory during buffering
         for chunk in body_bytes.chunks(8192) {
             let _processed_chunk = chunk;
             let current_memory = MEMORY_TRACKER.current_usage();
@@ -178,109 +182,128 @@ async fn measure_cache_hit_memory_usage(
     }
 }
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn run_memory_analysis() {
     println!("Memory Usage Analysis: Buffered vs Streaming Cache (Reqwest)");
     println!("============================================================");
     println!("This analysis measures memory efficiency differences between");
     println!("traditional buffered caching and file-based streaming caching.");
-    println!("Measurements are taken during cache hits to compare memory usage patterns.\n");
+    println!("Measurements are taken during cache hits to compare memory usage patterns.");
+    println!();
 
-    // Memory profiling analysis for different payload sizes
-    let payload_sizes = vec![
-        100 * 1024,       // 100KB
-        1024 * 1024,      // 1MB
-        5 * 1024 * 1024,  // 5MB
-        10 * 1024 * 1024, // 10MB
+    let payload_sizes = [
+        (100 * 1024, "100KB"),
+        (1024 * 1024, "1024KB"),
+        (5 * 1024 * 1024, "5120KB"),
+        (10 * 1024 * 1024, "10240KB"),
     ];
 
-    let mut overall_buffered_peak = 0;
-    let mut overall_streaming_peak = 0;
+    let mut max_buffered_peak = 0;
+    let mut max_streaming_peak = 0;
 
-    for size in &payload_sizes {
-        println!("Testing cache hits with {}KB payload:", size / 1024);
-        println!("{}", "=".repeat(60));
+    for (size, size_label) in payload_sizes {
+        println!("Testing cache hits with {size_label} payload:");
+        println!(
+            "============================================================"
+        );
 
-        // Test buffered cache hit
+        // Test buffered cache
         let (buffered_response, buffered_peak, buffered_final) =
-            measure_cache_hit_memory_usage(*size, false).await;
+            measure_cache_hit_memory_usage(size, false).await;
 
-        println!("Buffered Cache Hit ({}KB payload):", size / 1024);
+        println!("Buffered Cache Hit ({size_label} payload):");
         println!("  Response memory delta: {buffered_response} bytes");
         println!("  Peak memory delta: {buffered_peak} bytes");
         println!("  Final memory delta: {buffered_final} bytes");
+        println!();
 
-        // Test streaming cache hit
+        max_buffered_peak = max_buffered_peak.max(buffered_peak);
+
+        // Test streaming cache
         let (streaming_response, streaming_peak, streaming_final) =
-            measure_cache_hit_memory_usage(*size, true).await;
+            measure_cache_hit_memory_usage(size, true).await;
 
-        println!("\nStreaming Cache Hit ({}KB payload):", size / 1024);
+        println!("Streaming Cache Hit ({size_label} payload):");
         println!("  Response memory delta: {streaming_response} bytes");
         println!("  Peak memory delta: {streaming_peak} bytes");
         println!("  Final memory delta: {streaming_final} bytes");
+        println!();
 
-        println!("\nCache hit memory comparison:");
+        max_streaming_peak = max_streaming_peak.max(streaming_peak);
 
-        if buffered_response > 0 && streaming_response < buffered_response {
-            let response_savings = ((buffered_response - streaming_response)
-                as f64
+        // Compare results
+        println!("Cache hit memory comparison:");
+        if streaming_response <= buffered_response {
+            let savings = ((buffered_response - streaming_response) as f64
                 / buffered_response as f64)
                 * 100.0;
             println!(
-                "  Response memory savings: {response_savings:.1}% ({buffered_response} vs {streaming_response} bytes)"
+                "  Response memory savings: {savings:.1}% ({buffered_response} vs {streaming_response} bytes)"
+            );
+        } else {
+            let increase = ((streaming_response - buffered_response) as f64
+                / buffered_response as f64)
+                * 100.0;
+            println!(
+                "  Response memory increase: {increase:.1}% ({buffered_response} vs {streaming_response} bytes)"
             );
         }
 
-        if buffered_peak > 0 && streaming_peak < buffered_peak {
-            let peak_savings = ((buffered_peak - streaming_peak) as f64
+        if streaming_peak <= buffered_peak {
+            let savings = ((buffered_peak - streaming_peak) as f64
                 / buffered_peak as f64)
                 * 100.0;
             println!(
-                "  Peak memory savings: {peak_savings:.1}% ({buffered_peak} vs {streaming_peak} bytes)"
+                "  Peak memory savings: {savings:.1}% ({buffered_peak} vs {streaming_peak} bytes)"
             );
-        } else if streaming_peak > buffered_peak {
-            let peak_increase = ((streaming_peak - buffered_peak) as f64
+        } else {
+            let increase = ((streaming_peak - buffered_peak) as f64
                 / buffered_peak as f64)
                 * 100.0;
             println!(
-                "  Peak memory increase: {peak_increase:.1}% ({buffered_peak} vs {streaming_peak} bytes)"
+                "  Peak memory increase: {increase:.1}% ({buffered_peak} vs {streaming_peak} bytes)"
             );
         }
 
-        if buffered_final > 0 && streaming_final < buffered_final {
-            let final_savings = ((buffered_final - streaming_final) as f64
+        if streaming_final <= buffered_final {
+            let savings = ((buffered_final - streaming_final) as f64
                 / buffered_final as f64)
                 * 100.0;
             println!(
-                "  Final memory savings: {final_savings:.1}% ({buffered_final} vs {streaming_final} bytes)"
+                "  Final memory savings: {savings:.1}% ({buffered_final} vs {streaming_final} bytes)"
+            );
+        } else {
+            let increase = ((streaming_final - buffered_final) as f64
+                / buffered_final as f64)
+                * 100.0;
+            println!(
+                "  Final memory increase: {increase:.1}% ({buffered_final} vs {streaming_final} bytes)"
             );
         }
 
-        println!(
-            "  Absolute memory difference: {} bytes",
-            (buffered_peak as i64 - streaming_peak as i64).abs()
-        );
-
-        overall_buffered_peak = overall_buffered_peak.max(buffered_peak);
-        overall_streaming_peak = overall_streaming_peak.max(streaming_peak);
-
-        println!("\n");
+        let abs_diff = buffered_peak.abs_diff(streaming_peak);
+        println!("  Absolute memory difference: {abs_diff} bytes");
+        println!();
+        println!();
     }
 
+    // Overall summary
     println!("Overall Analysis Summary:");
     println!("========================");
-    println!("Max buffered peak memory: {overall_buffered_peak} bytes");
-    println!("Max streaming peak memory: {overall_streaming_peak} bytes");
+    println!("Max buffered peak memory: {max_buffered_peak} bytes");
+    println!("Max streaming peak memory: {max_streaming_peak} bytes");
+    let overall_savings = if max_streaming_peak <= max_buffered_peak {
+        ((max_buffered_peak - max_streaming_peak) as f64
+            / max_buffered_peak as f64)
+            * 100.0
+    } else {
+        -((max_streaming_peak - max_buffered_peak) as f64
+            / max_buffered_peak as f64)
+            * 100.0
+    };
+    println!("Overall memory savings: {overall_savings:.1}%");
+}
 
-    if overall_buffered_peak > 0
-        && overall_streaming_peak < overall_buffered_peak
-    {
-        let overall_savings = ((overall_buffered_peak - overall_streaming_peak)
-            as f64
-            / overall_buffered_peak as f64)
-            * 100.0;
-        println!("Overall memory savings: {overall_savings:.1}%");
-    }
-
-    Ok(())
+#[tokio::main]
+async fn main() {
+    run_memory_analysis().await;
 }

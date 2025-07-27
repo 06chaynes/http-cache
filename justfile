@@ -17,6 +17,21 @@
     echo "\n----------\nQuickcache middleware:\n"
     cd http-cache-quickcache && cargo nextest run --all-features
 
+# Run doctests on all crates with proper feature combinations
+@doctest:
+    echo "----------\nCore library (smol):\n"
+    cd http-cache && cargo test --doc --no-default-features --features manager-cacache,cacache-smol,with-http-types,manager-moka,streaming-smol
+    echo "\n----------\nCore library (tokio):\n"
+    cd http-cache && cargo test --doc --no-default-features --features manager-cacache,cacache-tokio,with-http-types,manager-moka,streaming-tokio
+    echo "\n----------\nReqwest middleware:\n"
+    cd http-cache-reqwest && cargo test --doc --all-features
+    echo "\n----------\nSurf middleware:\n"
+    cd http-cache-surf && cargo test --doc --all-features
+    echo "\n----------\nTower middleware:\n"
+    cd http-cache-tower && cargo test --doc --all-features
+    echo "\n----------\nQuickcache middleware:\n"
+    cd http-cache-quickcache && cargo test --doc --all-features
+
 @check:
     echo "----------\nCore library (smol):\n"
     cd http-cache && cargo check --no-default-features --features manager-cacache,cacache-smol,with-http-types,manager-moka,streaming-smol

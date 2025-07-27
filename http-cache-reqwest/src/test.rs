@@ -1150,23 +1150,27 @@ async fn options_request_not_cached() -> Result<()> {
 #[cfg(test)]
 mod streaming_tests {
     use super::*;
+    #[cfg(feature = "streaming")]
     use crate::{HttpCacheStreamInterface, HttpStreamingCache, StreamingBody};
     use bytes::Bytes;
     use http::{Request, Response};
     use http_body::Body;
     use http_body_util::{BodyExt, Full};
-    use http_cache::FileCacheManager;
+    #[cfg(feature = "streaming")]
+    use http_cache::StreamingManager;
     use tempfile::TempDir;
 
     /// Helper function to create a streaming cache manager
-    fn create_streaming_cache_manager() -> FileCacheManager {
+    #[cfg(feature = "streaming")]
+    fn create_streaming_cache_manager() -> StreamingManager {
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
         let cache_path = temp_dir.path().to_path_buf();
         // Keep the temp dir alive by leaking it
         std::mem::forget(temp_dir);
-        FileCacheManager::new(cache_path)
+        StreamingManager::new(cache_path)
     }
 
+    #[cfg(feature = "streaming")]
     #[tokio::test]
     async fn test_streaming_cache_basic_operations() -> Result<()> {
         let manager = create_streaming_cache_manager();
@@ -1225,6 +1229,7 @@ mod streaming_tests {
         Ok(())
     }
 
+    #[cfg(feature = "streaming")]
     #[tokio::test]
     async fn test_streaming_cache_large_response() -> Result<()> {
         let manager = create_streaming_cache_manager();
@@ -1270,6 +1275,7 @@ mod streaming_tests {
         Ok(())
     }
 
+    #[cfg(feature = "streaming")]
     #[tokio::test]
     async fn test_streaming_cache_empty_response() -> Result<()> {
         let manager = create_streaming_cache_manager();
@@ -1311,6 +1317,7 @@ mod streaming_tests {
         Ok(())
     }
 
+    #[cfg(feature = "streaming")]
     #[tokio::test]
     async fn test_streaming_cache_no_cache_mode() -> Result<()> {
         let manager = create_streaming_cache_manager();
@@ -1334,6 +1341,7 @@ mod streaming_tests {
         Ok(())
     }
 
+    #[cfg(feature = "streaming")]
     #[tokio::test]
     async fn test_streaming_body_operations() -> Result<()> {
         // Test buffered streaming body
@@ -1444,6 +1452,247 @@ mod streaming_tests {
 
         let response = client.get(&rate_limit_url).send().await?;
         assert_eq!(response.status(), 429);
+
+        Ok(())
+    }
+
+    #[cfg(feature = "streaming")]
+    #[tokio::test]
+    async fn streaming_with_different_cache_modes() -> Result<()> {
+        let manager = create_streaming_cache_manager();
+
+        // Test with NoCache mode
+        let cache_no_cache = HttpStreamingCache {
+            mode: CacheMode::NoCache,
+            manager: manager.clone(),
+            options: HttpCacheOptions::default(),
+        };
+
+        let request = Request::builder()
+            .uri("https://example.com/streaming-no-cache")
+            .header("user-agent", "test-agent")
+            .body(())
+            .unwrap();
+
+        let (parts, _) = request.into_parts();
+        let analysis = cache_no_cache.analyze_request(&parts, None)?;
+
+        // Should analyze but mode affects caching behavior
+        assert!(!analysis.cache_key.is_empty());
+
+        // Test with ForceCache mode
+        let cache_force = HttpStreamingCache {
+            mode: CacheMode::ForceCache,
+            manager: manager.clone(),
+            options: HttpCacheOptions::default(),
+        };
+
+        let request2 = Request::builder()
+            .uri("https://example.com/streaming-force-cache")
+            .header("user-agent", "test-agent")
+            .body(())
+            .unwrap();
+
+        let (parts2, _) = request2.into_parts();
+        let analysis2 = cache_force.analyze_request(&parts2, None)?;
+
+        assert!(!analysis2.cache_key.is_empty());
+        assert!(analysis2.should_cache);
+
+        Ok(())
+    }
+
+    #[cfg(feature = "streaming")]
+    #[tokio::test]
+    async fn streaming_with_custom_cache_options() -> Result<()> {
+        let manager = create_streaming_cache_manager();
+
+        let cache = HttpStreamingCache {
+            mode: CacheMode::Default,
+            manager,
+            options: HttpCacheOptions {
+                cache_key: Some(Arc::new(|req: &http::request::Parts| {
+                    format!("stream:{}:{}", req.method, req.uri)
+                })),
+                cache_options: Some(CacheOptions {
+                    shared: false,
+                    ..Default::default()
+                }),
+                cache_mode_fn: Some(Arc::new(|req: &http::request::Parts| {
+                    if req.uri.path().contains("stream") {
+                        CacheMode::ForceCache
+                    } else {
+                        CacheMode::Default
+                    }
+                })),
+                cache_bust: None,
+                cache_status_headers: false,
+                response_cache_mode_fn: None,
+            },
+        };
+
+        // Test custom cache key generation
+        let request = Request::builder()
+            .uri("https://example.com/streaming-custom")
+            .header("user-agent", "test-agent")
+            .body(())
+            .unwrap();
+
+        let (parts, _) = request.into_parts();
+        let analysis = cache.analyze_request(&parts, None)?;
+
+        assert_eq!(
+            analysis.cache_key,
+            "stream:GET:https://example.com/streaming-custom"
+        );
+        assert!(analysis.should_cache); // ForceCache mode due to custom function
+
+        Ok(())
+    }
+
+    #[cfg(feature = "streaming")]
+    #[tokio::test]
+    async fn streaming_error_handling() -> Result<()> {
+        let manager = create_streaming_cache_manager();
+        let cache = HttpStreamingCache {
+            mode: CacheMode::Default,
+            manager,
+            options: HttpCacheOptions::default(),
+        };
+
+        // Test with malformed request
+        let request =
+            Request::builder().uri("not-a-valid-uri").body(()).unwrap();
+
+        let (parts, _) = request.into_parts();
+
+        // Should handle gracefully and not panic
+        let result = cache.analyze_request(&parts, None);
+        // The analyze_request should succeed even with unusual URIs
+        assert!(result.is_ok());
+
+        Ok(())
+    }
+
+    #[cfg(feature = "streaming")]
+    #[tokio::test]
+    async fn streaming_concurrent_access() -> Result<()> {
+        use tokio::task::JoinSet;
+
+        let manager = create_streaming_cache_manager();
+        let cache = Arc::new(HttpStreamingCache {
+            mode: CacheMode::Default,
+            manager,
+            options: HttpCacheOptions::default(),
+        });
+
+        let mut join_set = JoinSet::new();
+
+        // Spawn multiple concurrent tasks
+        for i in 0..10 {
+            let cache_clone = cache.clone();
+            join_set.spawn(async move {
+                let request = Request::builder()
+                    .uri(format!("https://example.com/concurrent-{i}"))
+                    .header("user-agent", "test-agent")
+                    .body(())
+                    .unwrap();
+
+                let (parts, _) = request.into_parts();
+                cache_clone.analyze_request(&parts, None)
+            });
+        }
+
+        // Collect all results
+        let mut results = Vec::new();
+        while let Some(result) = join_set.join_next().await {
+            results.push(result.unwrap());
+        }
+
+        // All should succeed
+        assert_eq!(results.len(), 10);
+        for result in results {
+            assert!(result.is_ok());
+        }
+
+        Ok(())
+    }
+
+    #[cfg(feature = "streaming")]
+    #[tokio::test]
+    async fn streaming_with_request_extensions() -> Result<()> {
+        let manager = create_streaming_cache_manager();
+        let cache = HttpStreamingCache {
+            mode: CacheMode::Default,
+            manager,
+            options: HttpCacheOptions::default(),
+        };
+
+        // Test with request that has extensions (simulating middleware data)
+        let mut request = Request::builder()
+            .uri("https://example.com/with-extensions")
+            .header("user-agent", "test-agent")
+            .body(())
+            .unwrap();
+
+        // Add some extension data
+        request.extensions_mut().insert("custom_data".to_string());
+
+        let (parts, _) = request.into_parts();
+        let analysis = cache.analyze_request(&parts, None)?;
+
+        // Should handle requests with extensions normally
+        assert!(!analysis.cache_key.is_empty());
+        assert!(analysis.should_cache);
+
+        Ok(())
+    }
+
+    #[cfg(feature = "streaming")]
+    #[tokio::test]
+    async fn streaming_cache_with_vary_headers() -> Result<()> {
+        let manager = create_streaming_cache_manager();
+        let cache = HttpStreamingCache {
+            mode: CacheMode::Default,
+            manager,
+            options: HttpCacheOptions::default(),
+        };
+
+        // Create a request with headers that could affect caching via Vary
+        let request = Request::builder()
+            .uri("https://example.com/vary-test")
+            .header("user-agent", "test-agent")
+            .header("accept-encoding", "gzip, deflate")
+            .header("accept-language", "en-US,en;q=0.9")
+            .body(())
+            .unwrap();
+
+        let (parts, _) = request.into_parts();
+        let analysis = cache.analyze_request(&parts, None)?;
+
+        // Create a response with Vary headers
+        let response = Response::builder()
+            .status(200)
+            .header("content-type", "application/json")
+            .header("cache-control", "max-age=3600")
+            .header("vary", "Accept-Encoding, Accept-Language")
+            .body(Full::new(Bytes::from("vary test data")))
+            .unwrap();
+
+        // Process the response
+        let cached_response =
+            cache.process_response(analysis.clone(), response).await?;
+        assert_eq!(cached_response.status(), 200);
+
+        // Verify the body
+        let body_bytes =
+            cached_response.into_body().collect().await?.to_bytes();
+        assert_eq!(body_bytes, "vary test data");
+
+        // Test cache lookup
+        let cached_response =
+            cache.lookup_cached_response(&analysis.cache_key).await?;
+        assert!(cached_response.is_some());
 
         Ok(())
     }

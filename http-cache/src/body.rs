@@ -3,7 +3,7 @@
 //! This module provides the [`StreamingBody`] type which allows HTTP cache middleware
 //! to handle both cached (buffered) responses and streaming responses from upstream
 //! servers without requiring full buffering of large responses.
-//! This implementation is based on the [http-cache-stream](https://github.com/stjude-rust-labs/http-cache-stream) approach.
+//! This implementation provides efficient streaming capabilities for HTTP caching.
 
 #![allow(missing_docs)]
 
@@ -21,7 +21,7 @@ use crate::error::StreamingError;
 #[cfg(feature = "streaming")]
 pin_project! {
     /// A body type that can represent either buffered data from cache, streaming body from upstream,
-    /// or streaming from a file for true file-based caching.
+    /// or streaming from a file for file-based caching.
     ///
     /// This enum allows the HTTP cache middleware to efficiently handle:
     /// - Cached responses (buffered data)
@@ -32,7 +32,7 @@ pin_project! {
     ///
     /// - [`Buffered`](StreamingBody::Buffered): Contains cached response data that can be sent immediately
     /// - [`Streaming`](StreamingBody::Streaming): Wraps an upstream body for streaming responses
-    /// - [`File`](StreamingBody::File): Streams directly from a file for true zero-copy caching
+    /// - [`File`](StreamingBody::File): Streams directly from a file for zero-copy caching
     ///
     /// # Example
     ///
@@ -270,5 +270,36 @@ where
 impl<B> From<Bytes> for StreamingBody<B> {
     fn from(bytes: Bytes) -> Self {
         Self::buffered(bytes)
+    }
+}
+
+#[cfg(feature = "streaming")]
+impl<B> StreamingBody<B>
+where
+    B: Body + Unpin + Send,
+    B::Error: Into<StreamingError>,
+    B::Data: Into<Bytes>,
+{
+    /// Convert this streaming body into a stream of Bytes for use with reqwest.
+    ///
+    /// This method creates a stream that's compatible with `reqwest::Body::wrap_stream()`,
+    /// allowing for streaming without collecting the entire body into memory first.
+    /// This is particularly useful for file-based cached responses which can stream
+    /// directly from disk.
+    pub fn into_bytes_stream(
+        self,
+    ) -> impl futures_util::Stream<
+        Item = Result<Bytes, Box<dyn std::error::Error + Send + Sync>>,
+    > + Send {
+        use futures_util::TryStreamExt;
+
+        http_body_util::BodyStream::new(self)
+            .map_ok(|frame| {
+                // Extract data from frame, StreamingBody always produces Bytes
+                frame.into_data().unwrap_or_else(|_| Bytes::new())
+            })
+            .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {
+                Box::new(std::io::Error::other(format!("Stream error: {e}")))
+            })
     }
 }

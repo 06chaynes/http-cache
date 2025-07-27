@@ -1,6 +1,6 @@
 # cacache
 
-[`cacache`](https://github.com/zkat/cacache-rs) is a high-performance, concurrent, content-addressable disk cache, optimized for async APIs. It supports both traditional caching and streaming operations for memory-efficient handling of large responses.
+[`cacache`](https://github.com/zkat/cacache-rs) is a high-performance, concurrent, content-addressable disk cache, optimized for async APIs. It provides traditional buffered caching for memory-efficient handling of responses.
 
 ## Getting Started
 

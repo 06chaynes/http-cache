@@ -28,6 +28,9 @@ reqwest-middleware = "0.4.0"
 serde = { version = "1.0.217", features = ["derive"] }
 url = { version = "2.5.4", features = ["serde"] }
 
+# Optional dependencies for streaming feature
+futures-util = { version = "0.3.31", optional = true }
+
 [dependencies.http-cache]
 path = "../http-cache"
 version = "1.0.0-alpha.1"
@@ -47,7 +50,7 @@ anyhow = "1.0.95"
 default = ["manager-cacache"]
 manager-cacache = ["http-cache/manager-cacache", "http-cache/cacache-tokio"]
 manager-moka = ["http-cache/manager-moka"]
-streaming = ["http-cache/streaming-tokio"]
+streaming = ["http-cache/streaming-tokio", "reqwest/stream", "futures-util"]
 
 [package.metadata.docs.rs]
 all-features = true

@@ -136,19 +136,19 @@
 //!
 //! ## Streaming Support
 //!
-//! For handling large responses without full buffering, use the `FileCacheManager`:
+//! For handling large responses without full buffering, use the `StreamingManager`:
 //!
 //! ```rust
 //! # #[cfg(feature = "streaming")]
 //! # {
-//! use http_cache::{StreamingBody, HttpStreamingCache, FileCacheManager};
+//! use http_cache::{StreamingBody, HttpStreamingCache, StreamingManager};
 //! use bytes::Bytes;
 //! use std::path::PathBuf;
 //! use http_body::Body;
 //! use http_body_util::Full;
 //!
 //! // Create a file-based streaming cache manager
-//! let manager = FileCacheManager::new(PathBuf::from("./streaming-cache"));
+//! let manager = StreamingManager::new(PathBuf::from("./streaming-cache"));
 //!
 //! // StreamingBody can handle both buffered and streaming scenarios
 //! let body: StreamingBody<Full<Bytes>> = StreamingBody::buffered(Bytes::from("cached content"));
@@ -156,8 +156,8 @@
 //! # }
 //! ```
 //!
-//! **Note**: True streaming support requires the `FileCacheManager` with the `streaming` feature.
-//! Other cache managers (CACacheManager, MokaManager, QuickManager) do not support true streaming
+//! **Note**: Streaming support requires the `StreamingManager` with the `streaming` feature.
+//! Other cache managers (CACacheManager, MokaManager, QuickManager) do not support streaming
 //! and will buffer response bodies in memory.
 //!
 //! ## Features
@@ -170,14 +170,14 @@
 //! - `cacache-tokio` (disabled): enable [tokio](https://github.com/tokio-rs/tokio) runtime support for cacache.
 //! - `manager-moka` (disabled): enable [moka](https://github.com/moka-rs/moka),
 //! an in-memory cache, backend manager.
-//! - `streaming` (disabled): enable the `FileCacheManager` for true streaming cache support.
+//! - `streaming` (disabled): enable the `StreamingManager` for streaming cache support.
 //! - `streaming-tokio` (disabled): enable streaming with tokio runtime support.
 //! - `streaming-smol` (disabled): enable streaming with smol runtime support.
 //! - `with-http-types` (disabled): enable [http-types](https://github.com/http-rs/http-types)
 //! type conversion support
 //!
-//! **Note**: Only `FileCacheManager` (via the `streaming` feature) provides true streaming support.
-//! Other managers will buffer response bodies in memory even when used with `StreamingCacheManager`.
+//! **Note**: Only `StreamingManager` (via the `streaming` feature) provides streaming support.
+//! Other managers will buffer response bodies in memory even when used with `StreamingManager`.
 //!
 //! ## Integration
 //!
@@ -215,7 +215,7 @@ pub use error::{BadHeader, BadVersion, BoxError, Result, StreamingError};
 pub use managers::cacache::CACacheManager;
 
 #[cfg(feature = "streaming")]
-pub use managers::streaming_cache::FileCacheManager;
+pub use managers::streaming_cache::StreamingManager;
 
 #[cfg(feature = "manager-moka")]
 pub use managers::moka::MokaManager;
@@ -500,6 +500,21 @@ pub trait StreamingCacheManager: Send + Sync + 'static {
 
     /// Attempts to remove a record from cache.
     async fn delete(&self, cache_key: &str) -> Result<()>;
+
+    /// Convert the manager's body type to a reqwest-compatible bytes stream.
+    /// This enables efficient streaming without collecting the entire body.
+    #[cfg(feature = "streaming")]
+    fn body_to_bytes_stream(
+        body: Self::Body,
+    ) -> impl futures_util::Stream<
+        Item = std::result::Result<
+            bytes::Bytes,
+            Box<dyn std::error::Error + Send + Sync>,
+        >,
+    > + Send
+    where
+        <Self::Body as http_body::Body>::Data: Send,
+        <Self::Body as http_body::Body>::Error: Send + Sync + 'static;
 }
 
 /// Describes the functionality required for interfacing with HTTP client middleware

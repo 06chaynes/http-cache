@@ -1,10 +1,10 @@
-# FileCacheManager (Streaming Cache)
+# StreamingManager (Streaming Cache)
 
-[`FileCacheManager`](https://github.com/06chaynes/http-cache/blob/main/http-cache/src/managers/streaming_cache.rs) is a file-based streaming cache manager that does not buffer response bodies in memory. This implementation stores response metadata and body content separately, enabling memory-efficient handling of large responses.
+[`StreamingManager`](https://github.com/06chaynes/http-cache/blob/main/http-cache/src/managers/streaming_cache.rs) is a file-based streaming cache manager that does not buffer response bodies in memory. This implementation stores response metadata and body content separately, enabling memory-efficient handling of large responses.
 
 ## Getting Started
 
-The `FileCacheManager` is built into the core `http-cache` crate and is available when the `streaming` feature is enabled.
+The `StreamingManager` is built into the core `http-cache` crate and is available when the `streaming` feature is enabled.
 
 ```toml
 [dependencies]
@@ -21,14 +21,14 @@ http-cache = { version = "1.0", features = ["streaming", "streaming-smol"] }
 ## Basic Usage
 
 ```rust
-use http_cache::{FileCacheManager, StreamingBody, HttpStreamingCache};
+use http_cache::{StreamingManager, StreamingBody, HttpStreamingCache};
 use std::path::PathBuf;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create a file-based streaming cache manager
     let cache_dir = PathBuf::from("./streaming-cache");
-    let manager = FileCacheManager::new(cache_dir);
+    let manager = StreamingManager::new(cache_dir);
     
     // Use with streaming cache
     let cache = HttpStreamingCache::new(manager);
@@ -42,7 +42,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 The streaming cache manager works with Tower's `HttpCacheStreamingLayer`:
 
 ```rust
-use http_cache::{FileCacheManager, HttpCacheStreamingLayer};
+use http_cache::{StreamingManager, HttpCacheStreamingLayer};
 use tower::{Service, ServiceExt};
 use http::{Request, Response, StatusCode};
 use http_body_util::Full;
@@ -53,7 +53,7 @@ use std::path::PathBuf;
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create streaming cache manager
     let cache_dir = PathBuf::from("./cache");
-    let manager = FileCacheManager::new(cache_dir);
+    let manager = StreamingManager::new(cache_dir);
     
     // Create streaming cache layer
     let cache_layer = HttpCacheStreamingLayer::new(manager);
@@ -88,12 +88,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 ### Creating a manager
 
 ```rust
-use http_cache::FileCacheManager;
+use http_cache::StreamingManager;
 use std::path::PathBuf;
 
 // Create with custom cache directory
 let cache_dir = PathBuf::from("./my-streaming-cache");
-let manager = FileCacheManager::new(cache_dir);
+let manager = StreamingManager::new(cache_dir);
 ```
 
 ### Streaming Cache Operations
@@ -101,14 +101,14 @@ let manager = FileCacheManager::new(cache_dir);
 #### Caching a streaming response
 
 ```rust
-use http_cache::{FileCacheManager, StreamingCacheManager};
+use http_cache::StreamingManager;
 use http::{Request, Response, StatusCode};
 use http_body_util::Full;
 use bytes::Bytes;
 use http_cache_semantics::CachePolicy;
 use url::Url;
 
-let manager = FileCacheManager::new(PathBuf::from("./cache"));
+let manager = StreamingManager::new(PathBuf::from("./cache"));
 
 // Create a large response to cache
 let large_data = vec![b'X'; 10_000_000]; // 10MB response
@@ -175,7 +175,7 @@ manager.delete("GET:https://example.com/large-file").await?;
 
 ## Storage Structure
 
-The FileCacheManager organizes cache files as follows:
+The StreamingManager organizes cache files as follows:
 
 ```text
 cache-directory/
@@ -217,18 +217,18 @@ cache-directory/
 
 | Manager | Memory Usage | Storage | Streaming | Best For |
 |---------|--------------|---------|-----------|----------|
-| FileCacheManager | Constant | Disk | Yes | Large responses, memory efficiency |
+| StreamingManager | Constant | Disk | Yes | Large responses, memory efficiency |
 | CACacheManager | Buffers responses | Disk | No | General purpose, moderate sizes |
 | MokaManager | Buffers responses | Memory | No | Fast access, small responses |
 | QuickManager | Buffers responses | Memory | No | Low overhead, small responses |
 
 ## Configuration
 
-The FileCacheManager uses sensible defaults but can be configured through environment:
+The StreamingManager uses sensible defaults but can be configured through environment:
 
 ```rust
 // Cache directory structure is automatically created
-let manager = FileCacheManager::new(PathBuf::from("./cache"));
+let manager = StreamingManager::new(PathBuf::from("./cache"));
 
 // The manager handles:
 // - Directory creation

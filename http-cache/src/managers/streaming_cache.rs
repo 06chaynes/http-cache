@@ -1,5 +1,5 @@
 //! File-based streaming cache manager that stores response metadata and body content separately.
-//! This enables true streaming by never loading complete response bodies into memory.
+//! This enables streaming by never loading complete response bodies into memory.
 //!
 //! This implementation is based on the [http-cache-stream](https://github.com/stjude-rust-labs/http-cache-stream) approach.
 
@@ -35,11 +35,11 @@ pub struct CacheMetadata {
 
 /// File-based streaming cache manager
 #[derive(Debug, Clone)]
-pub struct FileCacheManager {
+pub struct StreamingManager {
     root_path: PathBuf,
 }
 
-impl FileCacheManager {
+impl StreamingManager {
     /// Create a new streaming cache manager
     pub fn new(root_path: PathBuf) -> Self {
         Self { root_path }
@@ -78,7 +78,7 @@ impl FileCacheManager {
 }
 
 #[async_trait]
-impl crate::StreamingCacheManager for FileCacheManager {
+impl crate::StreamingCacheManager for StreamingManager {
     type Body = StreamingBody<Empty<Bytes>>;
 
     async fn get(
@@ -276,6 +276,23 @@ impl crate::StreamingCacheManager for FileCacheManager {
         runtime::remove_file(&metadata_path).await.ok();
         Ok(())
     }
+
+    #[cfg(feature = "streaming")]
+    fn body_to_bytes_stream(
+        body: Self::Body,
+    ) -> impl futures_util::Stream<
+        Item = std::result::Result<
+            Bytes,
+            Box<dyn std::error::Error + Send + Sync>,
+        >,
+    > + Send
+    where
+        <Self::Body as http_body::Body>::Data: Send,
+        <Self::Body as http_body::Body>::Error: Send + Sync + 'static,
+    {
+        // Use the StreamingBody's built-in conversion method
+        body.into_bytes_stream()
+    }
 }
 
 #[cfg(test)]
@@ -288,7 +305,7 @@ mod tests {
     #[tokio::test]
     async fn test_streaming_cache_put_get() {
         let temp_dir = TempDir::new().unwrap();
-        let cache = FileCacheManager::new(temp_dir.path().to_path_buf());
+        let cache = StreamingManager::new(temp_dir.path().to_path_buf());
 
         let original_body = Full::new(Bytes::from("test response body"));
         let response = Response::builder()
@@ -338,7 +355,7 @@ mod tests {
     #[tokio::test]
     async fn test_streaming_cache_delete() {
         let temp_dir = TempDir::new().unwrap();
-        let cache = FileCacheManager::new(temp_dir.path().to_path_buf());
+        let cache = StreamingManager::new(temp_dir.path().to_path_buf());
 
         let original_body = Full::new(Bytes::from("test response body"));
         let response = Response::builder()
