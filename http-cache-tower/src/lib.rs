@@ -952,6 +952,33 @@ where
     }
 }
 
+// Hyper service implementation for HttpCacheService
+impl<S, CM> hyper::service::Service<Request<hyper::body::Incoming>>
+    for HttpCacheService<S, CM>
+where
+    S: Service<Request<hyper::body::Incoming>> + Clone + Send + 'static,
+    S::Response: Into<Response<http_body_util::Full<Bytes>>>,
+    S::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
+    S::Future: Send + 'static,
+    CM: CacheManager,
+{
+    type Response = Response<HttpCacheBody<http_body_util::Full<Bytes>>>;
+    type Error = HttpCacheError;
+    type Future = Pin<
+        Box<
+            dyn std::future::Future<
+                    Output = Result<Self::Response, Self::Error>,
+                > + Send,
+        >,
+    >;
+
+    fn call(&self, _req: Request<hyper::body::Incoming>) -> Self::Future {
+        // Convert to the format expected by the generic Service implementation
+        let service_clone = self.clone();
+        Box::pin(async move { service_clone.call(_req).await })
+    }
+}
+
 #[cfg(feature = "streaming")]
 impl<S, CM, ReqBody, ResBody> Service<Request<ReqBody>>
     for HttpCacheStreamingService<S, CM>

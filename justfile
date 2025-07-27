@@ -71,6 +71,13 @@ memory-profile:
     cd http-cache-tower && cargo run --release --example streaming_memory_profile --features streaming
     cd http-cache-reqwest && cargo run --release --example streaming_memory_profile --features streaming
 
+# Run Tower Hyper examples
+@examples:
+    echo "----------\nTower Hyper Basic Example:\n"
+    cd http-cache-tower && cargo run --example hyper_basic --features manager-cacache
+    echo "\n----------\nTower Hyper Streaming Example:\n"
+    cd http-cache-tower && cargo run --example hyper_streaming --features manager-cacache
+
 # Generate a changelog with git-cliff
 changelog TAG:
     git-cliff --prepend CHANGELOG.md -u --tag {{TAG}}

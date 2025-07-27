@@ -55,6 +55,10 @@ required-features = ["streaming"]
 name = "streaming_memory_profile"
 required-features = ["streaming"]
 
+[[example]]
+name = "hyper_basic"
+required-features = ["manager-cacache"]
+
 [features]
 default = ["manager-cacache"]
 manager-cacache = ["http-cache/manager-cacache", "http-cache/cacache-tokio"]
