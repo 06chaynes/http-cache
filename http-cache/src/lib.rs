@@ -186,7 +186,7 @@
 //!
 //! - [`http-cache-reqwest`](https://docs.rs/http-cache-reqwest) for reqwest client middleware
 //! - [`http-cache-surf`](https://docs.rs/http-cache-surf) for surf client middleware  
-//! - [`http-cache-tower`](https://docs.rs/http-cache-tower) for tower/axum service middleware
+//! - [`http-cache-tower`](https://docs.rs/http-cache-tower) for tower service middleware
 mod body;
 mod error;
 mod managers;

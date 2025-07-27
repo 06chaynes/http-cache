@@ -40,6 +40,10 @@ macro_rules_attribute = "0.2.0"
 smol-macros = "0.1.1"
 tokio = { version = "1.46", features = ["net", "rt", "macros"] }
 
+[[example]]
+name = "surf_basic"
+required-features = ["manager-cacache"]
+
 [features]
 default = ["manager-cacache"]
 manager-cacache = ["http-cache/manager-cacache", "http-cache/cacache-smol"]

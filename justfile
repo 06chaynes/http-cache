@@ -65,18 +65,23 @@
     echo "\n----------\nTower middleware:\n"
     cd http-cache-tower && cargo criterion --all-features
 
-# Run the streaming memory profile examples
 # Run memory profiling example to compare streaming vs traditional caching
 memory-profile:
     cd http-cache-tower && cargo run --release --example streaming_memory_profile --features streaming
     cd http-cache-reqwest && cargo run --release --example streaming_memory_profile --features streaming
 
-# Run Tower Hyper examples
+# Run examples
 @examples:
     echo "----------\nTower Hyper Basic Example:\n"
     cd http-cache-tower && cargo run --example hyper_basic --features manager-cacache
     echo "\n----------\nTower Hyper Streaming Example:\n"
-    cd http-cache-tower && cargo run --example hyper_streaming --features manager-cacache
+    cd http-cache-tower && cargo run --example hyper_streaming --features streaming
+    echo "----------\nReqwest Basic Example:\n"
+    cd http-cache-reqwest && cargo run --example reqwest_basic --features manager-cacache
+    echo "\n----------\nReqwest Streaming Example:\n"
+    cd http-cache-reqwest && cargo run --example reqwest_streaming --features streaming
+    echo "\n----------\nSurf Basic Example:\n"
+    cd http-cache-surf && cargo run --example surf_basic --features manager-cacache
 
 # Generate a changelog with git-cliff
 changelog TAG:

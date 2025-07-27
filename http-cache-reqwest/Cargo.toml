@@ -46,6 +46,18 @@ http-body-util = "0.1.2"
 futures = "0.3.31"
 anyhow = "1.0.95"
 
+[[example]]
+name = "streaming_memory_profile"
+required-features = ["streaming"]
+
+[[example]]
+name = "reqwest_basic"
+required-features = ["manager-cacache"]
+
+[[example]]
+name = "reqwest_streaming"
+required-features = ["streaming"]
+
 [features]
 default = ["manager-cacache"]
 manager-cacache = ["http-cache/manager-cacache", "http-cache/cacache-tokio"]

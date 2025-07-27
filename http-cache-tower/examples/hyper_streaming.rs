@@ -1,18 +1,19 @@
 //! Streaming HTTP caching example with large response bodies.
 //!
-//! This example demonstrates how to use the http-cache-tower middleware
-//! with large response bodies to test caching performance and behavior.
+//! This example demonstrates how to use the http-cache-tower streaming middleware
+//! with large response bodies to test streaming caching performance and behavior.
 //!
-//! Run with: cargo run --example hyper_streaming --features manager-cacache
+//! Run with: cargo run --example hyper_streaming --features streaming
+
+#![cfg(feature = "streaming")]
 
 use bytes::Bytes;
 use http::{Request, Response, StatusCode};
 use http_body_util::Full;
-use http_cache::{CacheMode, HttpCache, HttpCacheOptions};
-use http_cache_tower::{CACacheManager, HttpCacheLayer};
+use http_cache::StreamingManager;
+use http_cache_tower::HttpCacheStreamingLayer;
 use std::future::Future;
 use std::pin::Pin;
-use std::sync::Arc;
 use std::task::{Context, Poll};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tower::{Service, ServiceBuilder};
@@ -260,38 +261,25 @@ where
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    println!("HTTP Cache Tower Example - Large Content Testing");
-    println!("================================================");
+    println!("HTTP Cache Tower Example - Large Content Streaming Testing");
+    println!("==========================================================");
 
-    // Create cache manager with disk storage
+    // Create streaming cache manager with disk storage
     let cache_dir = tempfile::tempdir()?;
-    let cache_manager =
-        CACacheManager::new(cache_dir.path().to_path_buf(), true);
+    let streaming_manager =
+        StreamingManager::new(cache_dir.path().to_path_buf());
 
-    // Configure cache options
-    let cache_options = HttpCacheOptions {
-        cache_key: Some(Arc::new(|req: &http::request::Parts| {
-            format!("{}:{}", req.method, req.uri)
-        })),
-        cache_status_headers: true, // Add X-Cache headers for debugging
-        ..Default::default()
-    };
+    // Configure cache options (StreamingManager doesn't use traditional cache options)
+    // Instead, we'll create the layer directly
+    let cache_layer = HttpCacheStreamingLayer::new(streaming_manager);
 
-    // Create HTTP cache with custom options
-    let cache = HttpCache {
-        mode: CacheMode::Default,
-        manager: cache_manager,
-        options: cache_options,
-    };
-
-    // Create the cache layer
-    let cache_layer = HttpCacheLayer::with_cache(cache);
-
-    // Build the service with caching middleware
+    // Build the service with streaming caching middleware
     let mut service =
         ServiceBuilder::new().layer(cache_layer).service(LargeContentService);
 
-    println!("Demonstrating HTTP caching with large response bodies...\n");
+    println!(
+        "Demonstrating HTTP streaming caching with large response bodies...\n"
+    );
 
     // Scenario 1: Small content caching
     make_request(
