@@ -48,9 +48,9 @@ The following features are available. By default `manager-cacache` and `cacache-
 
 ## Provided Client Implementations
 
-- **Surf**: See [README](https://github.com/06chaynes/http-cache/blob/main/http-cache-surf/README.md) for more details
 - **Reqwest**: See [README](https://github.com/06chaynes/http-cache/blob/main/http-cache-reqwest/README.md) for more details
 - **Tower**: See [README](https://github.com/06chaynes/http-cache/blob/main/http-cache-tower/README.md) for more details
+- **Surf**: See [README](https://github.com/06chaynes/http-cache/blob/main/http-cache-surf/README.md) for more details
 
 ## Additional Manager Implementations
 

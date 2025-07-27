@@ -280,10 +280,9 @@ where
     B::Error: Into<StreamingError>,
     B::Data: Into<Bytes>,
 {
-    /// Convert this streaming body into a stream of Bytes for use with reqwest.
+    /// Convert this streaming body into a stream of Bytes.
     ///
-    /// This method creates a stream that's compatible with `reqwest::Body::wrap_stream()`,
-    /// allowing for streaming without collecting the entire body into memory first.
+    /// This method allows for streaming without collecting the entire body into memory first.
     /// This is particularly useful for file-based cached responses which can stream
     /// directly from disk.
     pub fn into_bytes_stream(

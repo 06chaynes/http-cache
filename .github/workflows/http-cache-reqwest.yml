@@ -66,4 +66,6 @@ jobs:
         env:
           RUSTFLAGS: --cfg docsrs
           RUSTDOCFLAGS: --cfg docsrs -Dwarnings
-      - run: cargo doc --no-deps --document-private-items
+      - run: |
+          cargo doc --no-deps --document-private-items
+          cargo test --doc --all-features
