@@ -49,12 +49,59 @@ async fn main() -> Result<()> {
 }
 ```
 
+## Streaming Support
+
+When the `streaming` feature is enabled, you can use `StreamingCache` for efficient handling of large responses without buffering them entirely in memory. This provides significant memory savings (typically 35-40% reduction) while maintaining full HTTP caching compliance.
+
+**Note**: Only `StreamingCacheManager` supports streaming. `CACacheManager` and `MokaManager` do not support streaming and will buffer responses in memory.
+
+```rust
+use reqwest::Client;
+use reqwest_middleware::ClientBuilder;
+use http_cache_reqwest::{StreamingCache, CacheMode};
+
+#[cfg(feature = "streaming")]
+use http_cache::StreamingCacheManager;
+
+#[cfg(feature = "streaming")]
+#[tokio::main]
+async fn main() -> reqwest_middleware::Result<()> {
+    let client = ClientBuilder::new(Client::new())
+        .with(StreamingCache::new(
+            StreamingCacheManager::new("./cache".into()),
+            CacheMode::Default,
+        ))
+        .build();
+        
+    // Efficiently stream large responses - cached responses are also streamed
+    let response = client
+        .get("https://httpbin.org/stream/1000")
+        .send()
+        .await?;
+        
+    // Process response as a stream
+    use futures_util::StreamExt;
+    let mut stream = response.bytes_stream();
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk?;
+        // Process each chunk without loading entire response into memory
+        println!("Received {} bytes", chunk.len());
+    }
+    
+    Ok(())
+}
+
+#[cfg(not(feature = "streaming"))]
+fn main() {}
+```
+
 ## Features
 
 The following features are available. By default `manager-cacache` is enabled.
 
 - `manager-cacache` (default): enable [cacache](https://github.com/zkat/cacache-rs), a high-performance disk cache, backend manager.
 - `manager-moka` (disabled): enable [moka](https://github.com/moka-rs/moka), a high-performance in-memory cache, backend manager.
+- `streaming` (disabled): enable streaming cache support with efficient memory usage. Provides `StreamingCache` middleware that can handle large responses without buffering them entirely in memory, while maintaining full HTTP caching compliance. Requires cache managers that implement `StreamingCacheManager`.
 
 ## Documentation
 

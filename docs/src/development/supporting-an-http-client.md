@@ -2,6 +2,8 @@
 
 This section is intended for those who wish to add support for a new HTTP client to `http-cache`, or understand how the [`Middleware`](https://docs.rs/http-cache/latest/http_cache/trait.Middleware.html) trait works. If you are looking to use `http-cache` with an HTTP client that is already supported, please see the [Client Implementations](../clients/clients.md) section.
 
+The ecosystem supports both traditional caching (where entire response bodies are buffered) and streaming caching (for memory-efficient handling of large responses). The Tower implementation provides the most comprehensive streaming support.
+
 ## The `Middleware` trait
 
 The [`Middleware`](https://docs.rs/http-cache/latest/http_cache/trait.Middleware.html) trait is the main trait that needs to be implemented to add support for a new HTTP client. It has nine methods that it requires:
@@ -54,7 +56,7 @@ The `remote_fetch` method is used to perform the request and return the `HttpRes
 
 ## How to implement a custom HTTP client
 
-This guide will use the [`surf`](https://github.com/http-rs/surf) HTTP client as an example. The full source can be found [here](https://github.com/06chaynes/http-cache/blob/latest/http-cache-surf/src/lib.rs). There are several ways to accomplish this, so feel free to experiment!
+This guide will use the [`surf`](https://github.com/http-rs/surf) HTTP client as an example. The full source can be found [here](https://github.com/06chaynes/http-cache/blob/main/http-cache-surf/src/lib.rs). There are several ways to accomplish this, so feel free to experiment!
 
 ### Part One: The base structs
 

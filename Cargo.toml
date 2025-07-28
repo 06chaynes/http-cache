@@ -4,5 +4,6 @@ members = [
     "http-cache",
     "http-cache-reqwest",
     "http-cache-surf",
-    "http-cache-quickcache"
+    "http-cache-quickcache",
+    "http-cache-tower"
 ]

@@ -1,0 +1,70 @@
+[package]
+name = "http-cache-tower"
+version = "1.0.0-alpha.1"
+description = "HTTP cache middleware for Tower/Hyper"
+authors = ["Christian Haynes <06chaynes@gmail.com>"]
+repository = "https://github.com/06chaynes/http-cache"
+homepage = "https://http-cache.rs"
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+keywords = ["cache", "http", "middleware", "tower", "hyper"]
+categories = [
+    "caching",
+    "web-programming::http-client"
+]
+edition = "2021"
+rust-version = "1.82.0"
+
+[dependencies]
+http-cache = { version = "1.0.0-alpha.1", path = "../http-cache", default-features = false }
+http-cache-semantics = "2.1.0"
+tower = { version = "0.5.2", features = ["util"] }
+tower-layer = "0.3.3"
+tower-service = "0.3.3"
+http = "1.2.0"
+http-body = "1.0.1"
+http-body-util = "0.1.2"
+hyper = "1.6.0"
+hyper-util = "0.1.14"
+futures = "0.3.31"
+futures-util = "0.3.31"
+pin-project = "1.1.7"
+bytes = "1.8.0"
+tokio = { version = "1.43.0", features = ["fs", "io-util", "rt"] }
+async-trait = "0.1"
+url = "2.5"
+anyhow = "1.0.98"
+
+[dev-dependencies]
+tokio = { version = "1.43.0", features = [ "macros", "rt", "rt-multi-thread" ] }
+tower-test = "0.4.0"
+hyper-util = { version = "0.1.14", features = ["client-legacy", "http1", "http2"] }
+http-body-util = "0.1.2"
+url = "2.5"
+tempfile = "3.13.0"
+hyper = { version = "1.6.0", features = ["full"] }
+tower = { version = "0.5.2", features = ["util"] }
+criterion = { version = "0.7", features = ["html_reports"] }
+
+[[bench]]
+name = "streaming_benchmark"
+harness = false
+required-features = ["streaming"]
+
+[[example]]
+name = "streaming_memory_profile"
+required-features = ["streaming"]
+
+[[example]]
+name = "hyper_basic"
+required-features = ["manager-cacache"]
+
+[[example]]
+name = "hyper_streaming"
+required-features = ["streaming"]
+
+[features]
+default = ["manager-cacache"]
+manager-cacache = ["http-cache/manager-cacache", "http-cache/cacache-tokio"]
+manager-moka = ["http-cache/manager-moka"]
+streaming = ["http-cache/streaming-tokio"]

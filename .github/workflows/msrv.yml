@@ -23,6 +23,8 @@ jobs:
           - http-cache
           - http-cache-reqwest
           - http-cache-surf
+          - http-cache-tower
+          - http-cache-quickcache
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable

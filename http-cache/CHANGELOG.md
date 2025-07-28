@@ -1,5 +1,27 @@
 # Changelog
 
+## [1.0.0-alpha.1] - 2025-07-27
+
+### Added
+
+- New streaming cache architecture for handling large HTTP responses without buffering entirely in memory
+- `StreamingCacheManager` trait for streaming-aware cache backends
+- `HttpCacheStreamInterface` trait for composable streaming middleware patterns
+- `HttpStreamingCache` struct for managing streaming cache operations
+- `StreamingManager` implementation using file-based storage
+- `StreamingBody` type for handling both buffered and streaming scenarios
+- `CacheAnalysis` struct for better separation of cache decision logic
+- `response_cache_mode_fn` field to `HttpCacheOptions` for per-response cache mode overrides
+- New streaming feature flags: `streaming`, `streaming-tokio`, `streaming-smol`
+
+### Changed
+
+- Refactored `Middleware` trait for better composability
+- Cache manager interfaces now support both buffered and streaming operations
+- Enhanced separation of concerns with discrete analysis/lookup/processing steps
+- Renamed `cacache-async-std` feature to `cacache-smol` for consistency
+- MSRV updated to 1.82.0
+
 ## [0.21.0] - 2025-06-25
 
 ### Added

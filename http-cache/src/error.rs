@@ -29,3 +29,40 @@ impl fmt::Display for BadHeader {
 }
 
 impl std::error::Error for BadHeader {}
+
+/// Error type for streaming operations
+#[derive(Debug)]
+pub struct StreamingError {
+    inner: BoxError,
+}
+
+impl StreamingError {
+    /// Create a new streaming error from any error type
+    pub fn new<E: Into<BoxError>>(error: E) -> Self {
+        Self { inner: error.into() }
+    }
+}
+
+impl fmt::Display for StreamingError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Streaming error: {}", self.inner)
+    }
+}
+
+impl std::error::Error for StreamingError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(&*self.inner)
+    }
+}
+
+impl From<BoxError> for StreamingError {
+    fn from(error: BoxError) -> Self {
+        Self::new(error)
+    }
+}
+
+impl From<std::convert::Infallible> for StreamingError {
+    fn from(never: std::convert::Infallible) -> Self {
+        match never {}
+    }
+}

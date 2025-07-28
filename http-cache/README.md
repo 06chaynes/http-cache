@@ -32,12 +32,14 @@ cargo add http-cache
 
 ## Features
 
-The following features are available. By default `manager-cacache` and `cacache-async-std` are enabled.
+The following features are available. By default `manager-cacache` and `cacache-smol` are enabled.
 
 - `manager-cacache` (default): enable [cacache](https://github.com/zkat/cacache-rs), a high-performance disk cache, backend manager.
-- `cacache-async-std` (default): enable [async-std](https://github.com/async-rs/async-std) runtime support for cacache.
+- `cacache-smol` (default): enable [smol](https://github.com/smol-rs/smol) runtime support for cacache.
 - `cacache-tokio` (disabled): enable [tokio](https://github.com/tokio-rs/tokio) runtime support for cacache.
 - `manager-moka` (disabled): enable [moka](https://github.com/moka-rs/moka), a high-performance in-memory cache, backend manager.
+- `streaming-tokio` (disabled): enable streaming cache support with [tokio](https://github.com/tokio-rs/tokio) runtime.
+- `streaming-smol` (disabled): enable streaming cache support with [smol](https://github.com/smol-rs/smol) runtime.
 - `with-http-types` (disabled): enable [http-types](https://github.com/http-rs/http-types) type conversion support
 
 ## Documentation
@@ -46,8 +48,9 @@ The following features are available. By default `manager-cacache` and `cacache-
 
 ## Provided Client Implementations
 
-- **Surf**: See [README](https://github.com/06chaynes/http-cache/blob/main/http-cache-surf/README.md) for more details
 - **Reqwest**: See [README](https://github.com/06chaynes/http-cache/blob/main/http-cache-reqwest/README.md) for more details
+- **Tower**: See [README](https://github.com/06chaynes/http-cache/blob/main/http-cache-tower/README.md) for more details
+- **Surf**: See [README](https://github.com/06chaynes/http-cache/blob/main/http-cache-surf/README.md) for more details
 
 ## Additional Manager Implementations
 

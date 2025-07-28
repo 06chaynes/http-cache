@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.0.0-alpha.1] - 2025-07-27
+
+### Added
+
+- Support for streaming cache architecture with new `streaming` features
+- Integration with `HttpCacheStreamInterface` for composable streaming middleware
+- New streaming examples: `reqwest_streaming.rs` and `streaming_memory_profile.rs`
+- Enhanced error handling and conditional request support
+
+### Changed
+
+- Updated to use http-cache 1.0.0-alpha.1 with streaming support
+- MSRV updated to 1.82.0
+
 ## [0.16.0] - 2025-06-25
 
 ### Added

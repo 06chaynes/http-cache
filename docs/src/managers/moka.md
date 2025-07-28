@@ -1,10 +1,10 @@
 # moka
 
-[`moka`](https://github.com/moka-rs/moka) is a fast, concurrent cache library inspired by the Caffeine library for Java.
+[`moka`](https://github.com/moka-rs/moka) is a fast, concurrent cache library inspired by the Caffeine library for Java. The moka manager provides traditional buffered caching operations for fast in-memory access.
 
 ## Getting Started
 
-The `moka` backend cache manager is provided by the `http-cache` crate but is not enabled by default. Both the `http-cache-reqwest` and `http-cache-surf` crates expose the types so no need to pull in the `http-cache` directly unless you need to implement your own client.
+The `moka` backend cache manager is provided by the `http-cache` crate but is not enabled by default. The `http-cache-reqwest`, `http-cache-surf`, and `http-cache-tower` crates all expose the types so no need to pull in the `http-cache` directly unless you need to implement your own client.
 
 ### reqwest
 
@@ -16,6 +16,12 @@ cargo add http-cache-reqwest --no-default-features -F manager-moka
 
 ```sh
 cargo add http-cache-surf --no-default-features -F manager-moka
+```
+
+### tower
+
+```sh
+cargo add http-cache-tower --no-default-features -F manager-moka
 ```
 
 ## Working with the manager directly

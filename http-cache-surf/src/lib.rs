@@ -12,57 +12,178 @@
 )]
 #![allow(clippy::doc_lazy_continuation)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
-//! The surf middleware implementation for http-cache.
-//! ```no_run
-//! use http_cache_surf::{Cache, CacheMode, CACacheManager, HttpCache, HttpCacheOptions};
+//! HTTP caching middleware for the surf HTTP client.
 //!
-//! #[async_std::main]
+//! This crate provides middleware for the surf HTTP client that implements HTTP caching
+//! according to RFC 7234. It supports various cache modes and storage backends.
+//!
+//! ## Basic Usage
+//!
+//! Add HTTP caching to your surf client:
+//!
+//! ```no_run
+//! use surf::Client;
+//! use http_cache_surf::{Cache, CACacheManager, HttpCache, CacheMode};
+//! use macro_rules_attribute::apply;
+//! use smol_macros::main;
+//!
+//! #[apply(main!)]
 //! async fn main() -> surf::Result<()> {
-//!     let req = surf::get("https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching");
-//!     surf::client()
+//!     let client = surf::Client::new()
 //!         .with(Cache(HttpCache {
 //!             mode: CacheMode::Default,
-//!             manager: CACacheManager::default(),
-//!             options: HttpCacheOptions::default(),
-//!         }))
-//!         .send(req)
-//!         .await?;
+//!             manager: CACacheManager::new("./cache".into(), true),
+//!             options: Default::default(),
+//!         }));
+//!
+//!     // This request will be cached according to response headers
+//!     let mut res = client.get("https://httpbin.org/cache/60").await?;
+//!     println!("Response: {}", res.body_string().await?);
+//!     
+//!     // Subsequent identical requests may be served from cache
+//!     let mut cached_res = client.get("https://httpbin.org/cache/60").await?;
+//!     println!("Cached response: {}", cached_res.body_string().await?);
+//!     
 //!     Ok(())
 //! }
 //! ```
-mod error;
+//!
+//! ## Cache Modes
+//!
+//! Control caching behavior with different modes:
+//!
+//! ```no_run
+//! use surf::Client;
+//! use http_cache_surf::{Cache, CACacheManager, HttpCache, CacheMode};
+//! use macro_rules_attribute::apply;
+//! use smol_macros::main;
+//!
+//! #[apply(main!)]
+//! async fn main() -> surf::Result<()> {
+//!     let client = surf::Client::new()
+//!         .with(Cache(HttpCache {
+//!             mode: CacheMode::ForceCache, // Cache everything, ignore headers
+//!             manager: CACacheManager::new("./cache".into(), true),
+//!             options: Default::default(),
+//!         }));
+//!
+//!     // This will be cached even if headers say not to cache
+//!     let mut res = client.get("https://httpbin.org/uuid").await?;
+//!     println!("{}", res.body_string().await?);
+//!     Ok(())
+//! }
+//! ```
+//!
+//! ## In-Memory Caching
+//!
+//! Use the Moka in-memory cache:
+//!
+//! ```no_run
+//! # #[cfg(feature = "manager-moka")]
+//! use surf::Client;
+//! # #[cfg(feature = "manager-moka")]
+//! use http_cache_surf::{Cache, MokaManager, HttpCache, CacheMode};
+//! # #[cfg(feature = "manager-moka")]
+//! use http_cache_surf::MokaCache;
+//! # #[cfg(feature = "manager-moka")]
+//! use macro_rules_attribute::apply;
+//! # #[cfg(feature = "manager-moka")]
+//! use smol_macros::main;
+//!
+//! # #[cfg(feature = "manager-moka")]
+//! #[apply(main!)]
+//! async fn main() -> surf::Result<()> {
+//!     let client = surf::Client::new()
+//!         .with(Cache(HttpCache {
+//!             mode: CacheMode::Default,
+//!             manager: MokaManager::new(MokaCache::new(1000)), // Max 1000 entries
+//!             options: Default::default(),
+//!         }));
+//!
+//!     let mut res = client.get("https://httpbin.org/cache/60").await?;
+//!     println!("{}", res.body_string().await?);
+//!     Ok(())
+//! }
+//! # #[cfg(not(feature = "manager-moka"))]
+//! # fn main() {}
+//! ```
+//!
+//! ## Custom Cache Keys
+//!
+//! Customize how cache keys are generated:
+//!
+//! ```no_run
+//! use surf::Client;
+//! use http_cache_surf::{Cache, CACacheManager, HttpCache, CacheMode};
+//! use http_cache::HttpCacheOptions;
+//! use std::sync::Arc;
+//! use macro_rules_attribute::apply;
+//! use smol_macros::main;
+//!
+//! #[apply(main!)]
+//! async fn main() -> surf::Result<()> {
+//!     let options = HttpCacheOptions {
+//!         cache_key: Some(Arc::new(|parts: &http::request::Parts| {
+//!             // Include query parameters in cache key
+//!             format!("{}:{}", parts.method, parts.uri)
+//!         })),
+//!         ..Default::default()
+//!     };
+//!     
+//!     let client = surf::Client::new()
+//!         .with(Cache(HttpCache {
+//!             mode: CacheMode::Default,
+//!             manager: CACacheManager::new("./cache".into(), true),
+//!             options,
+//!         }));
+//!
+//!     let mut res = client.get("https://httpbin.org/cache/60?param=value").await?;
+//!     println!("{}", res.body_string().await?);
+//!     Ok(())
+//! }
+//! ```
+
+use std::convert::TryInto;
+use std::time::SystemTime;
+use std::{collections::HashMap, str::FromStr};
 
 use anyhow::anyhow;
-use std::{
-    collections::HashMap, convert::TryInto, str::FromStr, time::SystemTime,
+use http::{
+    header::CACHE_CONTROL,
+    request::{self, Parts},
 };
-
-pub use http::request::Parts;
-use http::{header::CACHE_CONTROL, request};
 use http_cache::{
-    BadHeader, BoxError, HitOrMiss, Middleware, Result, XCACHE, XCACHELOOKUP,
+    BadHeader, BoxError, CacheManager, CacheOptions, HitOrMiss, HttpResponse,
+    Middleware, Result, XCACHE, XCACHELOOKUP,
 };
+pub use http_cache::{CacheMode, HttpCache};
 use http_cache_semantics::CachePolicy;
-use http_types::{headers::HeaderValue, Method, Response, StatusCode, Version};
-use surf::{middleware::Next, Client, Request};
-use url::Url;
-
-pub use http_cache::{
-    CacheManager, CacheMode, CacheOptions, HttpCache, HttpCacheOptions,
-    HttpResponse,
+use http_types::{
+    headers::HeaderValue as HttpTypesHeaderValue,
+    Response as HttpTypesResponse, StatusCode as HttpTypesStatusCode,
+    Version as HttpTypesVersion,
 };
+use http_types::{Method as HttpTypesMethod, Request, Url};
+use surf::{middleware::Next, Client};
 
+// Re-export managers and cache types
 #[cfg(feature = "manager-cacache")]
-#[cfg_attr(docsrs, doc(cfg(feature = "manager-cacache")))]
 pub use http_cache::CACacheManager;
+
+pub use http_cache::HttpCacheOptions;
+pub use http_cache::ResponseCacheModeFn;
 
 #[cfg(feature = "manager-moka")]
 #[cfg_attr(docsrs, doc(cfg(feature = "manager-moka")))]
 pub use http_cache::{MokaCache, MokaCacheBuilder, MokaManager};
 
-/// Wrapper for [`HttpCache`]
-#[derive(Debug)]
+/// A wrapper around [`HttpCache`] that implements [`surf::middleware::Middleware`]
+#[derive(Debug, Clone)]
 pub struct Cache<T: CacheManager>(pub HttpCache<T>);
+
+mod error;
+
+pub use error::BadRequest;
 
 /// Implements ['Middleware'] for surf
 pub(crate) struct SurfMiddleware<'a> {
@@ -74,7 +195,8 @@ pub(crate) struct SurfMiddleware<'a> {
 #[async_trait::async_trait]
 impl Middleware for SurfMiddleware<'_> {
     fn is_method_get_head(&self) -> bool {
-        self.req.method() == Method::Get || self.req.method() == Method::Head
+        self.req.method() == HttpTypesMethod::Get
+            || self.req.method() == HttpTypesMethod::Head
     }
     fn policy(&self, response: &HttpResponse) -> Result<CachePolicy> {
         Ok(CachePolicy::new(&self.parts()?, &response.parts()?))
@@ -93,11 +215,12 @@ impl Middleware for SurfMiddleware<'_> {
     }
     fn update_headers(&mut self, parts: &Parts) -> Result<()> {
         for header in parts.headers.iter() {
-            let value = match HeaderValue::from_str(header.1.to_str()?) {
+            let value = match HttpTypesHeaderValue::from_str(header.1.to_str()?)
+            {
                 Ok(v) => v,
                 Err(_e) => return Err(Box::new(BadHeader)),
             };
-            self.req.set_header(header.0.as_str(), value);
+            self.req.insert_header(header.0.as_str(), value);
         }
         Ok(())
     }
@@ -130,7 +253,7 @@ impl Middleware for SurfMiddleware<'_> {
     async fn remote_fetch(&mut self) -> Result<HttpResponse> {
         let url = self.req.url().clone();
         let mut res =
-            self.next.run(self.req.clone(), self.client.clone()).await?;
+            self.next.run(self.req.clone().into(), self.client.clone()).await?;
         let mut headers = HashMap::new();
         for header in res.iter() {
             headers.insert(
@@ -139,7 +262,7 @@ impl Middleware for SurfMiddleware<'_> {
             );
         }
         let status = res.status().into();
-        let version = res.version().unwrap_or(Version::Http1_1);
+        let version = res.version().unwrap_or(HttpTypesVersion::Http1_1);
         let body: Vec<u8> = res.body_bytes().await?;
         Ok(HttpResponse {
             body,
@@ -159,22 +282,20 @@ fn to_http_types_error(e: BoxError) -> http_types::Error {
 impl<T: CacheManager> surf::middleware::Middleware for Cache<T> {
     async fn handle(
         &self,
-        req: Request,
+        req: surf::Request,
         client: Client,
         next: Next<'_>,
     ) -> std::result::Result<surf::Response, http_types::Error> {
+        let req: Request = req.into();
         let mut middleware = SurfMiddleware { req, client, next };
-        if self
-            .0
-            .can_cache_request(&middleware)
-            .map_err(|e| http_types::Error::from(anyhow!(e)))?
-        {
+        if self.0.can_cache_request(&middleware).map_err(to_http_types_error)? {
             let res =
                 self.0.run(middleware).await.map_err(to_http_types_error)?;
-            let mut converted = Response::new(StatusCode::Ok);
+            let mut converted = HttpTypesResponse::new(HttpTypesStatusCode::Ok);
             for header in &res.headers {
-                let val =
-                    HeaderValue::from_bytes(header.1.as_bytes().to_vec())?;
+                let val = HttpTypesHeaderValue::from_bytes(
+                    header.1.as_bytes().to_vec(),
+                )?;
                 converted.insert_header(header.0.as_str(), val);
             }
             converted.set_status(res.status.try_into()?);
@@ -186,8 +307,10 @@ impl<T: CacheManager> surf::middleware::Middleware for Cache<T> {
                 .run_no_cache(&mut middleware)
                 .await
                 .map_err(to_http_types_error)?;
-            let mut res =
-                middleware.next.run(middleware.req, middleware.client).await?;
+            let mut res = middleware
+                .next
+                .run(middleware.req.into(), middleware.client)
+                .await?;
             let miss = HitOrMiss::MISS.to_string();
             res.append_header(XCACHE, miss.clone());
             res.append_header(XCACHELOOKUP, miss);

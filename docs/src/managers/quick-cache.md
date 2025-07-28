@@ -1,18 +1,58 @@
 # quick_cache
 
-[`quick_cache`](https://github.com/arthurprs/quick-cache) is a lightweight and high performance concurrent cache optimized for low cache overhead.
+[`quick_cache`](https://github.com/arthurprs/quick-cache) is a lightweight and high performance concurrent cache optimized for low cache overhead. The `http-cache-quickcache` implementation provides traditional buffered caching capabilities.
 
 ## Getting Started
 
-The `quick_cache` backend cache manager is provided by the [`http-cache-quickcache`](https://github.com/06chaynes/http-cache/tree/latest/http-cache-quickcache) crate.
+The `quick_cache` backend cache manager is provided by the [`http-cache-quickcache`](https://github.com/06chaynes/http-cache/tree/main/http-cache-quickcache) crate.
 
 ```sh
 cargo add http-cache-quickcache
 ```
 
+## Basic Usage with Tower
+
+The quickcache manager works excellently with Tower services:
+
+```rust
+use tower::{Service, ServiceExt};
+use http::{Request, Response, StatusCode};
+use http_body_util::Full;
+use bytes::Bytes;
+use http_cache_quickcache::QuickManager;
+use std::convert::Infallible;
+
+// Example Tower service that uses QuickManager for caching
+#[derive(Clone)]
+struct CachingService {
+    cache_manager: QuickManager,
+}
+
+impl Service<Request<Full<Bytes>>> for CachingService {
+    type Response = Response<Full<Bytes>>;
+    type Error = Box<dyn std::error::Error + Send + Sync>;
+    type Future = std::pin::Pin<Box<dyn std::future::Future<Output = Result<Self::Response, Self::Error>> + Send>>;
+
+    fn poll_ready(&mut self, _cx: &mut std::task::Context<'_>) -> std::task::Poll<Result<(), Self::Error>> {
+        std::task::Poll::Ready(Ok(()))
+    }
+
+    fn call(&mut self, req: Request<Full<Bytes>>) -> Self::Future {
+        let manager = self.cache_manager.clone();
+        Box::pin(async move {
+            // Cache logic using the manager would go here
+            let response = Response::builder()
+                .status(StatusCode::OK)
+                .body(Full::new(Bytes::from("Hello from cached service!")))?;
+            Ok(response)
+        })
+    }
+}
+```
+
 ## Working with the manager directly
 
-First construct your manager instance. This example will use the default cache configuration (42).
+First construct your manager instance. This example will use the default cache configuration.
 
 ```rust
 let manager = Arc::new(QuickManager::default());
@@ -23,6 +63,8 @@ You can also specify other configuration options. This uses the `new` methods on
 ```rust
 let manager = Arc::new(QuickManager::new(quick_cache::sync::Cache::new(100)));
 ```
+
+### Traditional Cache Operations
 
 You can attempt to retrieve a record from the cache using the `get` method. This method accepts a `&str` as the cache key and returns an `Result<Option<(HttpResponse, CachePolicy)>, BoxError>`.
 

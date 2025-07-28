@@ -1,6 +1,6 @@
 [package]
 name = "http-cache-surf"
-version = "0.15.0"
+version = "1.0.0-alpha.1"
 description = "http-cache middleware implementation for surf"
 authors = ["Christian Haynes <06chaynes@gmail.com>", "Kat Marchán <kzm@zkat.tech>"]
 repository = "https://github.com/06chaynes/http-cache"
@@ -28,18 +28,25 @@ thiserror = "2.0.11"
 
 [dependencies.http-cache]
 path = "../http-cache"
-version = "0.21.0"
+version = "1.0.0-alpha.1"
 default-features = false
 features = ["with-http-types"]
 
 [dev-dependencies]
-async-std = { version = "1.13.0", features = ["attributes"] }
 surf = { version = "2.3.2", features = ["curl-client"] }
 wiremock = "0.6.2"
+tempfile = "3.13.0"
+macro_rules_attribute = "0.2.0"
+smol-macros = "0.1.1"
+tokio = { version = "1.46", features = ["net", "rt", "macros"] }
+
+[[example]]
+name = "surf_basic"
+required-features = ["manager-cacache"]
 
 [features]
 default = ["manager-cacache"]
-manager-cacache = ["http-cache/manager-cacache", "http-cache/cacache-async-std"]
+manager-cacache = ["http-cache/manager-cacache", "http-cache/cacache-smol"]
 manager-moka = ["http-cache/manager-moka"]
 
 [package.metadata.docs.rs]
