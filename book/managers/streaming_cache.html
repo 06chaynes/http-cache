@@ -1,0 +1,403 @@
+<!DOCTYPE HTML>
+<html lang="en" class="sidebar-visible no-js oranda-dark">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>streaming_cache - http-cache</title>
+
+
+        <!-- Custom HTML head -->
+        
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff" />
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" href="../highlight.css">
+        <link rel="stylesheet" href="../tomorrow-night.css">
+        <link rel="stylesheet" href="../ayu-highlight.css">
+        <link rel="stylesheet" href="../oranda-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+    </head>
+    <body>
+    <div id="body-container">
+        <!-- Provide site root to javascript -->
+        <script>
+            var path_to_root = "../";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "oranda-dark" : "oranda-dark";
+        </script>
+
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                var theme = localStorage.getItem('orandamdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('orandamdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            var theme;
+            try { theme = localStorage.getItem('orandamdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            var html = document.querySelector('html');
+            html.classList.remove('no-js')
+            html.classList.remove('oranda-dark')
+            html.classList.add(theme);
+            html.classList.add('js');
+        </script>
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            var html = document.querySelector('html');
+            var sidebar = 'hidden';
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            }
+            html.classList.remove('sidebar-visible');
+            html.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <div class="sidebar-scrollbox">
+                <ol class="chapter"><li class="chapter-item expanded "><a href="../introduction.html"><strong aria-hidden="true">1.</strong> Introduction</a></li><li class="chapter-item expanded "><a href="../cache-modes.html"><strong aria-hidden="true">2.</strong> Cache Modes</a></li><li class="chapter-item expanded "><a href="../development/development.html"><strong aria-hidden="true">3.</strong> Development</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../development/supporting-a-backend-cache-manager.html"><strong aria-hidden="true">3.1.</strong> Supporting a Backend Cache Manager</a></li><li class="chapter-item expanded "><a href="../development/supporting-an-http-client.html"><strong aria-hidden="true">3.2.</strong> Supporting an HTTP Client</a></li></ol></li><li class="chapter-item expanded "><a href="../clients/clients.html"><strong aria-hidden="true">4.</strong> Client Implementations</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../clients/reqwest.html"><strong aria-hidden="true">4.1.</strong> reqwest</a></li><li class="chapter-item expanded "><a href="../clients/surf.html"><strong aria-hidden="true">4.2.</strong> surf</a></li><li class="chapter-item expanded "><a href="../clients/tower.html"><strong aria-hidden="true">4.3.</strong> tower</a></li></ol></li><li class="chapter-item expanded "><a href="../managers/managers.html"><strong aria-hidden="true">5.</strong> Backend Cache Manager Implementations</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../managers/cacache.html"><strong aria-hidden="true">5.1.</strong> cacache</a></li><li class="chapter-item expanded "><a href="../managers/moka.html"><strong aria-hidden="true">5.2.</strong> moka</a></li><li class="chapter-item expanded "><a href="../managers/quick-cache.html"><strong aria-hidden="true">5.3.</strong> quick_cache</a></li><li class="chapter-item expanded "><a href="../managers/streaming_cache.html" class="active"><strong aria-hidden="true">5.4.</strong> streaming_cache</a></li></ol></li></ol>
+            </div>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky bordered">
+                    <div class="left-buttons">
+                        <button id="sidebar-toggle" class="icon-button" type="button" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </button>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="oranda-dark">Axo Dark</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="oranda-light">Axo Light</button></li>
+
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">http-cache</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="streamingmanager-streaming-cache"><a class="header" href="#streamingmanager-streaming-cache">StreamingManager (Streaming Cache)</a></h1>
+<p><a href="https://github.com/06chaynes/http-cache/blob/main/http-cache/src/managers/streaming_cache.rs"><code>StreamingManager</code></a> is a file-based streaming cache manager that does not buffer response bodies in memory. This implementation stores response metadata and body content separately, enabling memory-efficient handling of large responses.</p>
+<h2 id="getting-started"><a class="header" href="#getting-started">Getting Started</a></h2>
+<p>The <code>StreamingManager</code> is built into the core <code>http-cache</code> crate and is available when the <code>streaming</code> feature is enabled.</p>
+<pre><code class="language-toml">[dependencies]
+http-cache = { version = "1.0", features = ["streaming", "streaming-tokio"] }
+</code></pre>
+<p>Or for smol runtime:</p>
+<pre><code class="language-toml">[dependencies]  
+http-cache = { version = "1.0", features = ["streaming", "streaming-smol"] }
+</code></pre>
+<h2 id="basic-usage"><a class="header" href="#basic-usage">Basic Usage</a></h2>
+<pre><pre class="playground"><code class="language-rust">use http_cache::{StreamingManager, StreamingBody, HttpStreamingCache};
+use std::path::PathBuf;
+
+#[tokio::main]
+async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
+    // Create a file-based streaming cache manager
+    let cache_dir = PathBuf::from("./streaming-cache");
+    let manager = StreamingManager::new(cache_dir);
+    
+    // Use with streaming cache
+    let cache = HttpStreamingCache::new(manager);
+    
+    Ok(())
+}</code></pre></pre>
+<h2 id="usage-with-tower"><a class="header" href="#usage-with-tower">Usage with Tower</a></h2>
+<p>The streaming cache manager works with Tower's <code>HttpCacheStreamingLayer</code>:</p>
+<pre><pre class="playground"><code class="language-rust">use http_cache::{StreamingManager, HttpCacheStreamingLayer};
+use tower::{Service, ServiceExt};
+use http::{Request, Response, StatusCode};
+use http_body_util::Full;
+use bytes::Bytes;
+use std::path::PathBuf;
+
+#[tokio::main]
+async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
+    // Create streaming cache manager
+    let cache_dir = PathBuf::from("./cache");
+    let manager = StreamingManager::new(cache_dir);
+    
+    // Create streaming cache layer
+    let cache_layer = HttpCacheStreamingLayer::new(manager);
+    
+    // Your base service
+    let service = tower::service_fn(|_req: Request&lt;Full&lt;Bytes&gt;&gt;| async {
+        Ok::&lt;_, std::convert::Infallible&gt;(
+            Response::builder()
+                .status(StatusCode::OK)
+                .header("cache-control", "max-age=3600")
+                .body(Full::new(Bytes::from("Large response data...")))?
+        )
+    });
+    
+    // Wrap with caching
+    let cached_service = cache_layer.layer(service);
+    
+    // Make requests
+    let request = Request::builder()
+        .uri("https://example.com/large-file")
+        .body(Full::new(Bytes::new()))?;
+        
+    let response = cached_service.oneshot(request).await?;
+    println!("Response status: {}", response.status());
+    
+    Ok(())
+}</code></pre></pre>
+<h2 id="working-with-the-manager-directly"><a class="header" href="#working-with-the-manager-directly">Working with the manager directly</a></h2>
+<h3 id="creating-a-manager"><a class="header" href="#creating-a-manager">Creating a manager</a></h3>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use http_cache::StreamingManager;
+use std::path::PathBuf;
+
+// Create with custom cache directory
+let cache_dir = PathBuf::from("./my-streaming-cache");
+let manager = StreamingManager::new(cache_dir);
+<span class="boring">}</span></code></pre></pre>
+<h3 id="streaming-cache-operations"><a class="header" href="#streaming-cache-operations">Streaming Cache Operations</a></h3>
+<h4 id="caching-a-streaming-response"><a class="header" href="#caching-a-streaming-response">Caching a streaming response</a></h4>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use http_cache::StreamingManager;
+use http::{Request, Response, StatusCode};
+use http_body_util::Full;
+use bytes::Bytes;
+use http_cache_semantics::CachePolicy;
+use url::Url;
+
+let manager = StreamingManager::new(PathBuf::from("./cache"));
+
+// Create a large response to cache
+let large_data = vec![b'X'; 10_000_000]; // 10MB response
+let response = Response::builder()
+    .status(StatusCode::OK)
+    .header("cache-control", "max-age=3600, public")
+    .header("content-type", "application/octet-stream")
+    .body(Full::new(Bytes::from(large_data)))?;
+
+// Create cache policy
+let request = Request::builder()
+    .method("GET")
+    .uri("https://example.com/large-file")
+    .body(())?;
+let policy = CachePolicy::new(&amp;request, &amp;Response::builder()
+    .status(200)
+    .header("cache-control", "max-age=3600, public")
+    .body(vec![])?);
+
+// Cache the response (content stored to disk, metadata separate)
+let url = Url::parse("https://example.com/large-file")?;
+let cached_response = manager.put(
+    "GET:https://example.com/large-file".to_string(),
+    response,
+    policy,
+    url,
+).await?;
+
+println!("Cached response without loading into memory!");
+<span class="boring">}</span></code></pre></pre>
+<h4 id="retrieving-a-streaming-response"><a class="header" href="#retrieving-a-streaming-response">Retrieving a streaming response</a></h4>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Retrieve from cache - returns a streaming body
+let cached = manager.get("GET:https://example.com/large-file").await?;
+
+if let Some((response, policy)) = cached {
+    println!("Cache hit! Status: {}", response.status());
+    
+    // The response body streams directly from disk
+    let body = response.into_body();
+    
+    // Process the streaming body without loading it all into memory
+    let mut body_stream = std::pin::pin!(body);
+    while let Some(frame_result) = body_stream.frame().await {
+        let frame = frame_result?;
+        if let Some(chunk) = frame.data_ref() {
+            // Process chunk without accumulating in memory
+            println!("Processing chunk of {} bytes", chunk.len());
+        }
+    }
+} else {
+    println!("Cache miss");
+}
+<span class="boring">}</span></code></pre></pre>
+<h4 id="deleting-cached-entries"><a class="header" href="#deleting-cached-entries">Deleting cached entries</a></h4>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Remove from cache (deletes both metadata and content files)
+manager.delete("GET:https://example.com/large-file").await?;
+<span class="boring">}</span></code></pre></pre>
+<h2 id="storage-structure"><a class="header" href="#storage-structure">Storage Structure</a></h2>
+<p>The StreamingManager organizes cache files as follows:</p>
+<pre><code class="language-text">cache-directory/
+├── cache-v2/
+│   ├── metadata/
+│   │   ├── 1a2b3c4d....json  # Response metadata (headers, status, policy)
+│   │   └── 5e6f7g8h....json
+│   └── content/
+│       ├── sha256_hash1      # Raw response body content
+│       └── sha256_hash2
+</code></pre>
+<ul>
+<li><strong>Metadata files</strong>: JSON files containing response status, headers, cache policy, and content digest</li>
+<li><strong>Content files</strong>: Raw binary content files identified by SHA256 hash for deduplication</li>
+<li><strong>Content-addressable</strong>: Identical content is stored only once regardless of URL</li>
+</ul>
+<h2 id="performance-characteristics"><a class="header" href="#performance-characteristics">Performance Characteristics</a></h2>
+<h3 id="memory-usage"><a class="header" href="#memory-usage">Memory Usage</a></h3>
+<ul>
+<li><strong>Constant memory usage</strong> regardless of response size</li>
+<li>Only metadata loaded into memory (~few KB per response)</li>
+<li>Response bodies stream directly from disk files</li>
+</ul>
+<h3 id="disk-usage"><a class="header" href="#disk-usage">Disk Usage</a></h3>
+<ul>
+<li><strong>Content deduplication</strong> via SHA256 hashing</li>
+<li><strong>Efficient storage</strong> with separate metadata and content</li>
+<li><strong>Persistent cache</strong> survives application restarts</li>
+</ul>
+<h3 id="use-cases"><a class="header" href="#use-cases">Use Cases</a></h3>
+<ul>
+<li><strong>Large file responses</strong> (images, videos, archives)</li>
+<li><strong>Memory-constrained environments</strong></li>
+<li><strong>High-throughput applications</strong> with large responses</li>
+<li><strong>Long-running services</strong> that need persistent caching</li>
+</ul>
+<h2 id="comparison-with-other-managers"><a class="header" href="#comparison-with-other-managers">Comparison with Other Managers</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Manager</th><th>Memory Usage</th><th>Storage</th><th>Streaming</th><th>Best For</th></tr></thead><tbody>
+<tr><td>StreamingManager</td><td>Constant</td><td>Disk</td><td>Yes</td><td>Large responses, memory efficiency</td></tr>
+<tr><td>CACacheManager</td><td>Buffers responses</td><td>Disk</td><td>No</td><td>General purpose, moderate sizes</td></tr>
+<tr><td>MokaManager</td><td>Buffers responses</td><td>Memory</td><td>No</td><td>Fast access, small responses</td></tr>
+<tr><td>QuickManager</td><td>Buffers responses</td><td>Memory</td><td>No</td><td>Low overhead, small responses</td></tr>
+</tbody></table>
+</div>
+<h2 id="configuration"><a class="header" href="#configuration">Configuration</a></h2>
+<p>The StreamingManager uses sensible defaults but can be configured through environment:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Cache directory structure is automatically created
+let manager = StreamingManager::new(PathBuf::from("./cache"));
+
+// The manager handles:
+// - Directory creation
+// - Content deduplication  
+// - Metadata organization
+// - File cleanup on delete
+<span class="boring">}</span></code></pre></pre>
+<p>For advanced configuration, you can implement custom cleanup policies or directory management by extending the manager.</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../managers/quick-cache.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../managers/quick-cache.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+    </div>
+    </body>
+</html>
