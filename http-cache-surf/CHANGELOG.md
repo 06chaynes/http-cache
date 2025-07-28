@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.0-alpha.1] - 2025-07-27
+
+### Changed
+
+- Updated to use http-cache 1.0.0-alpha.1
+- MSRV updated to 1.82.0
+
 ## [0.15.0] - 2025-06-25
 
 ### Added

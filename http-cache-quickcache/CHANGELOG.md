@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.0.0-alpha.1] - 2025-07-27
+
+### Added
+
+- Integration with updated core library traits for better composability
+
+### Changed
+
+- Updated to use http-cache 1.0.0-alpha.1
+- MSRV updated to 1.82.0
+- Made `cache` field private in `QuickManager`
+
 ## [0.9.0] - 2025-06-25
 
 ### Added
