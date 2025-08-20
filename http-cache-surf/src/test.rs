@@ -46,10 +46,13 @@ const MISS: &str = "MISS";
 #[test]
 #[allow(clippy::default_constructed_unit_structs)]
 fn test_errors() -> Result<()> {
-    // Testing the Debug trait for the error type
-    let err = error::Error::Surf(anyhow::anyhow!("test"));
-    assert_eq!(format!("{:?}", &err), "Surf(test)",);
-    assert_eq!(err.to_string(), "Surf error: test".to_string(),);
+    // Testing the Debug trait for the error types
+    let bad_request_err = error::BadRequest::default();
+    assert!(format!("{:?}", bad_request_err).contains("BadRequest"));
+
+    let surf_err = error::SurfError::Cache("test".to_string());
+    assert!(format!("{:?}", &surf_err).contains("Cache"));
+    assert_eq!(surf_err.to_string(), "Cache error: test".to_string());
     Ok(())
 }
 

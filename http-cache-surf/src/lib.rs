@@ -147,7 +147,6 @@ use std::convert::TryInto;
 use std::time::SystemTime;
 use std::{collections::HashMap, str::FromStr};
 
-use anyhow::anyhow;
 use http::{
     header::CACHE_CONTROL,
     request::{self, Parts},
@@ -183,7 +182,7 @@ pub struct Cache<T: CacheManager>(pub HttpCache<T>);
 
 mod error;
 
-pub use error::BadRequest;
+pub use error::{BadRequest, SurfError};
 
 /// Implements ['Middleware'] for surf
 pub(crate) struct SurfMiddleware<'a> {
@@ -275,7 +274,7 @@ impl Middleware for SurfMiddleware<'_> {
 }
 
 fn to_http_types_error(e: BoxError) -> http_types::Error {
-    http_types::Error::from(anyhow!(e))
+    http_types::Error::from_str(500, format!("HTTP cache error: {e}"))
 }
 
 #[surf::utils::async_trait]

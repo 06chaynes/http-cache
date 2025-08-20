@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.0.0-alpha.2] - 2025-08-20
+
+### Changed
+
+- Renamed `Error` enum to `SurfError` for consistent `{CrateName}Error` naming
+- Replaced `thiserror` with manual `std::error::Error` implementation for consistency
+- Removed `anyhow` dependency
+- Updated to use http-cache 1.0.0-alpha.2
+
+### Removed
+
+- Dependency on `thiserror` and `anyhow` for reduced dependency footprint
+
 ## [1.0.0-alpha.1] - 2025-07-27
 
 ### Changed

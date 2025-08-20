@@ -3,7 +3,7 @@ use std::fmt;
 
 /// Errors that can occur during HTTP caching operations
 #[derive(Debug)]
-pub enum HttpCacheError {
+pub enum TowerError {
     /// Cache operation failed
     CacheError(String),
     /// Body collection failed
@@ -12,31 +12,31 @@ pub enum HttpCacheError {
     HttpError(Box<dyn std::error::Error + Send + Sync>),
 }
 
-impl fmt::Display for HttpCacheError {
+impl fmt::Display for TowerError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            HttpCacheError::CacheError(msg) => write!(f, "Cache error: {msg}"),
-            HttpCacheError::BodyError(e) => {
+            TowerError::CacheError(msg) => write!(f, "Cache error: {msg}"),
+            TowerError::BodyError(e) => {
                 write!(f, "Body processing error: {e}")
             }
-            HttpCacheError::HttpError(e) => write!(f, "HTTP error: {e}"),
+            TowerError::HttpError(e) => write!(f, "HTTP error: {e}"),
         }
     }
 }
 
-impl std::error::Error for HttpCacheError {
+impl std::error::Error for TowerError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            HttpCacheError::CacheError(_) => None,
-            HttpCacheError::BodyError(e) => Some(e.as_ref()),
-            HttpCacheError::HttpError(e) => Some(e.as_ref()),
+            TowerError::CacheError(_) => None,
+            TowerError::BodyError(e) => Some(e.as_ref()),
+            TowerError::HttpError(e) => Some(e.as_ref()),
         }
     }
 }
 
-impl From<http_cache::BoxError> for HttpCacheError {
+impl From<http_cache::BoxError> for TowerError {
     fn from(error: http_cache::BoxError) -> Self {
-        HttpCacheError::HttpError(error)
+        TowerError::HttpError(error)
     }
 }
 

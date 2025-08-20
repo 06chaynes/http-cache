@@ -12,6 +12,59 @@ impl fmt::Display for BadRequest {
 
 impl std::error::Error for BadRequest {}
 
+/// Error type for the `HttpCache` Reqwest implementation.
+#[derive(Debug)]
+pub enum ReqwestError {
+    /// Reqwest client error
+    Reqwest(reqwest::Error),
+    /// HTTP cache operation failed
+    Cache(String),
+    /// Request parsing failed
+    BadRequest(BadRequest),
+    /// Other error
+    Other(Box<dyn std::error::Error + Send + Sync>),
+}
+
+impl fmt::Display for ReqwestError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ReqwestError::Reqwest(e) => write!(f, "Reqwest error: {e}"),
+            ReqwestError::Cache(msg) => write!(f, "Cache error: {msg}"),
+            ReqwestError::BadRequest(e) => write!(f, "Request error: {e}"),
+            ReqwestError::Other(e) => write!(f, "Other error: {e}"),
+        }
+    }
+}
+
+impl std::error::Error for ReqwestError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            ReqwestError::Reqwest(e) => Some(e),
+            ReqwestError::Cache(_) => None,
+            ReqwestError::BadRequest(e) => Some(e),
+            ReqwestError::Other(e) => Some(e.as_ref()),
+        }
+    }
+}
+
+impl From<reqwest::Error> for ReqwestError {
+    fn from(error: reqwest::Error) -> Self {
+        ReqwestError::Reqwest(error)
+    }
+}
+
+impl From<BadRequest> for ReqwestError {
+    fn from(error: BadRequest) -> Self {
+        ReqwestError::BadRequest(error)
+    }
+}
+
+impl From<Box<dyn std::error::Error + Send + Sync>> for ReqwestError {
+    fn from(error: Box<dyn std::error::Error + Send + Sync>) -> Self {
+        ReqwestError::Other(error)
+    }
+}
+
 #[cfg(feature = "streaming")]
 /// Error type for reqwest streaming operations
 #[derive(Debug)]

@@ -171,25 +171,25 @@ use std::{
 use tower::{Layer, Service, ServiceExt};
 
 pub mod error;
-pub use error::HttpCacheError;
+pub use error::TowerError;
 #[cfg(feature = "streaming")]
 pub use error::TowerStreamingError;
 
 /// Helper functions for error conversions
-trait HttpCacheErrorExt<T> {
-    fn cache_err(self) -> Result<T, HttpCacheError>;
+trait TowerErrorExt<T> {
+    fn cache_err(self) -> Result<T, TowerError>;
 }
 
 trait HttpErrorExt<T> {
-    fn http_err(self) -> Result<T, HttpCacheError>;
+    fn http_err(self) -> Result<T, TowerError>;
 }
 
-impl<T, E> HttpCacheErrorExt<T> for Result<T, E>
+impl<T, E> TowerErrorExt<T> for Result<T, E>
 where
     E: ToString,
 {
-    fn cache_err(self) -> Result<T, HttpCacheError> {
-        self.map_err(|e| HttpCacheError::CacheError(e.to_string()))
+    fn cache_err(self) -> Result<T, TowerError> {
+        self.map_err(|e| TowerError::CacheError(e.to_string()))
     }
 }
 
@@ -197,8 +197,8 @@ impl<T, E> HttpErrorExt<T> for Result<T, E>
 where
     E: Into<Box<dyn std::error::Error + Send + Sync>>,
 {
-    fn http_err(self) -> Result<T, HttpCacheError> {
-        self.map_err(|e| HttpCacheError::HttpError(e.into()))
+    fn http_err(self) -> Result<T, TowerError> {
+        self.map_err(|e| TowerError::HttpError(e.into()))
     }
 }
 
@@ -584,7 +584,7 @@ where
     CM: CacheManager,
 {
     type Response = Response<HttpCacheBody<ResBody>>;
-    type Error = HttpCacheError;
+    type Error = TowerError;
     type Future = Pin<
         Box<
             dyn std::future::Future<
@@ -597,9 +597,7 @@ where
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<Result<(), Self::Error>> {
-        self.inner
-            .poll_ready(cx)
-            .map_err(|e| HttpCacheError::HttpError(e.into()))
+        self.inner.poll_ready(cx).map_err(|e| TowerError::HttpError(e.into()))
     }
 
     fn call(&mut self, req: Request<ReqBody>) -> Self::Future {
@@ -666,7 +664,7 @@ where
                         let response = http_cache::HttpCacheOptions::http_response_to_response(
                             &cached_response,
                             HttpCacheBody::Buffered(cached_response.body.clone()),
-                        ).map_err(HttpCacheError::HttpError)?;
+                        ).map_err(TowerError::HttpError)?;
                         return Ok(response);
                     }
                     BeforeRequest::Stale {
@@ -695,7 +693,7 @@ where
                             let response = http_cache::HttpCacheOptions::http_response_to_response(
                                 &updated_response,
                                 HttpCacheBody::Buffered(updated_response.body.clone()),
-                            ).map_err(HttpCacheError::HttpError)?;
+                            ).map_err(TowerError::HttpError)?;
                             return Ok(response);
                         } else {
                             // Process fresh response
@@ -755,7 +753,7 @@ where
     CM: CacheManager,
 {
     type Response = Response<HttpCacheBody<http_body_util::Full<Bytes>>>;
-    type Error = HttpCacheError;
+    type Error = TowerError;
     type Future = Pin<
         Box<
             dyn std::future::Future<
@@ -793,7 +791,7 @@ where
         Into<StreamingError> + Send + Sync + 'static,
 {
     type Response = Response<CM::Body>;
-    type Error = HttpCacheError;
+    type Error = TowerError;
     type Future = Pin<
         Box<
             dyn std::future::Future<
@@ -806,9 +804,7 @@ where
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<Result<(), Self::Error>> {
-        self.inner
-            .poll_ready(cx)
-            .map_err(|e| HttpCacheError::HttpError(e.into()))
+        self.inner.poll_ready(cx).map_err(|e| TowerError::HttpError(e.into()))
     }
 
     fn call(&mut self, req: Request<ReqBody>) -> Self::Future {

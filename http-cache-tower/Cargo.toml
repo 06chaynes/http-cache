@@ -1,8 +1,8 @@
 [package]
 name = "http-cache-tower"
-version = "1.0.0-alpha.1"
+version = "1.0.0-alpha.2"
 description = "HTTP cache middleware for Tower/Hyper"
-authors = ["Christian Haynes <06chaynes@gmail.com>"]
+authors = ["Christian Haynes <06chaynes@gmail.com>", "Kat Marchán <kzm@zkat.tech>"]
 repository = "https://github.com/06chaynes/http-cache"
 homepage = "https://http-cache.rs"
 license = "MIT OR Apache-2.0"
@@ -16,7 +16,7 @@ edition = "2021"
 rust-version = "1.82.0"
 
 [dependencies]
-http-cache = { version = "1.0.0-alpha.1", path = "../http-cache", default-features = false }
+http-cache = { version = "1.0.0-alpha.2", path = "../http-cache", default-features = false }
 http-cache-semantics = "2.1.0"
 tower = { version = "0.5.2", features = ["util"] }
 tower-layer = "0.3.3"
@@ -33,7 +33,6 @@ bytes = "1.8.0"
 tokio = { version = "1.43.0", features = ["fs", "io-util", "rt"] }
 async-trait = "0.1"
 url = "2.5"
-anyhow = "1.0.98"
 
 [dev-dependencies]
 tokio = { version = "1.43.0", features = [ "macros", "rt", "rt-multi-thread" ] }

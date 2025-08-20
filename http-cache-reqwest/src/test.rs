@@ -49,6 +49,15 @@ fn test_errors() -> Result<()> {
         "Request object is not cloneable. Are you passing a streaming body?"
             .to_string(),
     );
+
+    // Test ReqwestError
+    let reqwest_err =
+        error::ReqwestError::Cache("test cache error".to_string());
+    assert!(format!("{:?}", &reqwest_err).contains("Cache"));
+    assert_eq!(
+        reqwest_err.to_string(),
+        "Cache error: test cache error".to_string(),
+    );
     Ok(())
 }
 
