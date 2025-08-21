@@ -27,6 +27,7 @@ jobs:
           cargo llvm-cov --no-report --no-default-features --package http-cache --features manager-cacache,cacache-smol,with-http-types,manager-moka,streaming-smol
           cargo llvm-cov --no-report --no-default-features --package http-cache --features manager-cacache,cacache-tokio,with-http-types,manager-moka,streaming-tokio
           cargo llvm-cov --no-report --package http-cache-surf --all-features
+          cargo llvm-cov --no-report --package http-cache-ureq --no-default-features --features manager-cacache
           cargo llvm-cov --no-report --package http-cache-ureq --all-features
           cargo llvm-cov --no-report --package http-cache-reqwest --all-features
           cargo llvm-cov --no-report --package http-cache-tower --all-features

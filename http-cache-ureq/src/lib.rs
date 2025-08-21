@@ -20,6 +20,12 @@
 //! HTTP caching according to RFC 7234. Since ureq is a synchronous HTTP client, this
 //! wrapper uses the [smol] async runtime to integrate with the async http-cache system.
 //!
+//! ## Features
+//!
+//! - `json` - Enables JSON request/response support via `send_json()` and `into_json()` methods (requires `serde_json`)
+//! - `manager-cacache` - Enable [cacache](https://docs.rs/cacache/) cache manager (default)
+//! - `manager-moka` - Enable [moka](https://docs.rs/moka/) cache manager
+//!
 //! ## Basic Usage
 //!
 //! ```no_run
@@ -70,6 +76,40 @@
 //!         Ok(())
 //!     })
 //! }
+//! ```
+//!
+//! ## JSON Support
+//!
+//! Enable the `json` feature to send and parse JSON data:
+//!
+//! ```no_run
+//! # #[cfg(feature = "json")]
+//! use http_cache_ureq::{CachedAgent, CACacheManager, CacheMode};
+//! # #[cfg(feature = "json")]
+//! use serde_json::json;
+//!
+//! # #[cfg(feature = "json")]
+//! fn main() -> Result<(), Box<dyn std::error::Error>> {
+//!     smol::block_on(async {
+//!         let agent = CachedAgent::builder()
+//!             .cache_manager(CACacheManager::new("./cache".into(), true))
+//!             .cache_mode(CacheMode::Default)
+//!             .build()?;
+//!         
+//!         // Send JSON data
+//!         let response = agent.post("https://httpbin.org/post")
+//!             .send_json(json!({"key": "value"}))
+//!             .await?;
+//!         
+//!         // Parse JSON response
+//!         let json: serde_json::Value = response.into_json()?;
+//!         println!("Response: {}", json);
+//!         
+//!         Ok(())
+//!     })
+//! }
+//! # #[cfg(not(feature = "json"))]
+//! # fn main() {}
 //! ```
 //!
 //! ## In-Memory Caching
@@ -196,6 +236,13 @@ impl<T: CacheManager> CachedAgentBuilder<T> {
     }
 
     /// Set the ureq agent configuration
+    ///
+    /// The provided configuration will be used to preserve your settings like
+    /// timeout, proxy, TLS config, and user agent. However, `http_status_as_error`
+    /// will always be set to `false` to ensure proper cache operation.
+    ///
+    /// This is necessary because the cache middleware needs to see all HTTP responses
+    /// (including 4xx and 5xx status codes) to make proper caching decisions.
     pub fn agent_config(mut self, config: ureq::config::Config) -> Self {
         self.agent_config = Some(config);
         self
@@ -221,9 +268,45 @@ impl<T: CacheManager> CachedAgentBuilder<T> {
 
     /// Build the cached agent
     pub fn build(self) -> Result<CachedAgent<T>, UreqError> {
-        let agent = if let Some(config) = self.agent_config {
-            // We can't modify an existing Config, so we have to use it as-is
-            // TODO: In the future, we might want to expose http_status_as_error as a builder option
+        let agent = if let Some(user_config) = self.agent_config {
+            // Extract user preferences and rebuild with cache-compatible settings
+            let mut config_builder =
+                ureq::config::Config::builder().http_status_as_error(false); // Force this to false for cache compatibility
+
+            // Preserve user's timeout settings
+            let timeouts = user_config.timeouts();
+            if timeouts.global.is_some()
+                || timeouts.connect.is_some()
+                || timeouts.send_request.is_some()
+            {
+                if let Some(global) = timeouts.global {
+                    config_builder =
+                        config_builder.timeout_global(Some(global));
+                }
+                if let Some(connect) = timeouts.connect {
+                    config_builder =
+                        config_builder.timeout_connect(Some(connect));
+                }
+                if let Some(send_request) = timeouts.send_request {
+                    config_builder =
+                        config_builder.timeout_send_request(Some(send_request));
+                }
+            }
+
+            // Preserve user's proxy setting
+            if let Some(proxy) = user_config.proxy() {
+                config_builder = config_builder.proxy(Some(proxy.clone()));
+            }
+
+            // Preserve user's TLS config
+            let tls_config = user_config.tls_config();
+            config_builder = config_builder.tls_config(tls_config.clone());
+
+            // Preserve user's user agent
+            let user_agent = user_config.user_agent();
+            config_builder = config_builder.user_agent(user_agent.clone());
+
+            let config = config_builder.build();
             ureq::Agent::new_with_config(config)
         } else {
             // Create default config with http_status_as_error disabled
@@ -336,6 +419,8 @@ impl<'a, T: CacheManager> CachedRequestBuilder<'a, T> {
     }
 
     /// Send JSON data with the request
+    #[cfg(feature = "json")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "json")))]
     pub async fn send_json(
         self,
         data: serde_json::Value,
@@ -476,7 +561,7 @@ fn is_cacheable_method(method: &str) -> bool {
     matches!(method, "GET" | "HEAD")
 }
 
-/// Helper function to execute HTTP requests, eliminating code duplication
+/// Universal function to execute HTTP requests - replaces all method-specific duplication
 fn execute_request(
     agent: &ureq::Agent,
     method: &str,
@@ -484,77 +569,27 @@ fn execute_request(
     headers: &[(String, String)],
     body: Option<&str>,
 ) -> Result<http::Response<ureq::Body>, ureq::Error> {
-    // Handle methods that support or require bodies differently due to ureq's type system
-    match method {
-        "GET" => {
-            let mut req = agent.get(url);
-            for (name, value) in headers {
-                req = req.header(name, value);
-            }
-            req.call()
-        }
-        "HEAD" => {
-            let mut req = agent.head(url);
-            for (name, value) in headers {
-                req = req.header(name, value);
-            }
-            req.call()
-        }
-        "DELETE" => {
-            let mut req = agent.delete(url);
-            for (name, value) in headers {
-                req = req.header(name, value);
-            }
-            req.call()
-        }
-        "OPTIONS" => {
-            let mut req = agent.options(url);
-            for (name, value) in headers {
-                req = req.header(name, value);
-            }
-            req.call()
-        }
-        "POST" => {
-            let mut req = agent.post(url);
-            for (name, value) in headers {
-                req = req.header(name, value);
-            }
-            if let Some(body_content) = body {
-                req.send(body_content)
-            } else {
-                req.send("")
-            }
-        }
-        "PUT" => {
-            let mut req = agent.put(url);
-            for (name, value) in headers {
-                req = req.header(name, value);
-            }
-            if let Some(body_content) = body {
-                req.send(body_content)
-            } else {
-                req.send("")
-            }
-        }
-        "PATCH" => {
-            let mut req = agent.patch(url);
-            for (name, value) in headers {
-                req = req.header(name, value);
-            }
-            if let Some(body_content) = body {
-                req.send(body_content)
-            } else {
-                req.send("")
-            }
-        }
-        _ => Err(ureq::Error::Io(std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            format!("Unsupported method: {}", method),
-        ))),
+    // Build http::Request directly - eliminates all method-specific switching
+    let mut http_request = http::Request::builder().method(method).uri(url);
+
+    // Add headers
+    for (name, value) in headers {
+        http_request = http_request.header(name, value);
     }
+
+    // Build request with or without body
+    let request = match body {
+        Some(data) => http_request.body(data.as_bytes().to_vec()),
+        None => http_request.body(Vec::new()),
+    }
+    .map_err(|e| ureq::Error::BadUri(e.to_string()))?;
+
+    // Use ureq's universal run method - this replaces ALL the method-specific logic
+    agent.run(request)
 }
 
-/// Helper for JSON requests
+#[cfg(feature = "json")]
+/// Universal function for JSON requests - eliminates method-specific duplication
 fn execute_json_request(
     agent: &ureq::Agent,
     method: &str,
@@ -562,33 +597,19 @@ fn execute_json_request(
     headers: &[(String, String)],
     data: serde_json::Value,
 ) -> Result<http::Response<ureq::Body>, ureq::Error> {
-    match method {
-        "POST" => {
-            let mut req = agent.post(url);
-            for (name, value) in headers {
-                req = req.header(name, value);
-            }
-            req.send_json(data)
-        }
-        "PUT" => {
-            let mut req = agent.put(url);
-            for (name, value) in headers {
-                req = req.header(name, value);
-            }
-            req.send_json(data)
-        }
-        "PATCH" => {
-            let mut req = agent.patch(url);
-            for (name, value) in headers {
-                req = req.header(name, value);
-            }
-            req.send_json(data)
-        }
-        _ => Err(ureq::Error::Io(std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            format!("Method {} does not support JSON body", method),
-        ))),
-    }
+    let json_string = serde_json::to_string(&data).map_err(|e| {
+        ureq::Error::Io(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("JSON serialization error: {}", e),
+        ))
+    })?;
+
+    // Just call the universal execute_request with JSON body
+    let mut json_headers = headers.to_vec();
+    json_headers
+        .push(("Content-Type".to_string(), "application/json".to_string()));
+
+    execute_request(agent, method, url, &json_headers, Some(&json_string))
 }
 
 fn convert_ureq_response_to_http_response(
@@ -681,6 +702,8 @@ impl CachedResponse {
     }
 
     /// Parse response body as JSON
+    #[cfg(feature = "json")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "json")))]
     pub fn into_json<T: serde::de::DeserializeOwned>(
         self,
     ) -> Result<T, UreqError> {

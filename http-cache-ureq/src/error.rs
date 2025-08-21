@@ -20,6 +20,18 @@ impl fmt::Display for UreqError {
 
 impl std::error::Error for UreqError {}
 
+impl From<ureq::Error> for UreqError {
+    fn from(error: ureq::Error) -> Self {
+        UreqError::Http(error.to_string())
+    }
+}
+
+impl From<std::io::Error> for UreqError {
+    fn from(error: std::io::Error) -> Self {
+        UreqError::Http(error.to_string())
+    }
+}
+
 /// Error for bad requests that can't be cached
 #[derive(Debug, Clone, Copy, Default)]
 pub struct BadRequest;

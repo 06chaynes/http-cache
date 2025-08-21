@@ -13,6 +13,7 @@
     echo "\n----------\nSurf middleware:\n"
     cd http-cache-surf && cargo nextest run --all-features
     echo "\n----------\nUreq middleware:\n"
+    cd http-cache-ureq && cargo nextest run --no-default-features --features manager-cacache
     cd http-cache-ureq && cargo nextest run --all-features
     echo "\n----------\nTower middleware:\n"
     cd http-cache-tower && cargo nextest run --all-features
@@ -30,6 +31,7 @@
     echo "\n----------\nSurf middleware:\n"
     cd http-cache-surf && cargo test --doc --all-features
     echo "\n----------\nUreq middleware:\n"
+    cd http-cache-ureq && cargo test --doc --no-default-features --features manager-cacache
     cd http-cache-ureq && cargo test --doc --all-features
     echo "\n----------\nTower middleware:\n"
     cd http-cache-tower && cargo test --doc --all-features
@@ -46,6 +48,7 @@
     echo "\n----------\nSurf middleware:\n"
     cd http-cache-surf && cargo check --all-features
     echo "\n----------\nUreq middleware:\n"
+    cd http-cache-ureq && cargo check --no-default-features --features manager-cacache
     cd http-cache-ureq && cargo check --all-features
     echo "\n----------\nTower middleware:\n"
     cd http-cache-tower && cargo check --all-features
