@@ -16,7 +16,7 @@ edition = "2021"
 rust-version = "1.82.0"
 
 [dependencies]
-http-cache = { version = "1.0.0-alpha.2", path = "../http-cache", default-features = false }
+http-cache = { version = "1.0.0-alpha.1", path = "../http-cache", default-features = false }
 http-cache-semantics = "2.1.0"
 tower = { version = "0.5.2", features = ["util"] }
 tower-layer = "0.3.3"

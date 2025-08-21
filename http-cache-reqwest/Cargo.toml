@@ -23,7 +23,7 @@ http = "1.2.0"
 http-body = "1.0.1"
 http-body-util = "0.1.2"
 http-cache-semantics = "2.1.0"
-reqwest = { version = "0.12.12", default-features = false }
+reqwest = { version = "0.12.12", default-features = false, features = ["rustls-tls"] }
 reqwest-middleware = "0.4.0"
 serde = { version = "1.0.217", features = ["derive"] }
 url = { version = "2.5.4", features = ["serde"] }
@@ -33,7 +33,7 @@ futures-util = { version = "0.3.31", optional = true }
 
 [dependencies.http-cache]
 path = "../http-cache"
-version = "1.0.0-alpha.2"
+version = "1.0.0-alpha.1"
 default-features = false
 
 [dev-dependencies]

@@ -7,7 +7,6 @@
 - Renamed `Error` enum to `SurfError` for consistent `{CrateName}Error` naming
 - Replaced `thiserror` with manual `std::error::Error` implementation for consistency
 - Removed `anyhow` dependency
-- Updated to use http-cache 1.0.0-alpha.2
 
 ### Removed
 

@@ -6,7 +6,6 @@
 
 - Added `ReqwestError` enum with manual `std::error::Error` implementation for improved error handling consistency
 - Standardized error types to follow `{CrateName}Error` naming convention
-- Updated to use http-cache 1.0.0-alpha.2
 
 ## [1.0.0-alpha.1] - 2025-07-27
 

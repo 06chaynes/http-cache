@@ -7,7 +7,6 @@
 - Renamed `HttpCacheError` to `TowerError` for consistent `{CrateName}Error` naming convention
 - Removed `anyhow` dependency, using manual error implementations throughout
 - Fixed author field to include both authors for consistency with other crates
-- Updated to use http-cache 1.0.0-alpha.2
 
 ### Removed
 

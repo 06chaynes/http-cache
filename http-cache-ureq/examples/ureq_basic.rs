@@ -4,27 +4,40 @@
 
 use http_cache_ureq::{CACacheManager, CachedAgent};
 use std::time::Instant;
+use wiremock::{matchers::method, Mock, MockServer, ResponseTemplate};
 
 fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     smol::block_on(async {
+        // Setup mock server with cacheable response
+        let mock_server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_string("Hello from cached response!")
+                    .append_header("cache-control", "max-age=300, public")
+                    .append_header("content-type", "text/plain"),
+            )
+            .mount(&mock_server)
+            .await;
+
         let cache_dir = tempfile::tempdir().unwrap();
         let cache_manager =
             CACacheManager::new(cache_dir.path().to_path_buf(), true);
         let client =
             CachedAgent::builder().cache_manager(cache_manager).build()?;
 
+        let url = format!("{}/", mock_server.uri());
+
         // First request
         let start = Instant::now();
-        let response =
-            client.get("https://httpbin.org/cache/300").call().await?;
+        let response = client.get(&url).call().await?;
 
         println!("First request: {:?}", start.elapsed());
         println!("Status: {}", response.status());
 
         // Second request
         let start = Instant::now();
-        let response =
-            client.get("https://httpbin.org/cache/300").call().await?;
+        let response = client.get(&url).call().await?;
 
         println!("Second request: {:?}", start.elapsed());
         println!("Status: {}", response.status());
