@@ -39,6 +39,7 @@ tokio = { version = "1.44.0", features = ["fs", "io-util"], optional = true }
 url = { version = "2.5.4", features = ["serde"] }
 uuid = { version = "1.11.0", features = ["v4"], optional = true }
 cfg-if = { version = "1.0", optional = true }
+governor = { version = "0.7.0", optional = true }
 
 [dev-dependencies]
 smol = "2.0.2"
@@ -58,6 +59,7 @@ streaming = ["uuid", "bincode", "cfg-if", "serde_json", "futures-util"]
 streaming-tokio = ["tokio", "streaming"]
 streaming-smol = ["smol", "streaming"]
 with-http-types = ["http-types"]
+rate-limiting = ["governor"]
 
 [package.metadata.docs.rs]
 rustdoc-args = ["--cfg", "docsrs"]

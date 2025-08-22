@@ -323,6 +323,12 @@ pub use http_cache::CACacheManager;
 #[cfg_attr(docsrs, doc(cfg(feature = "manager-moka")))]
 pub use http_cache::{MokaCache, MokaCacheBuilder, MokaManager};
 
+#[cfg(feature = "rate-limiting")]
+#[cfg_attr(docsrs, doc(cfg(feature = "rate-limiting")))]
+pub use http_cache::rate_limiting::{
+    CacheAwareRateLimiter, DirectRateLimiter, DomainRateLimiter, Quota,
+};
+
 /// Wrapper for [`HttpCache`]
 #[derive(Debug)]
 pub struct Cache<T: CacheManager>(pub HttpCache<T>);
@@ -703,6 +709,16 @@ where
                     });
                 }
                 BeforeRequest::Stale { request: conditional_parts, .. } => {
+                    // Apply rate limiting before revalidation request
+                    #[cfg(feature = "rate-limiting")]
+                    if let Some(rate_limiter) = &self.cache.options.rate_limiter
+                    {
+                        let url = req.url().clone();
+                        let rate_limit_key =
+                            url.host_str().unwrap_or("unknown");
+                        rate_limiter.until_key_ready(rate_limit_key).await;
+                    }
+
                     // Create conditional request
                     let mut conditional_req = req;
                     for (name, value) in conditional_parts.headers.iter() {
@@ -802,6 +818,14 @@ where
                     }
                 }
             }
+        }
+
+        // Apply rate limiting before fresh request
+        #[cfg(feature = "rate-limiting")]
+        if let Some(rate_limiter) = &self.cache.options.rate_limiter {
+            let url = req.url().clone();
+            let rate_limit_key = url.host_str().unwrap_or("unknown");
+            rate_limiter.until_key_ready(rate_limit_key).await;
         }
 
         // Fetch fresh response from upstream

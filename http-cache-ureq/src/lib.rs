@@ -230,6 +230,12 @@ pub use http_cache::CACacheManager;
 #[cfg_attr(docsrs, doc(cfg(feature = "manager-moka")))]
 pub use http_cache::{MokaCache, MokaCacheBuilder, MokaManager};
 
+#[cfg(feature = "rate-limiting")]
+#[cfg_attr(docsrs, doc(cfg(feature = "rate-limiting")))]
+pub use http_cache::rate_limiting::{
+    CacheAwareRateLimiter, DirectRateLimiter, DomainRateLimiter, Quota,
+};
+
 /// A cached HTTP agent that wraps ureq with HTTP caching capabilities
 #[derive(Debug, Clone)]
 pub struct CachedAgent<T: CacheManager> {

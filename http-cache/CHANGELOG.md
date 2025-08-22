@@ -8,6 +8,12 @@
 - Support for `Duration` type in `max_ttl` field for better ergonomics and type safety
 - Cache duration limiting functionality that overrides longer server-specified durations while respecting shorter ones
 - Enhanced cache expiration control for `CacheMode::IgnoreRules` mode
+- `rate_limiter` field to `HttpCacheOptions` for cache-aware rate limiting that only applies on cache misses
+- `CacheAwareRateLimiter` trait for implementing rate limiting strategies
+- `DomainRateLimiter` for per-domain rate limiting using governor
+- `DirectRateLimiter` for global rate limiting using governor
+- New `rate-limiting` feature flag for optional rate limiting functionality
+- Rate limiting support for streaming cache operations with seamless integration
 
 ### Changed
 

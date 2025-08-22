@@ -1424,12 +1424,7 @@ mod tests {
             cache_key: Some(Arc::new(|req: &http::request::Parts| {
                 format!("{}:{}:{:?}:test", req.method, req.uri, req.version)
             })),
-            cache_options: None,
-            cache_mode_fn: None,
-            cache_bust: None,
-            cache_status_headers: true,
-            max_ttl: None,
-            response_cache_mode_fn: None,
+            ..Default::default()
         };
 
         let cache = HttpCache {
@@ -1478,8 +1473,6 @@ mod tests {
             CACacheManager::new(cache_dir.path().to_path_buf(), false);
 
         let options = HttpCacheOptions {
-            cache_key: None,
-            cache_options: None,
             cache_mode_fn: Some(Arc::new(|req: &http::request::Parts| {
                 if req.uri.path().ends_with(".css") {
                     CacheMode::Default
@@ -1487,10 +1480,7 @@ mod tests {
                     CacheMode::NoStore
                 }
             })),
-            cache_bust: None,
-            cache_status_headers: true,
-            max_ttl: None,
-            response_cache_mode_fn: None,
+            ..Default::default()
         };
 
         let cache = HttpCache {
@@ -1546,12 +1536,6 @@ mod tests {
             CACacheManager::new(cache_dir.path().to_path_buf(), false);
 
         let options = HttpCacheOptions {
-            cache_key: None,
-            cache_options: None,
-            cache_mode_fn: None,
-            cache_bust: None,
-            cache_status_headers: true,
-            max_ttl: None,
             response_cache_mode_fn: Some(Arc::new(
                 |_request_parts, response| {
                     match response.status {
@@ -1563,6 +1547,7 @@ mod tests {
                     }
                 },
             )),
+            ..Default::default()
         };
 
         let cache = HttpCache {
@@ -1641,9 +1626,6 @@ mod tests {
             CACacheManager::new(cache_dir.path().to_path_buf(), false);
 
         let options = HttpCacheOptions {
-            cache_key: None,
-            cache_options: None,
-            cache_mode_fn: None,
             cache_bust: Some(Arc::new(|req: &http::request::Parts, _, _| {
                 if req.uri.path().ends_with("/bust-cache") {
                     vec![format!(
@@ -1657,9 +1639,7 @@ mod tests {
                     Vec::new()
                 }
             })),
-            cache_status_headers: true,
-            max_ttl: None,
-            response_cache_mode_fn: None,
+            ..Default::default()
         };
 
         let cache = HttpCache {
@@ -1959,16 +1939,11 @@ mod tests {
             mode: CacheMode::Reload,
             manager: cache_manager.clone(),
             options: HttpCacheOptions {
-                cache_key: None,
                 cache_options: Some(http_cache::CacheOptions {
                     shared: false,
                     ..Default::default()
                 }),
-                cache_mode_fn: None,
-                cache_bust: None,
-                cache_status_headers: true,
-                max_ttl: None,
-                response_cache_mode_fn: None,
+                ..Default::default()
             },
         };
         let cache_layer = HttpCacheLayer::with_cache(cache);

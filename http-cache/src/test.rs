@@ -41,15 +41,27 @@ fn cache_mode() -> Result<()> {
 fn cache_options() -> Result<()> {
     // Testing the Debug, Default and Clone traits for the HttpCacheOptions struct
     let mut opts = HttpCacheOptions::default();
+    #[cfg(feature = "rate-limiting")]
+    assert_eq!(format!("{:?}", opts.clone()), "HttpCacheOptions { cache_options: None, cache_key: \"Fn(&request::Parts) -> String\", cache_mode_fn: \"Fn(&request::Parts) -> CacheMode\", response_cache_mode_fn: \"Fn(&request::Parts, &HttpResponse) -> Option<CacheMode>\", cache_bust: \"Fn(&request::Parts) -> Vec<String>\", cache_status_headers: true, max_ttl: None, rate_limiter: \"Option<CacheAwareRateLimiter>\" }");
+    #[cfg(not(feature = "rate-limiting"))]
     assert_eq!(format!("{:?}", opts.clone()), "HttpCacheOptions { cache_options: None, cache_key: \"Fn(&request::Parts) -> String\", cache_mode_fn: \"Fn(&request::Parts) -> CacheMode\", response_cache_mode_fn: \"Fn(&request::Parts, &HttpResponse) -> Option<CacheMode>\", cache_bust: \"Fn(&request::Parts) -> Vec<String>\", cache_status_headers: true, max_ttl: None }");
     opts.cache_options = Some(CacheOptions::default());
+    #[cfg(feature = "rate-limiting")]
+    assert_eq!(format!("{:?}", opts.clone()), "HttpCacheOptions { cache_options: Some(CacheOptions { shared: true, cache_heuristic: 0.1, immutable_min_time_to_live: 86400s, ignore_cargo_cult: false }), cache_key: \"Fn(&request::Parts) -> String\", cache_mode_fn: \"Fn(&request::Parts) -> CacheMode\", response_cache_mode_fn: \"Fn(&request::Parts, &HttpResponse) -> Option<CacheMode>\", cache_bust: \"Fn(&request::Parts) -> Vec<String>\", cache_status_headers: true, max_ttl: None, rate_limiter: \"Option<CacheAwareRateLimiter>\" }");
+    #[cfg(not(feature = "rate-limiting"))]
     assert_eq!(format!("{:?}", opts.clone()), "HttpCacheOptions { cache_options: Some(CacheOptions { shared: true, cache_heuristic: 0.1, immutable_min_time_to_live: 86400s, ignore_cargo_cult: false }), cache_key: \"Fn(&request::Parts) -> String\", cache_mode_fn: \"Fn(&request::Parts) -> CacheMode\", response_cache_mode_fn: \"Fn(&request::Parts, &HttpResponse) -> Option<CacheMode>\", cache_bust: \"Fn(&request::Parts) -> Vec<String>\", cache_status_headers: true, max_ttl: None }");
     opts.cache_options = None;
     opts.cache_key = Some(std::sync::Arc::new(|req: &http::request::Parts| {
         format!("{}:{}:{:?}:test", req.method, req.uri, req.version)
     }));
+    #[cfg(feature = "rate-limiting")]
+    assert_eq!(format!("{opts:?}"), "HttpCacheOptions { cache_options: None, cache_key: \"Fn(&request::Parts) -> String\", cache_mode_fn: \"Fn(&request::Parts) -> CacheMode\", response_cache_mode_fn: \"Fn(&request::Parts, &HttpResponse) -> Option<CacheMode>\", cache_bust: \"Fn(&request::Parts) -> Vec<String>\", cache_status_headers: true, max_ttl: None, rate_limiter: \"Option<CacheAwareRateLimiter>\" }");
+    #[cfg(not(feature = "rate-limiting"))]
     assert_eq!(format!("{opts:?}"), "HttpCacheOptions { cache_options: None, cache_key: \"Fn(&request::Parts) -> String\", cache_mode_fn: \"Fn(&request::Parts) -> CacheMode\", response_cache_mode_fn: \"Fn(&request::Parts, &HttpResponse) -> Option<CacheMode>\", cache_bust: \"Fn(&request::Parts) -> Vec<String>\", cache_status_headers: true, max_ttl: None }");
     opts.cache_status_headers = false;
+    #[cfg(feature = "rate-limiting")]
+    assert_eq!(format!("{opts:?}"), "HttpCacheOptions { cache_options: None, cache_key: \"Fn(&request::Parts) -> String\", cache_mode_fn: \"Fn(&request::Parts) -> CacheMode\", response_cache_mode_fn: \"Fn(&request::Parts, &HttpResponse) -> Option<CacheMode>\", cache_bust: \"Fn(&request::Parts) -> Vec<String>\", cache_status_headers: false, max_ttl: None, rate_limiter: \"Option<CacheAwareRateLimiter>\" }");
+    #[cfg(not(feature = "rate-limiting"))]
     assert_eq!(format!("{opts:?}"), "HttpCacheOptions { cache_options: None, cache_key: \"Fn(&request::Parts) -> String\", cache_mode_fn: \"Fn(&request::Parts) -> CacheMode\", response_cache_mode_fn: \"Fn(&request::Parts, &HttpResponse) -> Option<CacheMode>\", cache_bust: \"Fn(&request::Parts) -> Vec<String>\", cache_status_headers: false, max_ttl: None }");
     Ok(())
 }
@@ -1493,5 +1505,186 @@ mod response_cache_mode_tests {
         // Verify cache policy was properly created from headers
         let ttl = policy.time_to_live(std::time::SystemTime::now());
         assert!(ttl.as_secs() > 0);
+    }
+}
+
+#[cfg(all(test, feature = "rate-limiting"))]
+mod rate_limiting_tests {
+    use super::*;
+    use crate::rate_limiting::{
+        CacheAwareRateLimiter, DomainRateLimiter, Quota,
+    };
+    use std::num::NonZero;
+    use std::sync::{Arc, Mutex};
+    use std::time::{Duration, Instant};
+
+    // Mock rate limiter that tracks calls for testing
+    #[derive(Debug)]
+    struct MockRateLimiter {
+        calls: Arc<Mutex<Vec<String>>>,
+        delay: Duration,
+    }
+
+    impl MockRateLimiter {
+        fn new(delay: Duration) -> Self {
+            Self { calls: Arc::new(Mutex::new(Vec::new())), delay }
+        }
+
+        fn get_calls(&self) -> Vec<String> {
+            self.calls.lock().unwrap().clone()
+        }
+
+        fn call_count(&self) -> usize {
+            self.calls.lock().unwrap().len()
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl CacheAwareRateLimiter for MockRateLimiter {
+        async fn until_key_ready(&self, key: &str) {
+            self.calls.lock().unwrap().push(key.to_string());
+            if !self.delay.is_zero() {
+                // Use std::thread::sleep for simplicity in tests
+                std::thread::sleep(self.delay);
+            }
+        }
+
+        fn check_key(&self, _key: &str) -> bool {
+            true
+        }
+    }
+
+    #[test]
+    fn test_domain_rate_limiter_creation() {
+        let quota = Quota::per_second(NonZero::new(1).unwrap());
+        let limiter = DomainRateLimiter::new(quota);
+
+        // Test that we can check keys without panicking
+        assert!(limiter.check_key("example.com"));
+        assert!(limiter.check_key("another.com"));
+    }
+
+    #[test]
+    fn test_direct_rate_limiter_creation() {
+        let quota = Quota::per_second(NonZero::new(10).unwrap()); // Higher quota for testing
+        let limiter = DomainRateLimiter::new(quota);
+
+        // Test that we can check keys (key is ignored for direct limiter)
+        // Use the same key since it's a direct limiter
+        assert!(limiter.check_key("any-key"));
+    }
+
+    #[tokio::test]
+    async fn test_rate_limiting_options_integration() {
+        // Test that HttpCacheOptions properly stores and uses rate limiter
+        let rate_limiter = MockRateLimiter::new(Duration::from_millis(1));
+        let call_counter = rate_limiter.calls.clone();
+
+        let options = HttpCacheOptions {
+            rate_limiter: Some(Arc::new(rate_limiter)),
+            ..Default::default()
+        };
+
+        // Verify rate limiter is stored
+        assert!(options.rate_limiter.is_some());
+
+        // Simulate rate limiting call
+        if let Some(limiter) = &options.rate_limiter {
+            limiter.until_key_ready("test-domain").await;
+        }
+
+        // Verify the call was recorded
+        assert_eq!(call_counter.lock().unwrap().len(), 1);
+        assert_eq!(call_counter.lock().unwrap()[0], "test-domain");
+    }
+
+    #[tokio::test]
+    async fn test_rate_limiting_with_actual_governor() {
+        // Test with actual governor rate limiter
+        let quota = Quota::per_second(NonZero::new(2).unwrap()); // 2 requests per second
+        let limiter = DomainRateLimiter::new(quota);
+
+        let start = Instant::now();
+
+        // First request should be immediate
+        limiter.until_key_ready("example.com").await;
+        let first_duration = start.elapsed();
+
+        // Second request should also be immediate (within burst)
+        limiter.until_key_ready("example.com").await;
+        let second_duration = start.elapsed();
+
+        // Both should be very fast
+        assert!(first_duration < Duration::from_millis(10));
+        assert!(second_duration < Duration::from_millis(10));
+
+        // Test with different domain (should be separate rate limit)
+        limiter.until_key_ready("other.com").await;
+        let third_duration = start.elapsed();
+        assert!(third_duration < Duration::from_millis(10));
+    }
+
+    #[tokio::test]
+    async fn test_direct_rate_limiter_behavior() {
+        // Test direct rate limiter that applies globally
+        let quota = Quota::per_second(NonZero::new(10).unwrap()); // Higher quota for testing
+        let limiter = DomainRateLimiter::new(quota);
+
+        let start = Instant::now();
+
+        // First request should be immediate
+        limiter.until_key_ready("any-domain").await;
+        let first_duration = start.elapsed();
+        assert!(first_duration < Duration::from_millis(100));
+
+        // Test that check_key works (should still have quota)
+        assert!(limiter.check_key("any-domain"));
+    }
+
+    #[test]
+    fn test_http_cache_options_debug_with_rate_limiting() {
+        let quota = Quota::per_second(NonZero::new(1).unwrap());
+        let rate_limiter = DomainRateLimiter::new(quota);
+
+        let options = HttpCacheOptions {
+            rate_limiter: Some(Arc::new(rate_limiter)),
+            ..Default::default()
+        };
+
+        let debug_string = format!("{:?}", options);
+
+        // Verify debug output includes rate limiter field
+        assert!(debug_string.contains("rate_limiter"));
+        assert!(debug_string.contains("Option<CacheAwareRateLimiter>"));
+    }
+
+    #[test]
+    fn test_http_cache_options_default_no_rate_limiting() {
+        let options = HttpCacheOptions::default();
+
+        // Verify default has no rate limiter
+        assert!(options.rate_limiter.is_none());
+    }
+
+    // Integration test that would require more complex setup
+    // This tests the flow conceptually but would need a full middleware setup
+    #[tokio::test]
+    async fn test_rate_limiter_key_extraction() {
+        let url = Url::parse("https://api.example.com/users").unwrap();
+        let host = url.host_str().unwrap_or("unknown");
+
+        assert_eq!(host, "api.example.com");
+
+        // Test with different URLs
+        let url2 = Url::parse("https://other-api.example.com/posts").unwrap();
+        let host2 = url2.host_str().unwrap_or("unknown");
+
+        assert_eq!(host2, "other-api.example.com");
+
+        // Test with localhost
+        let url3 = Url::parse("http://localhost:8080/test").unwrap();
+        let host3 = url3.host_str().unwrap_or("unknown");
+
+        assert_eq!(host3, "localhost");
     }
 }

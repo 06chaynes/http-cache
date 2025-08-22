@@ -1085,3 +1085,173 @@ async fn content_type_based_caching() {
         "Unknown type should NOT be cached"
     );
 }
+
+#[cfg(feature = "rate-limiting")]
+mod rate_limiting_tests {
+    use super::*;
+    use http_cache::rate_limiting::{
+        DirectRateLimiter, DomainRateLimiter, Quota,
+    };
+    use std::sync::{Arc, Mutex};
+    use std::time::{Duration, Instant};
+
+    /// Mock rate limiter that tracks calls for testing
+    #[derive(Debug)]
+    struct MockRateLimiter {
+        calls: Arc<Mutex<Vec<String>>>,
+        delay: Duration,
+    }
+
+    impl MockRateLimiter {
+        fn new(delay: Duration) -> Self {
+            Self { calls: Arc::new(Mutex::new(Vec::new())), delay }
+        }
+
+        fn get_calls(&self) -> Vec<String> {
+            self.calls.lock().unwrap().clone()
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl CacheAwareRateLimiter for MockRateLimiter {
+        async fn until_key_ready(&self, key: &str) {
+            self.calls.lock().unwrap().push(key.to_string());
+            if !self.delay.is_zero() {
+                std::thread::sleep(self.delay);
+            }
+        }
+
+        fn check_key(&self, _key: &str) -> bool {
+            true
+        }
+    }
+
+    #[tokio::test]
+    async fn cache_hit_bypasses_rate_limiting() {
+        let mock_server = MockServer::start().await;
+        let m = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 1);
+        let _mock_guard = mock_server.register_as_scoped(m).await;
+        let url = format!("{}/", &mock_server.uri());
+        let manager = MokaManager::default();
+        let rate_limiter = Arc::new(MockRateLimiter::new(Duration::ZERO));
+
+        let agent = CachedAgent::builder()
+            .cache_manager(manager)
+            .cache_mode(CacheMode::Default)
+            .cache_options(HttpCacheOptions {
+                rate_limiter: Some(rate_limiter.clone()),
+                ..Default::default()
+            })
+            .build()
+            .unwrap();
+
+        // First request (cache miss) - should trigger rate limiting
+        let res1 = agent.get(&url).call().await.unwrap();
+        assert_eq!(res1.status(), 200);
+        assert_eq!(res1.header("x-cache-lookup"), Some(MISS));
+        assert_eq!(res1.header("x-cache"), Some(MISS));
+
+        // Second request (cache hit) - should NOT trigger rate limiting
+        let res2 = agent.get(&url).call().await.unwrap();
+        assert_eq!(res2.status(), 200);
+        assert_eq!(res2.header("x-cache-lookup"), Some(HIT));
+        assert_eq!(res2.header("x-cache"), Some(HIT));
+
+        // Verify rate limiter was only called once (for the cache miss)
+        let calls = rate_limiter.get_calls();
+        assert_eq!(calls.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn cache_miss_applies_rate_limiting() {
+        let mock_server = MockServer::start().await;
+        let m = build_mock("no-cache", TEST_BODY, 200, 2);
+        let _mock_guard = mock_server.register_as_scoped(m).await;
+        let url = format!("{}/", &mock_server.uri());
+        let manager = MokaManager::default();
+        let rate_limiter =
+            Arc::new(MockRateLimiter::new(Duration::from_millis(100)));
+
+        let agent = CachedAgent::builder()
+            .cache_manager(manager)
+            .cache_mode(CacheMode::NoCache) // Force cache misses
+            .cache_options(HttpCacheOptions {
+                rate_limiter: Some(rate_limiter.clone()),
+                ..Default::default()
+            })
+            .build()
+            .unwrap();
+
+        let start = Instant::now();
+
+        // Two requests that will both be cache misses
+        let res1 = agent.get(&url).call().await.unwrap();
+        assert_eq!(res1.status(), 200);
+
+        let res2 = agent.get(&url).call().await.unwrap();
+        assert_eq!(res2.status(), 200);
+
+        let elapsed = start.elapsed();
+
+        // Verify rate limiter was called for both requests
+        let calls = rate_limiter.get_calls();
+        assert_eq!(calls.len(), 2);
+
+        // Verify some delay was applied (at least some portion of our 200ms total)
+        assert!(elapsed >= Duration::from_millis(100));
+    }
+
+    #[tokio::test]
+    async fn domain_rate_limiter_integration() {
+        let mock_server = MockServer::start().await;
+        let m = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 1);
+        let _mock_guard = mock_server.register_as_scoped(m).await;
+        let url = format!("{}/", &mock_server.uri());
+        let manager = MokaManager::default();
+
+        // Create a domain rate limiter with very permissive limits
+        let quota = Quota::per_second(std::num::NonZeroU32::new(100).unwrap());
+        let rate_limiter = Arc::new(DomainRateLimiter::new(quota));
+
+        let agent = CachedAgent::builder()
+            .cache_manager(manager)
+            .cache_mode(CacheMode::NoCache) // Force cache miss
+            .cache_options(HttpCacheOptions {
+                rate_limiter: Some(rate_limiter),
+                ..Default::default()
+            })
+            .build()
+            .unwrap();
+
+        // Request should succeed and be rate limited
+        let res = agent.get(&url).call().await.unwrap();
+        assert_eq!(res.status(), 200);
+    }
+
+    #[tokio::test]
+    async fn direct_rate_limiter_integration() {
+        let mock_server = MockServer::start().await;
+        let m = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 1);
+        let _mock_guard = mock_server.register_as_scoped(m).await;
+        let url = format!("{}/", &mock_server.uri());
+        let manager = MokaManager::default();
+
+        // Create a direct rate limiter with very permissive limits
+        let quota = Quota::per_second(std::num::NonZeroU32::new(100).unwrap());
+        let rate_limiter = Arc::new(DirectRateLimiter::direct(quota));
+
+        let agent = CachedAgent::builder()
+            .cache_manager(manager)
+            .cache_mode(CacheMode::NoCache) // Force cache miss
+            .cache_options(HttpCacheOptions {
+                rate_limiter: Some(rate_limiter),
+                ..Default::default()
+            })
+            .build()
+            .unwrap();
+
+        // Request should succeed and be rate limited
+        let res = agent.get(&url).call().await.unwrap();
+        assert_eq!(res.status(), 200);
+    }
+}

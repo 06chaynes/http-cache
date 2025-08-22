@@ -131,7 +131,7 @@ mod with_moka {
         let client = Client::new().with(Cache(HttpCache {
             mode: CacheMode::Default,
             manager: manager.clone(),
-            options: HttpCacheOptions::default(),
+            options: Default::default(),
         }));
 
         // Cold pass to load cache
@@ -173,9 +173,7 @@ mod with_moka {
                 }),
                 cache_mode_fn: None,
                 cache_bust: None,
-                cache_status_headers: true,
-                max_ttl: None,
-                response_cache_mode_fn: None,
+                ..Default::default()
             },
         }));
 
@@ -206,7 +204,7 @@ mod with_moka {
         let client = Client::new().with(Cache(HttpCache {
             mode: CacheMode::Default,
             manager: manager.clone(),
-            options: HttpCacheOptions::default(),
+            options: Default::default(),
         }));
 
         // Cold pass to load cache
@@ -247,7 +245,7 @@ mod with_moka {
         let client = Client::new().with(Cache(HttpCache {
             mode: CacheMode::Default,
             manager: manager.clone(),
-            options: HttpCacheOptions::default(),
+            options: Default::default(),
         }));
 
         // Cold pass to load cache
@@ -282,7 +280,7 @@ mod with_moka {
         let client = Client::new().with(Cache(HttpCache {
             mode: CacheMode::NoStore,
             manager: manager.clone(),
-            options: HttpCacheOptions::default(),
+            options: Default::default(),
         }));
 
         // Remote request but should not cache
@@ -313,7 +311,7 @@ mod with_moka {
         let client = Client::new().with(Cache(HttpCache {
             mode: CacheMode::NoCache,
             manager: manager.clone(),
-            options: HttpCacheOptions::default(),
+            options: Default::default(),
         }));
 
         // Remote request and should cache
@@ -346,7 +344,7 @@ mod with_moka {
         let client = Client::new().with(Cache(HttpCache {
             mode: CacheMode::ForceCache,
             manager: manager.clone(),
-            options: HttpCacheOptions::default(),
+            options: Default::default(),
         }));
 
         // Should result in a cache miss and a remote request
@@ -379,7 +377,7 @@ mod with_moka {
         let client = Client::new().with(Cache(HttpCache {
             mode: CacheMode::IgnoreRules,
             manager: manager.clone(),
-            options: HttpCacheOptions::default(),
+            options: Default::default(),
         }));
 
         // Should result in a cache miss and a remote request
@@ -417,7 +415,7 @@ mod with_moka {
         let client = Client::new().with(Cache(HttpCache {
             mode: CacheMode::Default,
             manager: manager.clone(),
-            options: HttpCacheOptions::default(),
+            options: Default::default(),
         }));
 
         // Cold pass to load cache
@@ -456,7 +454,7 @@ mod with_moka {
         let client = Client::new().with(Cache(HttpCache {
             mode: CacheMode::Default,
             manager: manager.clone(),
-            options: HttpCacheOptions::default(),
+            options: Default::default(),
         }));
 
         // Cold pass to load cache
@@ -495,7 +493,7 @@ mod with_moka {
         let client = Client::new().with(Cache(HttpCache {
             mode: CacheMode::Default,
             manager: manager.clone(),
-            options: HttpCacheOptions::default(),
+            options: Default::default(),
         }));
 
         // Cold pass to load cache
@@ -536,7 +534,7 @@ mod with_moka {
         let client = Client::new().with(Cache(HttpCache {
             mode: CacheMode::Default,
             manager: manager.clone(),
-            options: HttpCacheOptions::default(),
+            options: Default::default(),
         }));
 
         // Cold pass to load cache
@@ -582,9 +580,7 @@ mod with_moka {
                 }),
                 cache_mode_fn: None,
                 cache_bust: None,
-                cache_status_headers: true,
-                max_ttl: None,
-                response_cache_mode_fn: None,
+                ..Default::default()
             },
         }));
 
@@ -621,9 +617,7 @@ mod with_moka {
                 cache_options: None,
                 cache_mode_fn: None,
                 cache_bust: None,
-                cache_status_headers: true,
-                max_ttl: None,
-                response_cache_mode_fn: None,
+                ..Default::default()
             },
         }));
 
@@ -662,9 +656,7 @@ mod with_moka {
                     }
                 })),
                 cache_bust: None,
-                cache_status_headers: true,
-                max_ttl: None,
-                response_cache_mode_fn: None,
+                ..Default::default()
             },
         }));
 
@@ -701,13 +693,8 @@ mod with_moka {
             mode: CacheMode::Default,
             manager: manager.clone(),
             options: HttpCacheOptions {
-                cache_key: None,
-                cache_options: None,
-                cache_mode_fn: None,
-                cache_bust: None,
                 cache_status_headers: false,
-                max_ttl: None,
-                response_cache_mode_fn: None,
+                ..Default::default()
             },
         }));
 
@@ -757,9 +744,7 @@ mod with_moka {
                         }
                     },
                 )),
-                cache_status_headers: true,
-                max_ttl: None,
-                response_cache_mode_fn: None,
+                ..Default::default()
             },
         }));
 
@@ -799,7 +784,7 @@ mod with_moka {
             let client = Client::new().with(Cache(HttpCache {
                 mode: CacheMode::OnlyIfCached,
                 manager: manager.clone(),
-                options: HttpCacheOptions::default(),
+                options: Default::default(),
             }));
 
             // Should result in a cache miss and no remote request
@@ -827,7 +812,7 @@ mod with_moka {
             let client = Client::new().with(Cache(HttpCache {
                 mode: CacheMode::Default,
                 manager: manager.clone(),
-                options: HttpCacheOptions::default(),
+                options: Default::default(),
             }));
 
             // Cold pass to load the cache
@@ -844,7 +829,7 @@ mod with_moka {
             let client = Client::new().with(Cache(HttpCache {
                 mode: CacheMode::OnlyIfCached,
                 manager: manager.clone(),
-                options: HttpCacheOptions::default(),
+                options: Default::default(),
             }));
 
             // Should result in a cache hit and no remote request
@@ -884,7 +869,7 @@ mod with_moka {
         let client = Client::new().with(Cache(HttpCache {
             mode: CacheMode::Default,
             manager: manager.clone(),
-            options: HttpCacheOptions::default(),
+            options: Default::default(),
         }));
 
         // First HEAD request - should miss and be cached
@@ -926,7 +911,7 @@ mod with_moka {
         let client = Client::new().with(Cache(HttpCache {
             mode: CacheMode::Default,
             manager: manager.clone(),
-            options: HttpCacheOptions::default(),
+            options: Default::default(),
         }));
 
         // First, cache a GET response
@@ -975,7 +960,7 @@ mod with_moka {
         let client = Client::new().with(Cache(HttpCache {
             mode: CacheMode::Default,
             manager: manager.clone(),
-            options: HttpCacheOptions::default(),
+            options: Default::default(),
         }));
 
         // Cache a GET response
@@ -1025,7 +1010,7 @@ mod with_moka {
         let client = Client::new().with(Cache(HttpCache {
             mode: CacheMode::Default,
             manager: manager.clone(),
-            options: HttpCacheOptions::default(),
+            options: Default::default(),
         }));
 
         // Cache a GET response
@@ -1068,7 +1053,7 @@ mod with_moka {
         let client = Client::new().with(Cache(HttpCache {
             mode: CacheMode::Default,
             manager: manager.clone(),
-            options: HttpCacheOptions::default(),
+            options: Default::default(),
         }));
 
         // First OPTIONS request
@@ -1089,5 +1074,205 @@ mod with_moka {
         assert_eq!(res2.status(), 200);
 
         Ok(())
+    }
+
+    #[cfg(feature = "rate-limiting")]
+    mod rate_limiting_tests {
+        use super::*;
+        use http_cache::rate_limiting::{
+            DirectRateLimiter, DomainRateLimiter, Quota,
+        };
+        use std::sync::{Arc, Mutex};
+        use std::time::{Duration, Instant};
+
+        /// Mock rate limiter that tracks calls for testing
+        #[derive(Debug)]
+        struct MockRateLimiter {
+            calls: Arc<Mutex<Vec<String>>>,
+            delay: Duration,
+        }
+
+        impl MockRateLimiter {
+            fn new(delay: Duration) -> Self {
+                Self { calls: Arc::new(Mutex::new(Vec::new())), delay }
+            }
+
+            fn get_calls(&self) -> Vec<String> {
+                self.calls.lock().unwrap().clone()
+            }
+        }
+
+        #[async_trait::async_trait]
+        impl CacheAwareRateLimiter for MockRateLimiter {
+            async fn until_key_ready(&self, key: &str) {
+                self.calls.lock().unwrap().push(key.to_string());
+                if !self.delay.is_zero() {
+                    std::thread::sleep(self.delay);
+                }
+            }
+
+            fn check_key(&self, _key: &str) -> bool {
+                true
+            }
+        }
+
+        #[apply(test!)]
+        async fn cache_hit_bypasses_rate_limiting() -> Result<()> {
+            let mock_server = MockServer::start().await;
+            let m = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 1);
+            let _mock_guard = mock_server.register_as_scoped(m).await;
+            let url = format!("{}/", &mock_server.uri());
+            let manager = MokaManager::default();
+            let rate_limiter = Arc::new(MockRateLimiter::new(Duration::ZERO));
+
+            let client = Client::new().with(Cache(HttpCache {
+                mode: CacheMode::Default,
+                manager,
+                options: HttpCacheOptions {
+                    rate_limiter: Some(rate_limiter.clone()),
+                    ..Default::default()
+                },
+            }));
+
+            // First request (cache miss) - should trigger rate limiting
+            let req1 = Request::new(Method::Get, Url::parse(&url)?);
+            let res1 = client.send(req1).await?;
+            assert_eq!(res1.header(XCACHELOOKUP).unwrap(), MISS);
+            assert_eq!(res1.header(XCACHE).unwrap(), MISS);
+
+            // Second request (cache hit) - should NOT trigger rate limiting
+            let req2 = Request::new(Method::Get, Url::parse(&url)?);
+            let res2 = client.send(req2).await?;
+            assert_eq!(res2.header(XCACHELOOKUP).unwrap(), HIT);
+            assert_eq!(res2.header(XCACHE).unwrap(), HIT);
+
+            // Verify rate limiter was only called once (for the cache miss)
+            let calls = rate_limiter.get_calls();
+            assert_eq!(calls.len(), 1);
+
+            Ok(())
+        }
+
+        #[apply(test!)]
+        async fn cache_miss_applies_rate_limiting() -> Result<()> {
+            let mock_server = MockServer::start().await;
+            let m = Mock::given(method(GET))
+                .respond_with(
+                    ResponseTemplate::new(200)
+                        .insert_header("cache-control", "no-cache")
+                        .set_body_bytes(TEST_BODY),
+                )
+                .expect(2);
+            let _mock_guard = mock_server.register_as_scoped(m).await;
+            let url = format!("{}/", &mock_server.uri());
+            let manager = MokaManager::default();
+            let rate_limiter =
+                Arc::new(MockRateLimiter::new(Duration::from_millis(100)));
+
+            let client = Client::new().with(Cache(HttpCache {
+                mode: CacheMode::Default,
+                manager,
+                options: HttpCacheOptions {
+                    rate_limiter: Some(rate_limiter.clone()),
+                    ..Default::default()
+                },
+            }));
+
+            let start = Instant::now();
+
+            // Two requests that will both be cache misses
+            let req1 = Request::new(Method::Get, Url::parse(&url)?);
+            let res1 = client.send(req1).await?;
+            assert_eq!(res1.header(XCACHE).unwrap(), MISS);
+
+            let req2 = Request::new(Method::Get, Url::parse(&url)?);
+            let res2 = client.send(req2).await?;
+            assert_eq!(res2.header(XCACHE).unwrap(), MISS);
+
+            let elapsed = start.elapsed();
+
+            // Verify rate limiter was called for both requests
+            let calls = rate_limiter.get_calls();
+            assert_eq!(calls.len(), 2);
+
+            // Verify some delay was applied (at least some portion of our 200ms total)
+            assert!(elapsed >= Duration::from_millis(100));
+
+            Ok(())
+        }
+
+        #[apply(test!)]
+        async fn domain_rate_limiter_integration() -> Result<()> {
+            let mock_server = MockServer::start().await;
+            let m = Mock::given(method(GET))
+                .respond_with(
+                    ResponseTemplate::new(200)
+                        .insert_header("cache-control", "no-cache")
+                        .set_body_bytes(TEST_BODY),
+                )
+                .expect(1);
+            let _mock_guard = mock_server.register_as_scoped(m).await;
+            let url = format!("{}/", &mock_server.uri());
+            let manager = MokaManager::default();
+
+            // Create a domain rate limiter with very permissive limits
+            let quota =
+                Quota::per_second(std::num::NonZeroU32::new(100).unwrap());
+            let rate_limiter = Arc::new(DomainRateLimiter::new(quota));
+
+            let client = Client::new().with(Cache(HttpCache {
+                mode: CacheMode::Default,
+                manager,
+                options: HttpCacheOptions {
+                    rate_limiter: Some(rate_limiter),
+                    ..Default::default()
+                },
+            }));
+
+            // Request should succeed and be rate limited
+            let req = Request::new(Method::Get, Url::parse(&url)?);
+            let res = client.send(req).await?;
+            assert_eq!(res.header(XCACHE).unwrap(), MISS);
+            assert_eq!(res.status(), 200);
+
+            Ok(())
+        }
+
+        #[apply(test!)]
+        async fn direct_rate_limiter_integration() -> Result<()> {
+            let mock_server = MockServer::start().await;
+            let m = Mock::given(method(GET))
+                .respond_with(
+                    ResponseTemplate::new(200)
+                        .insert_header("cache-control", "no-cache")
+                        .set_body_bytes(TEST_BODY),
+                )
+                .expect(1);
+            let _mock_guard = mock_server.register_as_scoped(m).await;
+            let url = format!("{}/", &mock_server.uri());
+            let manager = MokaManager::default();
+
+            // Create a direct rate limiter with very permissive limits
+            let quota =
+                Quota::per_second(std::num::NonZeroU32::new(100).unwrap());
+            let rate_limiter = Arc::new(DirectRateLimiter::direct(quota));
+
+            let client = Client::new().with(Cache(HttpCache {
+                mode: CacheMode::Default,
+                manager,
+                options: HttpCacheOptions {
+                    rate_limiter: Some(rate_limiter),
+                    ..Default::default()
+                },
+            }));
+
+            // Request should succeed and be rate limited
+            let req = Request::new(Method::Get, Url::parse(&url)?);
+            let res = client.send(req).await?;
+            assert_eq!(res.header(XCACHE).unwrap(), MISS);
+            assert_eq!(res.status(), 200);
+
+            Ok(())
+        }
     }
 }

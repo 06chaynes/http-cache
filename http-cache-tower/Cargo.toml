@@ -25,6 +25,7 @@ http-body-util = "0.1.2"
 hyper = "1.6.0"
 bytes = "1.8.0"
 tokio = { version = "1.43.0", features = ["fs", "io-util", "rt"] }
+url = { version = "2.5", optional = true }
 
 [dev-dependencies]
 tokio = { version = "1.43.0", features = [ "macros", "rt", "rt-multi-thread" ] }
@@ -59,3 +60,4 @@ default = ["manager-cacache"]
 manager-cacache = ["http-cache/manager-cacache", "http-cache/cacache-tokio"]
 manager-moka = ["http-cache/manager-moka"]
 streaming = ["http-cache/streaming-tokio"]
+rate-limiting = ["http-cache/rate-limiting", "url"]

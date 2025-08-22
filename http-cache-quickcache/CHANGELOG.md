@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.0.0-alpha.2] - 2025-08-22
+
+### Changed
+
+- Updated to use http-cache 1.0.0-alpha.2 with rate limiting support
+
 ## [1.0.0-alpha.1] - 2025-07-27
 
 ### Added

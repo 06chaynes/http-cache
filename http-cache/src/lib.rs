@@ -260,6 +260,9 @@ mod managers;
 #[cfg(feature = "streaming")]
 mod runtime;
 
+#[cfg(feature = "rate-limiting")]
+pub mod rate_limiting;
+
 use std::{
     collections::HashMap,
     convert::TryFrom,
@@ -287,6 +290,14 @@ pub use managers::streaming_cache::StreamingManager;
 
 #[cfg(feature = "manager-moka")]
 pub use managers::moka::MokaManager;
+
+#[cfg(feature = "rate-limiting")]
+pub use rate_limiting::{
+    CacheAwareRateLimiter, DirectRateLimiter, DomainRateLimiter,
+};
+
+#[cfg(feature = "rate-limiting")]
+pub use rate_limiting::Quota;
 
 // Exposing the moka cache for convenience, renaming to avoid naming conflicts
 #[cfg(feature = "manager-moka")]
@@ -1059,6 +1070,12 @@ pub struct HttpCacheOptions {
     /// When set, this overrides any longer cache durations specified by the server.
     /// Particularly useful with `CacheMode::IgnoreRules` to provide expiration control.
     pub max_ttl: Option<Duration>,
+    /// Rate limiter that applies only on cache misses.
+    /// When enabled, requests that result in cache hits are returned immediately,
+    /// while cache misses are rate limited before making network requests.
+    /// This provides the optimal behavior for web scrapers and similar applications.
+    #[cfg(feature = "rate-limiting")]
+    pub rate_limiter: Option<Arc<dyn CacheAwareRateLimiter>>,
 }
 
 impl Default for HttpCacheOptions {
@@ -1071,24 +1088,46 @@ impl Default for HttpCacheOptions {
             cache_bust: None,
             cache_status_headers: true,
             max_ttl: None,
+            #[cfg(feature = "rate-limiting")]
+            rate_limiter: None,
         }
     }
 }
 
 impl Debug for HttpCacheOptions {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("HttpCacheOptions")
-            .field("cache_options", &self.cache_options)
-            .field("cache_key", &"Fn(&request::Parts) -> String")
-            .field("cache_mode_fn", &"Fn(&request::Parts) -> CacheMode")
-            .field(
-                "response_cache_mode_fn",
-                &"Fn(&request::Parts, &HttpResponse) -> Option<CacheMode>",
-            )
-            .field("cache_bust", &"Fn(&request::Parts) -> Vec<String>")
-            .field("cache_status_headers", &self.cache_status_headers)
-            .field("max_ttl", &self.max_ttl)
-            .finish()
+        #[cfg(feature = "rate-limiting")]
+        {
+            f.debug_struct("HttpCacheOptions")
+                .field("cache_options", &self.cache_options)
+                .field("cache_key", &"Fn(&request::Parts) -> String")
+                .field("cache_mode_fn", &"Fn(&request::Parts) -> CacheMode")
+                .field(
+                    "response_cache_mode_fn",
+                    &"Fn(&request::Parts, &HttpResponse) -> Option<CacheMode>",
+                )
+                .field("cache_bust", &"Fn(&request::Parts) -> Vec<String>")
+                .field("cache_status_headers", &self.cache_status_headers)
+                .field("max_ttl", &self.max_ttl)
+                .field("rate_limiter", &"Option<CacheAwareRateLimiter>")
+                .finish()
+        }
+
+        #[cfg(not(feature = "rate-limiting"))]
+        {
+            f.debug_struct("HttpCacheOptions")
+                .field("cache_options", &self.cache_options)
+                .field("cache_key", &"Fn(&request::Parts) -> String")
+                .field("cache_mode_fn", &"Fn(&request::Parts) -> CacheMode")
+                .field(
+                    "response_cache_mode_fn",
+                    &"Fn(&request::Parts, &HttpResponse) -> Option<CacheMode>",
+                )
+                .field("cache_bust", &"Fn(&request::Parts) -> Vec<String>")
+                .field("cache_status_headers", &self.cache_status_headers)
+                .field("max_ttl", &self.max_ttl)
+                .finish()
+        }
     }
 }
 
@@ -1356,6 +1395,21 @@ impl<T: CacheManager> HttpCache<T> {
         Ok(analysis.should_cache)
     }
 
+    /// Apply rate limiting if enabled in options
+    #[cfg(feature = "rate-limiting")]
+    async fn apply_rate_limiting(&self, url: &Url) {
+        if let Some(rate_limiter) = &self.options.rate_limiter {
+            let rate_limit_key = url.host_str().unwrap_or("unknown");
+            rate_limiter.until_key_ready(rate_limit_key).await;
+        }
+    }
+
+    /// Apply rate limiting if enabled in options (no-op without rate-limiting feature)
+    #[cfg(not(feature = "rate-limiting"))]
+    async fn apply_rate_limiting(&self, _url: &Url) {
+        // No-op when rate limiting feature is not enabled
+    }
+
     /// Runs the actions to preform when the client middleware is running without the cache
     pub async fn run_no_cache(
         &self,
@@ -1494,6 +1548,10 @@ impl<T: CacheManager> HttpCache<T> {
         &self,
         middleware: &mut impl Middleware,
     ) -> Result<HttpResponse> {
+        // Apply rate limiting before making the network request
+        let url = middleware.url()?;
+        self.apply_rate_limiting(&url).await;
+
         let mut res = middleware.remote_fetch().await?;
         if self.options.cache_status_headers {
             res.cache_status(HitOrMiss::MISS);
@@ -1563,6 +1621,8 @@ impl<T: CacheManager> HttpCache<T> {
             }
         }
         let req_url = middleware.url()?;
+        // Apply rate limiting before revalidation request
+        self.apply_rate_limiting(&req_url).await;
         match middleware.remote_fetch().await {
             Ok(mut cond_res) => {
                 let status = StatusCode::from_u16(cond_res.status)?;

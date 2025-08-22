@@ -62,6 +62,7 @@ default = ["manager-cacache"]
 manager-cacache = ["http-cache/manager-cacache", "http-cache/cacache-tokio"]
 manager-moka = ["http-cache/manager-moka"]
 streaming = ["http-cache/streaming-tokio", "reqwest/stream", "futures-util"]
+rate-limiting = ["http-cache/rate-limiting"]
 
 [package.metadata.docs.rs]
 all-features = true

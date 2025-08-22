@@ -2,6 +2,14 @@
 
 ## [1.0.0-alpha.2] - 2025-08-20
 
+### Added
+
+- Support for cache-aware rate limiting through `rate_limiter` field in `HttpCacheOptions`
+- New `rate-limiting` feature flag for optional rate limiting functionality
+- Re-export of rate limiting types: `CacheAwareRateLimiter`, `DomainRateLimiter`, `DirectRateLimiter`, `Quota`
+- Rate limiting integration for streaming cache operations via `HttpCacheStreamingLayer`
+- `url` dependency (optional, enabled with rate-limiting feature) for URL parsing in rate limiting
+
 ### Changed
 
 - Renamed `HttpCacheError` to `TowerError` for consistent `{CrateName}Error` naming convention

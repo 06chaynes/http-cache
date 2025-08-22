@@ -8,6 +8,10 @@
     cd http-cache && cargo nextest run --no-default-features --features manager-cacache,cacache-smol,with-http-types,manager-moka,streaming-smol
     echo "\n----------\nCore library (tokio):\n"
     cd http-cache && cargo nextest run --no-default-features --features manager-cacache,cacache-tokio,with-http-types,manager-moka,streaming-tokio
+    echo "\n----------\nCore library (smol + rate-limiting):\n"
+    cd http-cache && cargo nextest run --no-default-features --features manager-cacache,cacache-smol,with-http-types,manager-moka,streaming-smol,rate-limiting
+    echo "\n----------\nCore library (tokio + rate-limiting):\n"
+    cd http-cache && cargo nextest run --no-default-features --features manager-cacache,cacache-tokio,with-http-types,manager-moka,streaming-tokio,rate-limiting
     echo "\n----------\nReqwest middleware:\n"
     cd http-cache-reqwest && cargo nextest run --all-features
     echo "\n----------\nSurf middleware:\n"
@@ -26,6 +30,10 @@
     cd http-cache && cargo test --doc --no-default-features --features manager-cacache,cacache-smol,with-http-types,manager-moka,streaming-smol
     echo "\n----------\nCore library (tokio):\n"
     cd http-cache && cargo test --doc --no-default-features --features manager-cacache,cacache-tokio,with-http-types,manager-moka,streaming-tokio
+    echo "\n----------\nCore library (smol + rate-limiting):\n"
+    cd http-cache && cargo test --doc --no-default-features --features manager-cacache,cacache-smol,with-http-types,manager-moka,streaming-smol,rate-limiting
+    echo "\n----------\nCore library (tokio + rate-limiting):\n"
+    cd http-cache && cargo test --doc --no-default-features --features manager-cacache,cacache-tokio,with-http-types,manager-moka,streaming-tokio,rate-limiting
     echo "\n----------\nReqwest middleware:\n"
     cd http-cache-reqwest && cargo test --doc --all-features
     echo "\n----------\nSurf middleware:\n"
@@ -43,6 +51,10 @@
     cd http-cache && cargo check --no-default-features --features manager-cacache,cacache-smol,with-http-types,manager-moka,streaming-smol
     echo "\n----------\nCore library (tokio):\n"
     cd http-cache && cargo check --no-default-features --features manager-cacache,cacache-tokio,with-http-types,manager-moka,streaming-tokio
+    echo "\n----------\nCore library (smol + rate-limiting):\n"
+    cd http-cache && cargo check --no-default-features --features manager-cacache,cacache-smol,with-http-types,manager-moka,streaming-smol,rate-limiting
+    echo "\n----------\nCore library (tokio + rate-limiting):\n"
+    cd http-cache && cargo check --no-default-features --features manager-cacache,cacache-tokio,with-http-types,manager-moka,streaming-tokio,rate-limiting
     echo "\n----------\nReqwest middleware:\n"
     cd http-cache-reqwest && cargo check --all-features
     echo "\n----------\nSurf middleware:\n"
@@ -111,6 +123,10 @@ changelog TAG:
     cd http-cache && cargo clippy --lib --tests --all-targets --no-default-features --features manager-cacache,cacache-smol,with-http-types,manager-moka,streaming-smol -- -D warnings
     echo "\n----------\nCore library (tokio):\n"
     cd http-cache && cargo clippy --lib --tests --all-targets --no-default-features --features manager-cacache,cacache-tokio,with-http-types,manager-moka,streaming-tokio -- -D warnings
+    echo "\n----------\nCore library (smol + rate-limiting):\n"
+    cd http-cache && cargo clippy --lib --tests --all-targets --no-default-features --features manager-cacache,cacache-smol,with-http-types,manager-moka,streaming-smol,rate-limiting -- -D warnings
+    echo "\n----------\nCore library (tokio + rate-limiting):\n"
+    cd http-cache && cargo clippy --lib --tests --all-targets --no-default-features --features manager-cacache,cacache-tokio,with-http-types,manager-moka,streaming-tokio,rate-limiting -- -D warnings
     echo "\n----------\nReqwest middleware:\n"
     cd http-cache-reqwest && cargo clippy --lib --tests --all-targets --all-features -- -D warnings
     echo "\n----------\nSurf middleware:\n"

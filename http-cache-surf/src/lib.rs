@@ -176,6 +176,12 @@ pub use http_cache::ResponseCacheModeFn;
 #[cfg_attr(docsrs, doc(cfg(feature = "manager-moka")))]
 pub use http_cache::{MokaCache, MokaCacheBuilder, MokaManager};
 
+#[cfg(feature = "rate-limiting")]
+#[cfg_attr(docsrs, doc(cfg(feature = "rate-limiting")))]
+pub use http_cache::rate_limiting::{
+    CacheAwareRateLimiter, DirectRateLimiter, DomainRateLimiter, Quota,
+};
+
 /// A wrapper around [`HttpCache`] that implements [`surf::middleware::Middleware`]
 #[derive(Debug, Clone)]
 pub struct Cache<T: CacheManager>(pub HttpCache<T>);

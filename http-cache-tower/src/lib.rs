@@ -152,8 +152,14 @@ use bytes::Bytes;
 use http::{HeaderValue, Request, Response};
 use http_body::Body;
 use http_body_util::BodyExt;
+
 #[cfg(feature = "manager-cacache")]
 pub use http_cache::CACacheManager;
+
+#[cfg(feature = "rate-limiting")]
+pub use http_cache::rate_limiting::{
+    CacheAwareRateLimiter, DirectRateLimiter, DomainRateLimiter, Quota,
+};
 #[cfg(feature = "streaming")]
 use http_cache::StreamingError;
 use http_cache::{
@@ -900,6 +906,17 @@ where
 
             // If not cacheable, convert body type and return
             if !analysis.should_cache {
+                // Apply rate limiting before non-cached request
+                #[cfg(feature = "rate-limiting")]
+                if let Some(rate_limiter) = &cache.options.rate_limiter {
+                    if let Ok(url) = parts.uri.to_string().parse::<::url::Url>()
+                    {
+                        let rate_limit_key =
+                            url.host_str().unwrap_or("unknown");
+                        rate_limiter.until_key_ready(rate_limit_key).await;
+                    }
+                }
+
                 let req = Request::from_parts(parts, body);
                 let response = inner_service.oneshot(req).await.http_err()?;
                 let mut converted_response =
@@ -919,6 +936,17 @@ where
 
             // Special case for Reload mode: skip cache lookup but still cache response
             if analysis.cache_mode == CacheMode::Reload {
+                // Apply rate limiting before reload request
+                #[cfg(feature = "rate-limiting")]
+                if let Some(rate_limiter) = &cache.options.rate_limiter {
+                    if let Ok(url) = parts.uri.to_string().parse::<::url::Url>()
+                    {
+                        let rate_limit_key =
+                            url.host_str().unwrap_or("unknown");
+                        rate_limiter.until_key_ready(rate_limit_key).await;
+                    }
+                }
+
                 let req = Request::from_parts(parts, body);
                 let response = inner_service.oneshot(req).await.http_err()?;
 
@@ -965,6 +993,23 @@ where
                     BeforeRequest::Stale {
                         request: conditional_parts, ..
                     } => {
+                        // Apply rate limiting before conditional request
+                        #[cfg(feature = "rate-limiting")]
+                        if let Some(rate_limiter) = &cache.options.rate_limiter
+                        {
+                            if let Ok(url) = conditional_parts
+                                .uri
+                                .to_string()
+                                .parse::<::url::Url>()
+                            {
+                                let rate_limit_key =
+                                    url.host_str().unwrap_or("unknown");
+                                rate_limiter
+                                    .until_key_ready(rate_limit_key)
+                                    .await;
+                            }
+                        }
+
                         let conditional_req =
                             Request::from_parts(conditional_parts, body);
                         let conditional_response = inner_service
@@ -1014,6 +1059,15 @@ where
                             return Ok(response);
                         }
                     }
+                }
+            }
+
+            // Apply rate limiting before fresh request
+            #[cfg(feature = "rate-limiting")]
+            if let Some(rate_limiter) = &cache.options.rate_limiter {
+                if let Ok(url) = parts.uri.to_string().parse::<url::Url>() {
+                    let rate_limit_key = url.host_str().unwrap_or("unknown");
+                    rate_limiter.until_key_ready(rate_limit_key).await;
                 }
             }
 

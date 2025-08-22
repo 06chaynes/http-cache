@@ -6,8 +6,9 @@
 
 - **Traditional Caching**: Standard HTTP response caching with full buffering
 - **Streaming Support**: Memory-efficient caching for large responses without full buffering
+- **Cache-Aware Rate Limiting**: Intelligent rate limiting that only applies on cache misses, not cache hits
 - **Multiple Backends**: Support for disk-based (cacache) and in-memory (moka, quick-cache) storage
-- **Client Integrations**: Support for reqwest, surf, and Tower/Hyper ecosystems
+- **Client Integrations**: Support for reqwest, surf, tower, and ureq HTTP clients
 - **RFC 7234 Compliance**: Proper HTTP cache semantics with respect for cache-control headers
 
 ## Streaming vs Traditional Caching
