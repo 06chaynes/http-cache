@@ -43,6 +43,64 @@ const HIT: &str = "HIT";
 
 const MISS: &str = "MISS";
 
+#[apply(test!)]
+async fn test_non_cloneable_request_graceful_fallback() -> Result<()> {
+    // Test graceful handling of requests that cannot be cloned
+    // This simulates the multipart form / streaming body scenario
+
+    let temp_dir = tempfile::TempDir::new().unwrap();
+    let manager = CACacheManager::new(temp_dir.path().into(), true);
+    let mock_server = MockServer::start().await;
+
+    // Set up a mock server that returns a successful response
+    let m = Mock::given(method("POST"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "application/json")
+                .set_body_bytes(b"{'status': 'success'}"),
+        )
+        .expect(1);
+    let _mock_guard = mock_server.register_as_scoped(m).await;
+
+    let url = format!("{}/upload", mock_server.uri());
+    let client = Client::new().with(Cache(HttpCache {
+        mode: CacheMode::Default,
+        manager,
+        options: HttpCacheOptions::default(),
+    }));
+
+    // Create a request that would potentially be difficult to clone
+    // Note: surf/http-types may not have the exact same cloning issues as reqwest,
+    // but this test ensures the error handling is robust
+    let body_data =
+        "large data that could potentially be streaming".repeat(1000);
+
+    let response = client
+        .post(&url)
+        .header("Content-Type", "application/octet-stream")
+        .body_string(body_data)
+        .await;
+
+    // The middleware should handle this gracefully - either cache or bypass cache
+    match response {
+        Ok(response) => {
+            // This is what we expect - successful handling
+            assert_eq!(response.status(), 200);
+        }
+        Err(e) => {
+            // If there's an error, it should NOT be a cloning error
+            let error_msg = e.to_string();
+            assert!(
+                !error_msg.contains("not cloneable"),
+                "Expected graceful handling but got cloning error: {}",
+                error_msg
+            );
+        }
+    }
+
+    Ok(())
+}
+
 #[test]
 #[allow(clippy::default_constructed_unit_structs)]
 fn test_errors() -> Result<()> {

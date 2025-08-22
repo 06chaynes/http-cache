@@ -7,6 +7,11 @@
 - Added `ReqwestError` enum with manual `std::error::Error` implementation for improved error handling consistency
 - Standardized error types to follow `{CrateName}Error` naming convention
 
+### Fixed
+
+- Request cloning failures for multipart forms and streaming bodies now fallback gracefully instead of throwing errors
+- Cache middleware now bypasses caching for non-cloneable requests while still performing cache maintenance operations
+
 ## [1.0.0-alpha.1] - 2025-07-27
 
 ### Added

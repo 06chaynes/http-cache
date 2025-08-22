@@ -100,3 +100,83 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 - **Memory Efficiency**: Large responses are streamed directly to/from disk cache without buffering in memory
 - **Performance**: Cached responses can be streamed immediately without waiting for complete download
 - **Scalability**: Handle responses of any size without memory constraints
+
+## Non-Cloneable Request Handling
+
+The reqwest middleware gracefully handles requests with non-cloneable bodies (such as multipart forms, streaming uploads, and custom body types). When a request cannot be cloned for caching operations, the middleware automatically:
+
+1. **Bypasses the cache gracefully**: The request proceeds normally without caching
+2. **Performs cache maintenance**: Still handles cache deletion and busting operations where possible
+3. **Avoids errors**: No "Request object is not cloneable" errors are thrown
+
+This ensures that your application continues to work seamlessly even when using complex request body types.
+
+### Example with Multipart Forms
+
+```rust
+use reqwest::Client;
+use reqwest_middleware::ClientBuilder;
+use http_cache_reqwest::{Cache, CacheMode, CACacheManager, HttpCache, HttpCacheOptions};
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let client = ClientBuilder::new(Client::new())
+        .with(Cache(HttpCache {
+            mode: CacheMode::Default,
+            manager: CACacheManager::default(),
+            options: HttpCacheOptions::default(),
+        }))
+        .build();
+
+    // Multipart forms are handled gracefully - no caching errors
+    let form = reqwest::multipart::Form::new()
+        .text("field1", "value1")
+        .file("upload", "/path/to/file.txt").await?;
+    
+    let response = client
+        .post("https://httpbin.org/post")
+        .multipart(form)
+        .send()
+        .await?;
+    
+    println!("Status: {}", response.status());
+    Ok(())
+}
+```
+
+### Example with Streaming Bodies
+
+```rust
+use reqwest::Client;
+use reqwest_middleware::ClientBuilder;
+use http_cache_reqwest::{Cache, CacheMode, CACacheManager, HttpCache, HttpCacheOptions};
+use futures_util::stream;
+use bytes::Bytes;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let client = ClientBuilder::new(Client::new())
+        .with(Cache(HttpCache {
+            mode: CacheMode::Default,
+            manager: CACacheManager::default(),
+            options: HttpCacheOptions::default(),
+        }))
+        .build();
+
+    // Create a streaming body
+    let stream_data = vec!["chunk1", "chunk2", "chunk3"];
+    let stream = stream::iter(stream_data)
+        .map(|s| Ok::<_, reqwest::Error>(Bytes::from(s)));
+    let body = reqwest::Body::wrap_stream(stream);
+    
+    // Streaming bodies are handled gracefully - no caching errors
+    let response = client
+        .put("https://httpbin.org/put")
+        .body(body)
+        .send()
+        .await?;
+    
+    println!("Status: {}", response.status());
+    Ok(())
+}
+```

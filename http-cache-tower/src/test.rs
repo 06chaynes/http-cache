@@ -2051,4 +2051,108 @@ mod tests {
 
         Ok(())
     }
+
+    #[tokio::test]
+    async fn test_streaming_request_graceful_handling() -> Result<()> {
+        // Test that streaming/non-cloneable requests are handled gracefully
+        // Tower's architecture decomposes requests into (parts, body) which should
+        // avoid cloning issues, but this test ensures robustness
+
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let cache_manager = CACacheManager::new(temp_dir.path().into(), true);
+        let cache_layer = HttpCacheLayer::new(cache_manager);
+
+        // Create a service that accepts streaming bodies
+        #[derive(Clone)]
+        struct StreamingService;
+
+        impl Service<Request<Full<Bytes>>> for StreamingService {
+            type Response = Response<Full<Bytes>>;
+            type Error = Box<dyn std::error::Error + Send + Sync>;
+            type Future = Pin<
+                Box<
+                    dyn Future<
+                            Output = std::result::Result<
+                                Self::Response,
+                                Self::Error,
+                            >,
+                        > + Send,
+                >,
+            >;
+
+            fn poll_ready(
+                &mut self,
+                _: &mut Context<'_>,
+            ) -> Poll<std::result::Result<(), Self::Error>> {
+                Poll::Ready(Ok(()))
+            }
+
+            fn call(&mut self, req: Request<Full<Bytes>>) -> Self::Future {
+                let (parts, body) = req.into_parts();
+                Box::pin(async move {
+                    // Process the body (in a real scenario this could be a large streaming body)
+                    let body_bytes = BodyExt::collect(body)
+                        .await
+                        .map_err(|e| {
+                            Box::new(e)
+                                as Box<dyn std::error::Error + Send + Sync>
+                        })?
+                        .to_bytes();
+                    let body_size = body_bytes.len();
+
+                    // Return response with information about the processed body
+                    Response::builder()
+                        .status(StatusCode::OK)
+                        .header("cache-control", "max-age=3600, public")
+                        .header("content-type", "application/json")
+                        .header("x-body-size", body_size.to_string())
+                        .body(Full::new(Bytes::from(format!(
+                            "{{\"processed\": true, \"body_size\": {}, \"uri\": \"{}\"}}",
+                            body_size,
+                            parts.uri
+                        ))))
+                        .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
+                })
+            }
+        }
+
+        let mut cached_service = cache_layer.layer(StreamingService);
+
+        // Create a request with a potentially large body (simulating streaming data)
+        let large_body_data = "streaming data ".repeat(10000); // ~150KB of data
+        let request = Request::builder()
+            .uri("https://example.com/streaming-upload")
+            .method("POST")
+            .header("content-type", "application/octet-stream")
+            .body(Full::new(Bytes::from(large_body_data.clone())))
+            .map_err(|e| {
+                Box::new(e) as Box<dyn std::error::Error + Send + Sync>
+            })?;
+
+        // This should not fail with cloning errors
+        let response = cached_service.ready().await?.call(request).await;
+
+        match response {
+            Ok(response) => {
+                // Success - the middleware handled the streaming body correctly
+                assert_eq!(response.status(), StatusCode::OK);
+                assert!(response.headers().contains_key("x-body-size"));
+            }
+            Err(e) => {
+                // If there's an error, it should NOT be related to cloning
+                let error_msg = e.to_string();
+                assert!(
+                    !error_msg.to_lowercase().contains("clone"),
+                    "Expected graceful handling but got cloning-related error: {}",
+                    error_msg
+                );
+                // Re-throw other errors as they might be legitimate test failures
+                return Err(
+                    Box::new(e) as Box<dyn std::error::Error + Send + Sync>
+                );
+            }
+        }
+
+        Ok(())
+    }
 }

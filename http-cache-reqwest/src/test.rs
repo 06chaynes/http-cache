@@ -5,7 +5,10 @@ use http_cache::*;
 use reqwest::Client;
 use reqwest_middleware::ClientBuilder;
 use url::Url;
-use wiremock::{matchers::method, Mock, MockServer, ResponseTemplate};
+use wiremock::{
+    matchers::{method, path},
+    Mock, MockServer, ResponseTemplate,
+};
 
 /// Helper function to create a temporary cache manager
 fn create_cache_manager() -> CACacheManager {
@@ -1163,6 +1166,81 @@ async fn options_request_not_cached() -> Result<()> {
     Ok(())
 }
 
+#[tokio::test]
+async fn test_multipart_form_cloning_issue() -> Result<()> {
+    // This test reproduces the exact issue reported by the user
+    // where multipart forms cause "Request object is not cloneable" errors
+
+    let manager = CACacheManager::new(".cache".into(), true);
+    let mock_server = MockServer::start().await;
+
+    // Mock an API endpoint that accepts multipart forms
+    let mock = Mock::given(method("POST"))
+        .and(path("/api/upload"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "application/json")
+                .insert_header("cache-control", "no-cache") // Should not be cached anyway
+                .set_body_bytes(r#"{"status": "uploaded"}"#),
+        )
+        .expect(1); // Should be called once since cache is bypassed
+
+    let _mock_guard = mock_server.register_as_scoped(mock).await;
+
+    // Create cached client
+    let client = ClientBuilder::new(
+        Client::builder()
+            .build()
+            .expect("should be able to construct reqwest client"),
+    )
+    .with(Cache(HttpCache {
+        mode: CacheMode::Default,
+        manager,
+        options: HttpCacheOptions::default(),
+    }))
+    .build();
+
+    // Create a streaming body that should cause cloning issues
+    // We need to create a body that can't be cloned - like a stream
+    use bytes::Bytes;
+    use futures_util::stream;
+    use reqwest::Body;
+
+    let file_content = b"fake file content for testing";
+    // Create a stream that can't be cloned
+    let stream = stream::iter(vec![Ok::<_, reqwest::Error>(Bytes::from(
+        file_content.to_vec(),
+    ))]);
+    let body = Body::wrap_stream(stream);
+
+    let url = format!("{}/api/upload", mock_server.uri());
+
+    // This should reproduce the cloning error when the cache middleware
+    // tries to clone the request for cache analysis
+    let result = client
+        .post(&url)
+        .header("Accept", "application/json")
+        .header("api-key", "test-key")
+        .header("content-type", "application/octet-stream")
+        .body(body)
+        .send()
+        .await;
+
+    // With the graceful fallback fix, the request should now succeed
+    // by bypassing the cache entirely
+    match result {
+        Ok(response) => {
+            // This is what we expect - graceful fallback working
+            assert_eq!(response.status(), 200);
+        }
+        Err(e) => {
+            panic!("Expected graceful fallback, but got error: {}", e);
+        }
+    }
+
+    Ok(())
+}
+
 #[cfg(all(test, feature = "streaming"))]
 mod streaming_tests {
     use super::*;
@@ -1376,7 +1454,7 @@ mod streaming_tests {
 
         // Mock endpoint that returns 200 with no-cache headers
         let no_cache_mock = Mock::given(method(GET))
-            .and(wiremock::matchers::path("/api/data"))
+            .and(path("/api/data"))
             .respond_with(
                 ResponseTemplate::new(200)
                     .insert_header(
@@ -1390,7 +1468,7 @@ mod streaming_tests {
 
         // Mock endpoint that returns 429 with cacheable headers
         let rate_limit_mock = Mock::given(method(GET))
-            .and(wiremock::matchers::path("/api/rate-limited"))
+            .and(path("/api/rate-limited"))
             .respond_with(
                 ResponseTemplate::new(429)
                     .insert_header("cache-control", "public, max-age=300")

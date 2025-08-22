@@ -279,10 +279,7 @@ pub use error::{BadRequest, ReqwestError};
 use http_cache::StreamingCacheManager;
 
 use std::{
-    collections::HashMap,
-    convert::{TryFrom, TryInto},
-    str::FromStr,
-    time::SystemTime,
+    collections::HashMap, convert::TryInto, str::FromStr, time::SystemTime,
 };
 
 pub use http::request::Parts;
@@ -410,10 +407,20 @@ impl Middleware for ReqwestMiddleware<'_> {
         Ok(())
     }
     fn parts(&self) -> Result<Parts> {
-        let copied_req = clone_req(&self.req)?;
-        let converted =
-            http::Request::try_from(copied_req).map_err(BoxError::from)?;
-        Ok(converted.into_parts().0)
+        // Extract request parts without cloning the body
+        let mut builder = http::Request::builder()
+            .method(self.req.method().as_str())
+            .uri(self.req.url().as_str())
+            .version(self.req.version());
+
+        // Add headers
+        for (name, value) in self.req.headers() {
+            builder = builder.header(name, value);
+        }
+
+        // Build with empty body just to get the Parts
+        let http_req = builder.body(()).map_err(Box::new)?;
+        Ok(http_req.into_parts().0)
     }
     fn url(&self) -> Result<Url> {
         Ok(self.req.url().clone())
@@ -554,9 +561,10 @@ impl<T: CacheManager> reqwest_middleware::Middleware for Cache<T> {
         next: Next<'_>,
     ) -> std::result::Result<Response, Error> {
         let mut middleware = ReqwestMiddleware { req, next, extensions };
-        if self.0.can_cache_request(&middleware).map_err(|e| {
-            to_middleware_error(ReqwestError::Cache(e.to_string()))
-        })? {
+        let can_cache =
+            self.0.can_cache_request(&middleware).map_err(from_box_error)?;
+
+        if can_cache {
             let res = self.0.run(middleware).await.map_err(from_box_error)?;
             let converted = convert_response(res).map_err(|e| {
                 to_middleware_error(ReqwestError::Cache(e.to_string()))
@@ -601,7 +609,15 @@ where
         use http_cache::HttpCacheStreamInterface;
 
         // Convert reqwest Request to http::Request for analysis
-        let copied_req = clone_req(&req)?;
+        // If the request can't be cloned (e.g., streaming body), bypass cache gracefully
+        let copied_req = match clone_req(&req) {
+            Ok(req) => req,
+            Err(_) => {
+                // Request has non-cloneable body (streaming/multipart), bypass cache
+                let response = next.run(req, extensions).await?;
+                return Ok(response);
+            }
+        };
         let http_req = match http::Request::try_from(copied_req) {
             Ok(r) => r,
             Err(e) => {
