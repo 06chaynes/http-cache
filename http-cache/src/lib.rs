@@ -101,6 +101,29 @@
 //! };
 //! ```
 //!
+//! ## Maximum TTL Control
+//!
+//! Set a maximum time-to-live for cached responses, particularly useful with `CacheMode::IgnoreRules`:
+//!
+//! ```rust
+//! use http_cache::{HttpCacheOptions, CACacheManager, HttpCache, CacheMode};
+//! use std::time::Duration;
+//!
+//! let manager = CACacheManager::new("./cache".into(), true);
+//!
+//! // Limit cache duration to 5 minutes regardless of server headers
+//! let options = HttpCacheOptions {
+//!     max_ttl: Some(Duration::from_secs(300)), // 5 minutes
+//!     ..Default::default()
+//! };
+//!
+//! let cache = HttpCache {
+//!     mode: CacheMode::IgnoreRules, // Ignore server cache-control headers
+//!     manager,
+//!     options,
+//! };
+//! ```
+//!
 //! ## Response-Based Cache Mode Override
 //!
 //! Override cache behavior based on the response you receive. This is useful for scenarios like
@@ -200,10 +223,12 @@ use std::{
     fmt::{self, Debug},
     str::FromStr,
     sync::Arc,
-    time::SystemTime,
+    time::{Duration, SystemTime},
 };
 
-use http::{header::CACHE_CONTROL, request, response, Response, StatusCode};
+use http::{
+    header::CACHE_CONTROL, request, response, HeaderValue, Response, StatusCode,
+};
 use http_cache_semantics::{AfterResponse, BeforeRequest, CachePolicy};
 use serde::{Deserialize, Serialize};
 use url::Url;
@@ -360,7 +385,7 @@ impl HttpResponse {
             for header in &self.headers {
                 headers.insert(
                     http::header::HeaderName::from_str(header.0.as_str())?,
-                    http::HeaderValue::from_str(header.1.as_str())?,
+                    HeaderValue::from_str(header.1.as_str())?,
                 );
             }
         }
@@ -962,6 +987,10 @@ pub struct HttpCacheOptions {
     pub cache_bust: Option<CacheBust>,
     /// Determines if the cache status headers should be added to the response.
     pub cache_status_headers: bool,
+    /// Maximum time-to-live for cached responses.
+    /// When set, this overrides any longer cache durations specified by the server.
+    /// Particularly useful with `CacheMode::IgnoreRules` to provide expiration control.
+    pub max_ttl: Option<Duration>,
 }
 
 impl Default for HttpCacheOptions {
@@ -973,6 +1002,7 @@ impl Default for HttpCacheOptions {
             response_cache_mode_fn: None,
             cache_bust: None,
             cache_status_headers: true,
+            max_ttl: None,
         }
     }
 }
@@ -989,6 +1019,7 @@ impl Debug for HttpCacheOptions {
             )
             .field("cache_bust", &"Fn(&request::Parts) -> Vec<String>")
             .field("cache_status_headers", &self.cache_status_headers)
+            .field("max_ttl", &self.max_ttl)
             .finish()
     }
 }
@@ -1040,10 +1071,9 @@ impl HttpCacheOptions {
             .version(http_response.version.into());
 
         for (name, value) in &http_response.headers {
-            if let (Ok(header_name), Ok(header_value)) = (
-                name.parse::<http::HeaderName>(),
-                value.parse::<http::HeaderValue>(),
-            ) {
+            if let (Ok(header_name), Ok(header_value)) =
+                (name.parse::<http::HeaderName>(), value.parse::<HeaderValue>())
+            {
                 response_builder =
                     response_builder.header(header_name, header_value);
             }
@@ -1090,14 +1120,72 @@ impl HttpCacheOptions {
         request_parts: &request::Parts,
         response_parts: &response::Parts,
     ) -> CachePolicy {
-        match self.cache_options {
-            Some(options) => CachePolicy::new_options(
+        let cache_options = self.cache_options.unwrap_or_default();
+
+        // If max_ttl is specified, we need to modify the response headers to enforce it
+        if let Some(max_ttl) = self.max_ttl {
+            let mut modified_response_parts = response_parts.clone();
+
+            // Parse existing cache-control header
+            let cache_control = response_parts
+                .headers
+                .get("cache-control")
+                .and_then(|v| v.to_str().ok())
+                .unwrap_or("");
+
+            // Extract existing max-age if present
+            let existing_max_age =
+                cache_control.split(',').find_map(|directive| {
+                    let directive = directive.trim();
+                    if directive.starts_with("max-age=") {
+                        directive.strip_prefix("max-age=")?.parse::<u64>().ok()
+                    } else {
+                        None
+                    }
+                });
+
+            // Convert max_ttl to seconds
+            let max_ttl_seconds = max_ttl.as_secs();
+
+            // Apply max_ttl by setting max-age to the minimum of existing max-age and max_ttl
+            let effective_max_age = match existing_max_age {
+                Some(existing) => std::cmp::min(existing, max_ttl_seconds),
+                None => max_ttl_seconds,
+            };
+
+            // Build new cache-control header
+            let mut new_directives = Vec::new();
+
+            // Add non-max-age directives from existing cache-control
+            for directive in cache_control.split(',').map(|d| d.trim()) {
+                if !directive.starts_with("max-age=") && !directive.is_empty() {
+                    new_directives.push(directive.to_string());
+                }
+            }
+
+            // Add our effective max-age
+            new_directives.push(format!("max-age={}", effective_max_age));
+
+            let new_cache_control = new_directives.join(", ");
+            modified_response_parts.headers.insert(
+                "cache-control",
+                HeaderValue::from_str(&new_cache_control)
+                    .unwrap_or_else(|_| HeaderValue::from_static("max-age=0")),
+            );
+
+            CachePolicy::new_options(
+                request_parts,
+                &modified_response_parts,
+                SystemTime::now(),
+                cache_options,
+            )
+        } else {
+            CachePolicy::new_options(
                 request_parts,
                 response_parts,
                 SystemTime::now(),
-                options,
-            ),
-            None => CachePolicy::new(request_parts, response_parts),
+                cache_options,
+            )
         }
     }
 

@@ -1428,6 +1428,7 @@ mod tests {
             cache_mode_fn: None,
             cache_bust: None,
             cache_status_headers: true,
+            max_ttl: None,
             response_cache_mode_fn: None,
         };
 
@@ -1488,6 +1489,7 @@ mod tests {
             })),
             cache_bust: None,
             cache_status_headers: true,
+            max_ttl: None,
             response_cache_mode_fn: None,
         };
 
@@ -1549,6 +1551,7 @@ mod tests {
             cache_mode_fn: None,
             cache_bust: None,
             cache_status_headers: true,
+            max_ttl: None,
             response_cache_mode_fn: Some(Arc::new(
                 |_request_parts, response| {
                     match response.status {
@@ -1655,6 +1658,7 @@ mod tests {
                 }
             })),
             cache_status_headers: true,
+            max_ttl: None,
             response_cache_mode_fn: None,
         };
 
@@ -1963,6 +1967,7 @@ mod tests {
                 cache_mode_fn: None,
                 cache_bust: None,
                 cache_status_headers: true,
+                max_ttl: None,
                 response_cache_mode_fn: None,
             },
         };

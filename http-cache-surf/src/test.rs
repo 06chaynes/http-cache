@@ -116,6 +116,7 @@ mod with_moka {
                 cache_mode_fn: None,
                 cache_bust: None,
                 cache_status_headers: true,
+                max_ttl: None,
                 response_cache_mode_fn: None,
             },
         }));
@@ -524,6 +525,7 @@ mod with_moka {
                 cache_mode_fn: None,
                 cache_bust: None,
                 cache_status_headers: true,
+                max_ttl: None,
                 response_cache_mode_fn: None,
             },
         }));
@@ -562,6 +564,7 @@ mod with_moka {
                 cache_mode_fn: None,
                 cache_bust: None,
                 cache_status_headers: true,
+                max_ttl: None,
                 response_cache_mode_fn: None,
             },
         }));
@@ -602,6 +605,7 @@ mod with_moka {
                 })),
                 cache_bust: None,
                 cache_status_headers: true,
+                max_ttl: None,
                 response_cache_mode_fn: None,
             },
         }));
@@ -644,6 +648,7 @@ mod with_moka {
                 cache_mode_fn: None,
                 cache_bust: None,
                 cache_status_headers: false,
+                max_ttl: None,
                 response_cache_mode_fn: None,
             },
         }));
@@ -695,6 +700,7 @@ mod with_moka {
                     },
                 )),
                 cache_status_headers: true,
+                max_ttl: None,
                 response_cache_mode_fn: None,
             },
         }));

@@ -29,7 +29,7 @@ http-body-util = "0.1.2"
 
 [dependencies.http-cache]
 path = "../http-cache"
-version = "1.0.0-alpha.1"
+version = "1.0.0-alpha.2"
 default-features = false
 features = ["bincode"]
 

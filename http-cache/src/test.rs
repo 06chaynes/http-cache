@@ -41,16 +41,16 @@ fn cache_mode() -> Result<()> {
 fn cache_options() -> Result<()> {
     // Testing the Debug, Default and Clone traits for the HttpCacheOptions struct
     let mut opts = HttpCacheOptions::default();
-    assert_eq!(format!("{:?}", opts.clone()), "HttpCacheOptions { cache_options: None, cache_key: \"Fn(&request::Parts) -> String\", cache_mode_fn: \"Fn(&request::Parts) -> CacheMode\", response_cache_mode_fn: \"Fn(&request::Parts, &HttpResponse) -> Option<CacheMode>\", cache_bust: \"Fn(&request::Parts) -> Vec<String>\", cache_status_headers: true }");
+    assert_eq!(format!("{:?}", opts.clone()), "HttpCacheOptions { cache_options: None, cache_key: \"Fn(&request::Parts) -> String\", cache_mode_fn: \"Fn(&request::Parts) -> CacheMode\", response_cache_mode_fn: \"Fn(&request::Parts, &HttpResponse) -> Option<CacheMode>\", cache_bust: \"Fn(&request::Parts) -> Vec<String>\", cache_status_headers: true, max_ttl: None }");
     opts.cache_options = Some(CacheOptions::default());
-    assert_eq!(format!("{:?}", opts.clone()), "HttpCacheOptions { cache_options: Some(CacheOptions { shared: true, cache_heuristic: 0.1, immutable_min_time_to_live: 86400s, ignore_cargo_cult: false }), cache_key: \"Fn(&request::Parts) -> String\", cache_mode_fn: \"Fn(&request::Parts) -> CacheMode\", response_cache_mode_fn: \"Fn(&request::Parts, &HttpResponse) -> Option<CacheMode>\", cache_bust: \"Fn(&request::Parts) -> Vec<String>\", cache_status_headers: true }");
+    assert_eq!(format!("{:?}", opts.clone()), "HttpCacheOptions { cache_options: Some(CacheOptions { shared: true, cache_heuristic: 0.1, immutable_min_time_to_live: 86400s, ignore_cargo_cult: false }), cache_key: \"Fn(&request::Parts) -> String\", cache_mode_fn: \"Fn(&request::Parts) -> CacheMode\", response_cache_mode_fn: \"Fn(&request::Parts, &HttpResponse) -> Option<CacheMode>\", cache_bust: \"Fn(&request::Parts) -> Vec<String>\", cache_status_headers: true, max_ttl: None }");
     opts.cache_options = None;
     opts.cache_key = Some(std::sync::Arc::new(|req: &http::request::Parts| {
         format!("{}:{}:{:?}:test", req.method, req.uri, req.version)
     }));
-    assert_eq!(format!("{opts:?}"), "HttpCacheOptions { cache_options: None, cache_key: \"Fn(&request::Parts) -> String\", cache_mode_fn: \"Fn(&request::Parts) -> CacheMode\", response_cache_mode_fn: \"Fn(&request::Parts, &HttpResponse) -> Option<CacheMode>\", cache_bust: \"Fn(&request::Parts) -> Vec<String>\", cache_status_headers: true }");
+    assert_eq!(format!("{opts:?}"), "HttpCacheOptions { cache_options: None, cache_key: \"Fn(&request::Parts) -> String\", cache_mode_fn: \"Fn(&request::Parts) -> CacheMode\", response_cache_mode_fn: \"Fn(&request::Parts, &HttpResponse) -> Option<CacheMode>\", cache_bust: \"Fn(&request::Parts) -> Vec<String>\", cache_status_headers: true, max_ttl: None }");
     opts.cache_status_headers = false;
-    assert_eq!(format!("{opts:?}"), "HttpCacheOptions { cache_options: None, cache_key: \"Fn(&request::Parts) -> String\", cache_mode_fn: \"Fn(&request::Parts) -> CacheMode\", response_cache_mode_fn: \"Fn(&request::Parts, &HttpResponse) -> Option<CacheMode>\", cache_bust: \"Fn(&request::Parts) -> Vec<String>\", cache_status_headers: false }");
+    assert_eq!(format!("{opts:?}"), "HttpCacheOptions { cache_options: None, cache_key: \"Fn(&request::Parts) -> String\", cache_mode_fn: \"Fn(&request::Parts) -> CacheMode\", response_cache_mode_fn: \"Fn(&request::Parts, &HttpResponse) -> Option<CacheMode>\", cache_bust: \"Fn(&request::Parts) -> Vec<String>\", cache_status_headers: false, max_ttl: None }");
     Ok(())
 }
 

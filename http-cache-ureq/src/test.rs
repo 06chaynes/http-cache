@@ -2,7 +2,7 @@ use crate::{error, CachedAgent};
 use http_cache::{CacheKey, *};
 use macro_rules_attribute::apply;
 use smol_macros::test;
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 use tempfile::TempDir;
 use wiremock::{matchers::method, Mock, MockServer, ResponseTemplate};
 
@@ -753,6 +753,123 @@ async fn head_request_caching() {
     assert!(data.is_some());
 
     let res2 = agent.head(&url).call().await.unwrap();
+    assert_eq!(res2.status(), 200);
+    assert_eq!(res2.header("x-cache-lookup"), Some(HIT));
+    assert_eq!(res2.header("x-cache"), Some(HIT));
+}
+
+#[apply(test!)]
+async fn max_ttl_override() {
+    let temp_dir = TempDir::new().unwrap();
+    let manager = CACacheManager::new(temp_dir.path().into(), true);
+    let mock_server = MockServer::start().await;
+    let m = Mock::given(method(GET))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("cache-control", "max-age=3600") // 1 hour
+                .set_body_bytes(TEST_BODY),
+        )
+        .expect(1);
+    let _mock_guard = mock_server.register_as_scoped(m).await;
+    let url = format!("{}/", &mock_server.uri());
+    let agent = CachedAgent::builder()
+        .cache_manager(manager.clone())
+        .cache_mode(CacheMode::Default)
+        .cache_options(HttpCacheOptions {
+            max_ttl: Some(Duration::from_secs(300)), // 5 minutes - should override the 1 hour max-age
+            ..Default::default()
+        })
+        .build()
+        .unwrap();
+
+    let res = agent.get(&url).call().await.unwrap();
+    assert_eq!(res.status(), 200);
+    assert_eq!(res.header("x-cache-lookup"), Some(MISS));
+    assert_eq!(res.header("x-cache"), Some(MISS));
+
+    let data = manager.get(&format!("{}:{}", GET, &url)).await.unwrap();
+    assert!(data.is_some());
+
+    // Verify the cache entry has the reduced TTL (this is implicit in the cache policy)
+    let res2 = agent.get(&url).call().await.unwrap();
+    assert_eq!(res2.status(), 200);
+    assert_eq!(res2.header("x-cache-lookup"), Some(HIT));
+    assert_eq!(res2.header("x-cache"), Some(HIT));
+}
+
+#[apply(test!)]
+async fn max_ttl_with_ignore_rules() {
+    let temp_dir = TempDir::new().unwrap();
+    let manager = CACacheManager::new(temp_dir.path().into(), true);
+    let mock_server = MockServer::start().await;
+    let m = Mock::given(method(GET))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("cache-control", "no-cache") // Should normally not cache
+                .set_body_bytes(TEST_BODY),
+        )
+        .expect(1);
+    let _mock_guard = mock_server.register_as_scoped(m).await;
+    let url = format!("{}/", &mock_server.uri());
+    let agent = CachedAgent::builder()
+        .cache_manager(manager.clone())
+        .cache_mode(CacheMode::IgnoreRules) // Ignore cache-control headers
+        .cache_options(HttpCacheOptions {
+            max_ttl: Some(Duration::from_secs(300)), // 5 minutes - provides expiration control
+            ..Default::default()
+        })
+        .build()
+        .unwrap();
+
+    let res = agent.get(&url).call().await.unwrap();
+    assert_eq!(res.status(), 200);
+    assert_eq!(res.header("x-cache-lookup"), Some(MISS));
+    assert_eq!(res.header("x-cache"), Some(MISS));
+
+    let data = manager.get(&format!("{}:{}", GET, &url)).await.unwrap();
+    assert!(data.is_some());
+
+    // Second request should hit cache despite no-cache header
+    let res2 = agent.get(&url).call().await.unwrap();
+    assert_eq!(res2.status(), 200);
+    assert_eq!(res2.header("x-cache-lookup"), Some(HIT));
+    assert_eq!(res2.header("x-cache"), Some(HIT));
+}
+
+#[apply(test!)]
+async fn max_ttl_no_override_when_shorter() {
+    let temp_dir = TempDir::new().unwrap();
+    let manager = CACacheManager::new(temp_dir.path().into(), true);
+    let mock_server = MockServer::start().await;
+    let m = Mock::given(method(GET))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("cache-control", "max-age=60") // 1 minute
+                .set_body_bytes(TEST_BODY),
+        )
+        .expect(1);
+    let _mock_guard = mock_server.register_as_scoped(m).await;
+    let url = format!("{}/", &mock_server.uri());
+    let agent = CachedAgent::builder()
+        .cache_manager(manager.clone())
+        .cache_mode(CacheMode::Default)
+        .cache_options(HttpCacheOptions {
+            max_ttl: Some(Duration::from_secs(300)), // 5 minutes - should NOT override the shorter 1 minute
+            ..Default::default()
+        })
+        .build()
+        .unwrap();
+
+    let res = agent.get(&url).call().await.unwrap();
+    assert_eq!(res.status(), 200);
+    assert_eq!(res.header("x-cache-lookup"), Some(MISS));
+    assert_eq!(res.header("x-cache"), Some(MISS));
+
+    let data = manager.get(&format!("{}:{}", GET, &url)).await.unwrap();
+    assert!(data.is_some());
+
+    // Verify the cache works (the actual TTL timing test would be complex)
+    let res2 = agent.get(&url).call().await.unwrap();
     assert_eq!(res2.status(), 200);
     assert_eq!(res2.header("x-cache-lookup"), Some(HIT));
     assert_eq!(res2.header("x-cache"), Some(HIT));

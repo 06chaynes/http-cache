@@ -162,6 +162,34 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
+## Maximum TTL Control
+
+Control cache expiration times, particularly useful with `IgnoreRules` mode:
+
+```rust
+use http_cache_ureq::{CachedAgent, CACacheManager, CacheMode, HttpCacheOptions};
+use std::time::Duration;
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    smol::block_on(async {
+        let agent = CachedAgent::builder()
+            .cache_manager(CACacheManager::new("./cache".into(), true))
+            .cache_mode(CacheMode::IgnoreRules) // Ignore server cache headers
+            .cache_options(HttpCacheOptions {
+                max_ttl: Some(Duration::from_secs(300)), // Limit cache to 5 minutes maximum
+                ..Default::default()
+            })
+            .build()?;
+        
+        // This will be cached for max 5 minutes even if server says cache longer
+        let response = agent.get("https://httpbin.org/cache/3600").call().await?;
+        println!("Response: {}", response.into_string()?);
+        
+        Ok(())
+    })
+}
+```
+
 ## Implementation Notes
 
 - The wrapper preserves ureq's synchronous interface while using async caching internally
@@ -169,3 +197,4 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 - All HTTP methods are supported (GET, POST, PUT, DELETE, HEAD, etc.)
 - Cache invalidation occurs for non-GET/HEAD requests to the same resource
 - Only GET and HEAD requests are cached by default
+- `max_ttl` provides expiration control when using `CacheMode::IgnoreRules`

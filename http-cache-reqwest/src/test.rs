@@ -115,6 +115,7 @@ async fn default_mode_with_options() -> Result<()> {
                 cache_mode_fn: None,
                 cache_bust: None,
                 cache_status_headers: true,
+                max_ttl: None,
                 response_cache_mode_fn: None,
             },
         }))
@@ -184,6 +185,7 @@ async fn reload_mode() -> Result<()> {
                 cache_mode_fn: None,
                 cache_bust: None,
                 cache_status_headers: true,
+                max_ttl: None,
                 response_cache_mode_fn: None,
             },
         }))
@@ -225,6 +227,7 @@ async fn custom_cache_key() -> Result<()> {
                 cache_mode_fn: None,
                 cache_bust: None,
                 cache_status_headers: true,
+                max_ttl: None,
                 response_cache_mode_fn: None,
             },
         }))
@@ -269,6 +272,7 @@ async fn custom_cache_mode_fn() -> Result<()> {
                 })),
                 cache_bust: None,
                 cache_status_headers: true,
+                max_ttl: None,
                 response_cache_mode_fn: None,
             },
         }))
@@ -315,6 +319,7 @@ async fn override_cache_mode() -> Result<()> {
                 cache_mode_fn: None,
                 cache_bust: None,
                 cache_status_headers: true,
+                max_ttl: None,
                 response_cache_mode_fn: None,
             },
         }))
@@ -361,6 +366,7 @@ async fn no_status_headers() -> Result<()> {
                 cache_mode_fn: None,
                 cache_bust: None,
                 cache_status_headers: false,
+                max_ttl: None,
                 response_cache_mode_fn: None,
             },
         }))
@@ -415,6 +421,7 @@ async fn cache_bust() -> Result<()> {
                     },
                 )),
                 cache_status_headers: true,
+                max_ttl: None,
                 response_cache_mode_fn: None,
             },
         }))
@@ -1410,6 +1417,7 @@ mod streaming_tests {
                     cache_mode_fn: None,
                     cache_bust: None,
                     cache_status_headers: true,
+                    max_ttl: None,
                     response_cache_mode_fn: Some(Arc::new(
                         |_request_parts, response| {
                             match response.status {
@@ -1526,6 +1534,7 @@ mod streaming_tests {
                 })),
                 cache_bust: None,
                 cache_status_headers: false,
+                max_ttl: None,
                 response_cache_mode_fn: None,
             },
         };

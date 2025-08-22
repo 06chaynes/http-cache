@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.0.0-alpha.2] - 2025-08-22
+
+### Added
+
+- `max_ttl` field to `HttpCacheOptions` for controlling maximum cache duration
+- Support for `Duration` type in `max_ttl` field for better ergonomics and type safety
+- Cache duration limiting functionality that overrides longer server-specified durations while respecting shorter ones
+- Enhanced cache expiration control for `CacheMode::IgnoreRules` mode
+
+### Changed
+
+- `max_ttl` implementation automatically enforces cache duration limits by modifying response cache-control headers
+- Documentation updated with comprehensive examples for `max_ttl` usage across all cache modes
+
 ## [1.0.0-alpha.1] - 2025-07-27
 
 ### Added

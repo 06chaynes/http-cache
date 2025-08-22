@@ -170,6 +170,34 @@
 //!     })
 //! }
 //! ```
+//!
+//! ## Maximum TTL Control
+//!
+//! Set a maximum time-to-live for cached responses, particularly useful with `CacheMode::IgnoreRules`:
+//!
+//! ```no_run
+//! use http_cache_ureq::{CachedAgent, CACacheManager, CacheMode, HttpCacheOptions};
+//! use std::time::Duration;
+//!
+//! fn main() -> Result<(), Box<dyn std::error::Error>> {
+//!     smol::block_on(async {
+//!         let agent = CachedAgent::builder()
+//!             .cache_manager(CACacheManager::new("./cache".into(), true))
+//!             .cache_mode(CacheMode::IgnoreRules) // Ignore server cache-control headers
+//!             .cache_options(HttpCacheOptions {
+//!                 max_ttl: Some(Duration::from_secs(300)), // Limit cache to 5 minutes regardless of server headers
+//!                 ..Default::default()
+//!             })
+//!             .build()?;
+//!         
+//!         // This will be cached for max 5 minutes even if server says cache longer
+//!         let response = agent.get("https://httpbin.org/cache/3600").call().await?;
+//!         println!("Response: {}", response.into_string()?);
+//!         
+//!         Ok(())
+//!     })
+//! }
+//! ```
 
 mod error;
 
