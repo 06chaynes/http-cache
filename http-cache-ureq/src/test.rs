@@ -689,3 +689,71 @@ async fn delete_after_non_get_head_method_request() {
     let data = manager.get(&format!("{}:{}", GET, &url)).await.unwrap();
     assert!(data.is_none());
 }
+
+#[cfg(feature = "json")]
+#[apply(test!)]
+async fn json_request_and_response() {
+    let temp_dir = TempDir::new().unwrap();
+    let manager = CACacheManager::new(temp_dir.path().into(), true);
+    let mock_server = MockServer::start().await;
+    let json_response =
+        serde_json::json!({"message": "success", "data": [1, 2, 3]});
+    let m = Mock::given(method("POST"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "application/json")
+                .insert_header("cache-control", CACHEABLE_PUBLIC)
+                .set_body_json(&json_response),
+        )
+        .expect(1);
+    let _mock_guard = mock_server.register_as_scoped(m).await;
+    let url = format!("{}/", &mock_server.uri());
+    let agent = CachedAgent::builder()
+        .cache_manager(manager.clone())
+        .cache_mode(CacheMode::Default)
+        .build()
+        .unwrap();
+
+    let request_json = serde_json::json!({"test": "data"});
+    let res = agent.post(&url).send_json(request_json).await.unwrap();
+    assert_eq!(res.status(), 200);
+
+    let response_json: serde_json::Value = res.into_json().unwrap();
+    assert_eq!(response_json["message"], "success");
+    assert_eq!(response_json["data"], serde_json::json!([1, 2, 3]));
+}
+
+#[apply(test!)]
+async fn head_request_caching() {
+    let temp_dir = TempDir::new().unwrap();
+    let manager = CACacheManager::new(temp_dir.path().into(), true);
+    let mock_server = MockServer::start().await;
+    let m = Mock::given(method("HEAD"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("cache-control", CACHEABLE_PUBLIC)
+                .insert_header("content-length", "100"),
+        )
+        .expect(1);
+    let _mock_guard = mock_server.register_as_scoped(m).await;
+    let url = format!("{}/", &mock_server.uri());
+    let agent = CachedAgent::builder()
+        .cache_manager(manager.clone())
+        .cache_mode(CacheMode::Default)
+        .build()
+        .unwrap();
+
+    let res = agent.head(&url).call().await.unwrap();
+    assert_eq!(res.status(), 200);
+    assert_eq!(res.header("x-cache-lookup"), Some(MISS));
+    assert_eq!(res.header("x-cache"), Some(MISS));
+    assert_eq!(res.as_bytes().len(), 0); // HEAD responses have no body
+
+    let data = manager.get(&format!("HEAD:{}", &url)).await.unwrap();
+    assert!(data.is_some());
+
+    let res2 = agent.head(&url).call().await.unwrap();
+    assert_eq!(res2.status(), 200);
+    assert_eq!(res2.header("x-cache-lookup"), Some(HIT));
+    assert_eq!(res2.header("x-cache"), Some(HIT));
+}
