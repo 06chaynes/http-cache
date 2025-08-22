@@ -4,7 +4,10 @@ use macro_rules_attribute::apply;
 use smol_macros::test;
 use std::{sync::Arc, time::Duration};
 use tempfile::TempDir;
-use wiremock::{matchers::method, Mock, MockServer, ResponseTemplate};
+use wiremock::{
+    matchers::{method, path},
+    Mock, MockServer, ResponseTemplate,
+};
 
 const GET: &str = "GET";
 const TEST_BODY: &[u8] = b"test";
@@ -873,4 +876,212 @@ async fn max_ttl_no_override_when_shorter() {
     assert_eq!(res2.status(), 200);
     assert_eq!(res2.header("x-cache-lookup"), Some(HIT));
     assert_eq!(res2.header("x-cache"), Some(HIT));
+}
+
+#[apply(test!)]
+async fn content_type_based_caching() {
+    let temp_dir = TempDir::new().unwrap();
+    let manager = CACacheManager::new(temp_dir.path().into(), true);
+    let mock_server = MockServer::start().await;
+
+    // Mock JSON API endpoint - should be force cached
+    let json_mock = Mock::given(method(GET))
+        .and(path("/api/data.json"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "application/json")
+                .insert_header("cache-control", "public, max-age=300") // Should be cached normally
+                .set_body_bytes(r#"{"message": "test"}"#),
+        )
+        .expect(1); // Should only be called once due to caching
+
+    // Mock CSS file - should be force cached
+    let css_mock = Mock::given(method(GET))
+        .and(path("/styles.css"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "text/css")
+                .insert_header("cache-control", "public, max-age=300")
+                .set_body_bytes("body { color: blue; }"),
+        )
+        .expect(1); // Should only be called once due to caching
+
+    // Mock HTML page - should NOT be cached
+    let html_mock = Mock::given(method(GET))
+        .and(path("/page.html"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "text/html")
+                .insert_header("cache-control", "public, max-age=300")
+                .set_body_bytes("<html><body>Hello World</body></html>"),
+        )
+        .expect(2); // Should be called twice (no caching)
+
+    // Mock image - should be cached with default rules
+    let image_mock = Mock::given(method(GET))
+        .and(path("/image.png"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "image/png")
+                .insert_header("cache-control", "public, max-age=3600")
+                .set_body_bytes("fake-png-data"),
+        )
+        .expect(1); // Should only be called once due to caching
+
+    // Mock unknown content type - should NOT be cached
+    let unknown_mock = Mock::given(method(GET))
+        .and(path("/unknown"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "application/octet-stream")
+                .insert_header("cache-control", "public, max-age=300")
+                .set_body_bytes("binary data"),
+        )
+        .expect(2); // Should be called twice (no caching)
+
+    let _json_guard = mock_server.register_as_scoped(json_mock).await;
+    let _css_guard = mock_server.register_as_scoped(css_mock).await;
+    let _html_guard = mock_server.register_as_scoped(html_mock).await;
+    let _image_guard = mock_server.register_as_scoped(image_mock).await;
+    let _unknown_guard = mock_server.register_as_scoped(unknown_mock).await;
+
+    // Create agent with content-type based caching
+    let agent = CachedAgent::builder()
+        .cache_manager(manager.clone())
+        .cache_mode(CacheMode::Default)
+        .cache_options(HttpCacheOptions {
+            response_cache_mode_fn: Some(Arc::new(
+                |_request_parts, response| {
+                    // Check the Content-Type header to decide caching behavior
+                    if let Some(content_type) =
+                        response.headers.get("content-type")
+                    {
+                        match content_type.as_str() {
+                            // Cache JSON APIs with default rules
+                            ct if ct.starts_with("application/json") => {
+                                Some(CacheMode::Default)
+                            }
+                            // Cache static assets aggressively
+                            ct if ct.starts_with("text/css") => {
+                                Some(CacheMode::ForceCache)
+                            }
+                            ct if ct.starts_with("application/javascript") => {
+                                Some(CacheMode::ForceCache)
+                            }
+                            // Cache images with default HTTP caching rules
+                            ct if ct.starts_with("image/") => {
+                                Some(CacheMode::Default)
+                            }
+                            // Don't cache HTML pages (often dynamic)
+                            ct if ct.starts_with("text/html") => {
+                                Some(CacheMode::NoStore)
+                            }
+                            // Don't cache unknown content types
+                            _ => Some(CacheMode::NoStore),
+                        }
+                    } else {
+                        // No Content-Type header - don't cache for safety
+                        Some(CacheMode::NoStore)
+                    }
+                },
+            )),
+            cache_status_headers: true,
+            ..Default::default()
+        })
+        .build()
+        .unwrap();
+
+    // Test JSON API - should be cached despite no-cache header (ForceCache)
+    let json_url = format!("{}/api/data.json", mock_server.uri());
+    let res1 = agent.get(&json_url).call().await.unwrap();
+    assert_eq!(res1.status(), 200);
+    assert_eq!(res1.header("x-cache-lookup"), Some(MISS));
+    assert_eq!(res1.header("x-cache"), Some(MISS));
+    assert_eq!(res1.header("content-type"), Some("application/json"));
+
+    // Second request should hit cache
+    let res2 = agent.get(&json_url).call().await.unwrap();
+    assert_eq!(res2.status(), 200);
+    assert_eq!(res2.header("x-cache-lookup"), Some(HIT));
+    assert_eq!(res2.header("x-cache"), Some(HIT));
+
+    // Test CSS file - should be cached (ForceCache)
+    let css_url = format!("{}/styles.css", mock_server.uri());
+    let res3 = agent.get(&css_url).call().await.unwrap();
+    assert_eq!(res3.status(), 200);
+    assert_eq!(res3.header("x-cache-lookup"), Some(MISS));
+    assert_eq!(res3.header("x-cache"), Some(MISS));
+
+    // Second CSS request should hit cache
+    let res4 = agent.get(&css_url).call().await.unwrap();
+    assert_eq!(res4.status(), 200);
+    assert_eq!(res4.header("x-cache-lookup"), Some(HIT));
+    assert_eq!(res4.header("x-cache"), Some(HIT));
+
+    // Test HTML page - should NOT be cached (NoStore)
+    let html_url = format!("{}/page.html", mock_server.uri());
+    let res5 = agent.get(&html_url).call().await.unwrap();
+    assert_eq!(res5.status(), 200);
+    assert_eq!(res5.header("x-cache-lookup"), Some(MISS));
+    assert_eq!(res5.header("x-cache"), Some(MISS));
+
+    // Second HTML request should also miss (not cached)
+    let res6 = agent.get(&html_url).call().await.unwrap();
+    assert_eq!(res6.status(), 200);
+    assert_eq!(res6.header("x-cache-lookup"), Some(MISS));
+    assert_eq!(res6.header("x-cache"), Some(MISS));
+
+    // Test image - should be cached with default rules
+    let image_url = format!("{}/image.png", mock_server.uri());
+    let res7 = agent.get(&image_url).call().await.unwrap();
+    assert_eq!(res7.status(), 200);
+    assert_eq!(res7.header("x-cache-lookup"), Some(MISS));
+    assert_eq!(res7.header("x-cache"), Some(MISS));
+
+    // Second image request should hit cache
+    let res8 = agent.get(&image_url).call().await.unwrap();
+    assert_eq!(res8.status(), 200);
+    assert_eq!(res8.header("x-cache-lookup"), Some(HIT));
+    assert_eq!(res8.header("x-cache"), Some(HIT));
+
+    // Test unknown content type - should NOT be cached (NoStore)
+    let unknown_url = format!("{}/unknown", mock_server.uri());
+    let res9 = agent.get(&unknown_url).call().await.unwrap();
+    assert_eq!(res9.status(), 200);
+    assert_eq!(res9.header("x-cache-lookup"), Some(MISS));
+    assert_eq!(res9.header("x-cache"), Some(MISS));
+
+    // Second unknown request should also miss (not cached)
+    let res10 = agent.get(&unknown_url).call().await.unwrap();
+    assert_eq!(res10.status(), 200);
+    assert_eq!(res10.header("x-cache-lookup"), Some(MISS));
+    assert_eq!(res10.header("x-cache"), Some(MISS));
+
+    // Verify cache entries exist for the expected content types
+    let json_key = format!("{}:{}", GET, json_url);
+    let css_key = format!("{}:{}", GET, css_url);
+    let html_key = format!("{}:{}", GET, html_url);
+    let image_key = format!("{}:{}", GET, image_url);
+    let unknown_key = format!("{}:{}", GET, unknown_url);
+
+    assert!(
+        manager.get(&json_key).await.unwrap().is_some(),
+        "JSON should be cached"
+    );
+    assert!(
+        manager.get(&css_key).await.unwrap().is_some(),
+        "CSS should be cached"
+    );
+    assert!(
+        manager.get(&html_key).await.unwrap().is_none(),
+        "HTML should NOT be cached"
+    );
+    assert!(
+        manager.get(&image_key).await.unwrap().is_some(),
+        "Image should be cached"
+    );
+    assert!(
+        manager.get(&unknown_key).await.unwrap().is_none(),
+        "Unknown type should NOT be cached"
+    );
 }

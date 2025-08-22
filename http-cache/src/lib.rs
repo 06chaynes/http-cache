@@ -157,6 +157,49 @@
 //! };
 //! ```
 //!
+//! ## Content-Type Based Caching
+//!
+//! You can implement selective caching based on response content types using `response_cache_mode_fn`.
+//! This is useful when you only want to cache certain types of content:
+//!
+//! ```rust
+//! use http_cache::{HttpCacheOptions, CACacheManager, HttpCache, CacheMode};
+//! use std::sync::Arc;
+//!
+//! let manager = CACacheManager::new("./cache".into(), true);
+//!
+//! let options = HttpCacheOptions {
+//!     response_cache_mode_fn: Some(Arc::new(|_request_parts, response| {
+//!         // Check the Content-Type header to decide caching behavior
+//!         if let Some(content_type) = response.headers.get("content-type") {
+//!             match content_type.to_str().unwrap_or("") {
+//!                 // Cache JSON APIs aggressively
+//!                 ct if ct.starts_with("application/json") => Some(CacheMode::ForceCache),
+//!                 // Cache images with default rules
+//!                 ct if ct.starts_with("image/") => Some(CacheMode::Default),
+//!                 // Cache static assets
+//!                 ct if ct.starts_with("text/css") => Some(CacheMode::ForceCache),
+//!                 ct if ct.starts_with("application/javascript") => Some(CacheMode::ForceCache),
+//!                 // Don't cache HTML pages (dynamic content)
+//!                 ct if ct.starts_with("text/html") => Some(CacheMode::NoStore),
+//!                 // Don't cache unknown content types
+//!                 _ => Some(CacheMode::NoStore),
+//!             }
+//!         } else {
+//!             // No Content-Type header - don't cache
+//!             Some(CacheMode::NoStore)
+//!         }
+//!     })),
+//!     ..Default::default()
+//! };
+//!
+//! let cache = HttpCache {
+//!     mode: CacheMode::Default, // This gets overridden by response_cache_mode_fn
+//!     manager,
+//!     options,
+//! };
+//! ```
+//!
 //! ## Streaming Support
 //!
 //! For handling large responses without full buffering, use the `StreamingManager`:
@@ -943,6 +986,31 @@ pub type CacheBust = Arc<
 ///             Some(CacheMode::NoStore) // Don't cache rate limit responses
 ///         } else {
 ///             None // Use default behavior
+///         }
+///     })),
+///     ..Default::default()
+/// };
+/// ```
+///
+/// ## Content-Type Based Cache Mode Override
+/// ```rust
+/// use http_cache::{HttpCacheOptions, ResponseCacheModeFn, CacheMode};
+/// use http::request::Parts;
+/// use http_cache::HttpResponse;
+/// use std::sync::Arc;
+///
+/// let options = HttpCacheOptions {
+///     response_cache_mode_fn: Some(Arc::new(|_parts: &Parts, response: &HttpResponse| {
+///         // Cache different content types with different strategies
+///         if let Some(content_type) = response.headers.get("content-type") {
+///             match content_type.to_str().unwrap_or("") {
+///                 ct if ct.starts_with("application/json") => Some(CacheMode::ForceCache),
+///                 ct if ct.starts_with("image/") => Some(CacheMode::Default),
+///                 ct if ct.starts_with("text/html") => Some(CacheMode::NoStore),
+///                 _ => None, // Use default behavior for other types
+///             }
+///         } else {
+///             Some(CacheMode::NoStore) // No content-type = don't cache
 ///         }
 ///     })),
 ///     ..Default::default()
