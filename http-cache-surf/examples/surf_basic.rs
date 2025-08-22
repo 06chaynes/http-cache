@@ -35,12 +35,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     let url = format!("{}/", mock_server.uri());
 
+    println!("Testing HTTP caching with surf...");
+
     // First request
     let start = Instant::now();
     let response = client.get(&url).await?;
 
     println!("First request: {:?}", start.elapsed());
     println!("Status: {}", response.status());
+
+    // Check cache headers after first request
+    if let Some(x_cache) = response.header("x-cache") {
+        println!("Cache header x-cache: {}", x_cache.as_str());
+    }
+    if let Some(x_cache_lookup) = response.header("x-cache-lookup") {
+        println!("Cache header x-cache-lookup: {}", x_cache_lookup.as_str());
+    }
+
+    println!();
 
     // Second request
     let start = Instant::now();
@@ -49,15 +61,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     println!("Second request: {:?}", start.elapsed());
     println!("Status: {}", response.status());
 
-    // Check cache headers
-    if let Some(cache_control) = response.header("cache-control") {
-        println!("Cache header cache-control: {}", cache_control);
-    }
+    // Check cache headers after second request
     if let Some(x_cache) = response.header("x-cache") {
-        println!("Cache header x-cache: {}", x_cache);
+        println!("Cache header x-cache: {}", x_cache.as_str());
     }
     if let Some(x_cache_lookup) = response.header("x-cache-lookup") {
-        println!("Cache header x-cache-lookup: {}", x_cache_lookup);
+        println!("Cache header x-cache-lookup: {}", x_cache_lookup.as_str());
     }
 
     Ok(())

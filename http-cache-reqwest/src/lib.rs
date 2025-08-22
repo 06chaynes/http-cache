@@ -516,6 +516,26 @@ fn convert_reqwest_response_to_http_parts(
 }
 
 #[cfg(feature = "streaming")]
+// Helper function to add cache status headers to a streaming response
+fn add_cache_status_headers_to_response<T>(
+    mut response: http::Response<T>,
+    hit_or_miss: &str,
+    cache_lookup: &str,
+) -> http::Response<T> {
+    use http::HeaderValue;
+    use http_cache::{XCACHE, XCACHELOOKUP};
+
+    let headers = response.headers_mut();
+    if let Ok(value1) = HeaderValue::from_str(hit_or_miss) {
+        headers.insert(XCACHE, value1);
+    }
+    if let Ok(value2) = HeaderValue::from_str(cache_lookup) {
+        headers.insert(XCACHELOOKUP, value2);
+    }
+    response
+}
+
+#[cfg(feature = "streaming")]
 // Converts a streaming response to reqwest Response using the StreamingCacheManager's method
 async fn convert_streaming_body_to_reqwest<T>(
     response: http::Response<T::Body>,
@@ -663,6 +683,17 @@ where
                 BeforeRequest::Fresh(_fresh_parts) => {
                     // Convert cached streaming response back to reqwest Response
                     // Now using streaming instead of buffering!
+                    let mut cached_response = cached_response;
+
+                    // Add cache status headers if enabled
+                    if self.cache.options.cache_status_headers {
+                        cached_response = add_cache_status_headers_to_response(
+                            cached_response,
+                            "HIT",
+                            "HIT",
+                        );
+                    }
+
                     return convert_streaming_body_to_reqwest::<T>(
                         cached_response,
                     )
@@ -704,8 +735,20 @@ where
                                 ))
                             })?;
 
+                        let mut final_response = updated_response;
+
+                        // Add cache status headers if enabled
+                        if self.cache.options.cache_status_headers {
+                            final_response =
+                                add_cache_status_headers_to_response(
+                                    final_response,
+                                    "HIT",
+                                    "HIT",
+                                );
+                        }
+
                         return convert_streaming_body_to_reqwest::<T>(
-                            updated_response,
+                            final_response,
                         )
                         .await
                         .map_err(|e| {
@@ -735,8 +778,20 @@ where
                                 ))
                             })?;
 
+                        let mut final_response = cached_response;
+
+                        // Add cache status headers if enabled
+                        if self.cache.options.cache_status_headers {
+                            final_response =
+                                add_cache_status_headers_to_response(
+                                    final_response,
+                                    "MISS",
+                                    "MISS",
+                                );
+                        }
+
                         return convert_streaming_body_to_reqwest::<T>(
-                            cached_response,
+                            final_response,
                         )
                         .await
                         .map_err(|e| {
@@ -767,7 +822,18 @@ where
                 to_middleware_error(ReqwestError::Cache(e.to_string()))
             })?;
 
-        convert_streaming_body_to_reqwest::<T>(cached_response).await.map_err(
+        let mut final_response = cached_response;
+
+        // Add cache status headers if enabled
+        if self.cache.options.cache_status_headers {
+            final_response = add_cache_status_headers_to_response(
+                final_response,
+                "MISS",
+                "MISS",
+            );
+        }
+
+        convert_streaming_body_to_reqwest::<T>(final_response).await.map_err(
             |e| to_middleware_error(ReqwestError::Cache(e.to_string())),
         )
     }

@@ -149,7 +149,7 @@
 //! ```
 
 use bytes::Bytes;
-use http::{Request, Response};
+use http::{HeaderValue, Request, Response};
 use http_body::Body;
 use http_body_util::BodyExt;
 #[cfg(feature = "manager-cacache")]
@@ -209,6 +209,42 @@ where
 {
     let collected = BodyExt::collect(body).await?;
     Ok(collected.to_bytes().to_vec())
+}
+
+/// Helper function to add cache status headers to a response
+fn add_cache_status_headers<B>(
+    mut response: Response<HttpCacheBody<B>>,
+    hit_or_miss: &str,
+    cache_lookup: &str,
+) -> Response<HttpCacheBody<B>> {
+    let headers = response.headers_mut();
+    headers.insert(
+        http_cache::XCACHE,
+        HeaderValue::from_str(hit_or_miss).unwrap(),
+    );
+    headers.insert(
+        http_cache::XCACHELOOKUP,
+        HeaderValue::from_str(cache_lookup).unwrap(),
+    );
+    response
+}
+
+#[cfg(feature = "streaming")]
+fn add_cache_status_headers_streaming<B>(
+    mut response: Response<B>,
+    hit_or_miss: &str,
+    cache_lookup: &str,
+) -> Response<B> {
+    let headers = response.headers_mut();
+    headers.insert(
+        http_cache::XCACHE,
+        HeaderValue::from_str(hit_or_miss).unwrap(),
+    );
+    headers.insert(
+        http_cache::XCACHELOOKUP,
+        HeaderValue::from_str(cache_lookup).unwrap(),
+    );
+    response
 }
 
 /// HTTP cache layer for Tower services.
@@ -661,10 +697,18 @@ where
                 match before_req {
                     BeforeRequest::Fresh(_) => {
                         // Return cached response
-                        let response = http_cache::HttpCacheOptions::http_response_to_response(
+                        let mut response = http_cache::HttpCacheOptions::http_response_to_response(
                             &cached_response,
                             HttpCacheBody::Buffered(cached_response.body.clone()),
                         ).map_err(TowerError::HttpError)?;
+
+                        // Add cache status headers if enabled
+                        if cache.options.cache_status_headers {
+                            response = add_cache_status_headers(
+                                response, "HIT", "HIT",
+                            );
+                        }
+
                         return Ok(response);
                     }
                     BeforeRequest::Stale {
@@ -690,10 +734,18 @@ where
                                 .await
                                 .cache_err()?;
 
-                            let response = http_cache::HttpCacheOptions::http_response_to_response(
+                            let mut response = http_cache::HttpCacheOptions::http_response_to_response(
                                 &updated_response,
                                 HttpCacheBody::Buffered(updated_response.body.clone()),
                             ).map_err(TowerError::HttpError)?;
+
+                            // Add cache status headers if enabled
+                            if cache.options.cache_status_headers {
+                                response = add_cache_status_headers(
+                                    response, "HIT", "HIT",
+                                );
+                            }
+
                             return Ok(response);
                         } else {
                             // Process fresh response
@@ -713,9 +765,17 @@ where
                                 .await
                                 .cache_err()?;
 
-                            return Ok(
-                                cached_response.map(HttpCacheBody::Buffered)
-                            );
+                            let mut response =
+                                cached_response.map(HttpCacheBody::Buffered);
+
+                            // Add cache status headers if enabled
+                            if cache.options.cache_status_headers {
+                                response = add_cache_status_headers(
+                                    response, "MISS", "MISS",
+                                );
+                            }
+
+                            return Ok(response);
                         }
                     }
                 }
@@ -737,7 +797,14 @@ where
                 .await
                 .cache_err()?;
 
-            Ok(cached_response.map(HttpCacheBody::Buffered))
+            let mut response = cached_response.map(HttpCacheBody::Buffered);
+
+            // Add cache status headers if enabled
+            if cache.options.cache_status_headers {
+                response = add_cache_status_headers(response, "MISS", "MISS");
+            }
+
+            Ok(response)
         })
     }
 }
@@ -835,7 +902,19 @@ where
             if !analysis.should_cache {
                 let req = Request::from_parts(parts, body);
                 let response = inner_service.oneshot(req).await.http_err()?;
-                return cache.manager.convert_body(response).await.cache_err();
+                let mut converted_response =
+                    cache.manager.convert_body(response).await.cache_err()?;
+
+                // Add cache status headers if enabled
+                if cache.options.cache_status_headers {
+                    converted_response = add_cache_status_headers_streaming(
+                        converted_response,
+                        "MISS",
+                        "MISS",
+                    );
+                }
+
+                return Ok(converted_response);
             }
 
             // Special case for Reload mode: skip cache lookup but still cache response
@@ -848,7 +927,18 @@ where
                     .await
                     .cache_err()?;
 
-                return Ok(cached_response);
+                let mut final_response = cached_response;
+
+                // Add cache status headers if enabled
+                if cache.options.cache_status_headers {
+                    final_response = add_cache_status_headers_streaming(
+                        final_response,
+                        "MISS",
+                        "MISS",
+                    );
+                }
+
+                return Ok(final_response);
             }
 
             // Look up cached response using interface
@@ -861,7 +951,16 @@ where
                     policy.before_request(&parts, std::time::SystemTime::now());
                 match before_req {
                     BeforeRequest::Fresh(_) => {
-                        return Ok(cached_response);
+                        let mut response = cached_response;
+
+                        // Add cache status headers if enabled
+                        if cache.options.cache_status_headers {
+                            response = add_cache_status_headers_streaming(
+                                response, "HIT", "HIT",
+                            );
+                        }
+
+                        return Ok(response);
                     }
                     BeforeRequest::Stale {
                         request: conditional_parts, ..
@@ -883,7 +982,17 @@ where
                                 )
                                 .await
                                 .cache_err()?;
-                            return Ok(updated_response);
+
+                            let mut response = updated_response;
+
+                            // Add cache status headers if enabled
+                            if cache.options.cache_status_headers {
+                                response = add_cache_status_headers_streaming(
+                                    response, "HIT", "HIT",
+                                );
+                            }
+
+                            return Ok(response);
                         } else {
                             let cached_response = cache
                                 .process_response(
@@ -892,7 +1001,17 @@ where
                                 )
                                 .await
                                 .cache_err()?;
-                            return Ok(cached_response);
+
+                            let mut response = cached_response;
+
+                            // Add cache status headers if enabled
+                            if cache.options.cache_status_headers {
+                                response = add_cache_status_headers_streaming(
+                                    response, "MISS", "MISS",
+                                );
+                            }
+
+                            return Ok(response);
                         }
                     }
                 }
@@ -906,7 +1025,18 @@ where
             let cached_response =
                 cache.process_response(analysis, response).await.cache_err()?;
 
-            Ok(cached_response)
+            let mut final_response = cached_response;
+
+            // Add cache status headers if enabled
+            if cache.options.cache_status_headers {
+                final_response = add_cache_status_headers_streaming(
+                    final_response,
+                    "MISS",
+                    "MISS",
+                );
+            }
+
+            Ok(final_response)
         })
     }
 }

@@ -5,7 +5,7 @@
 #![cfg(feature = "streaming")]
 
 use futures_util::StreamExt;
-use http_cache::{CacheMode, StreamingManager};
+use http_cache::{CacheMode, HttpCacheOptions, StreamingManager};
 use http_cache_reqwest::StreamingCache;
 use reqwest::Client;
 use reqwest_middleware::ClientBuilder;
@@ -32,7 +32,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         StreamingManager::new(cache_dir.path().to_path_buf());
 
     let client = ClientBuilder::new(Client::new())
-        .with(StreamingCache::new(streaming_manager, CacheMode::Default))
+        .with(StreamingCache::with_options(
+            streaming_manager,
+            CacheMode::Default,
+            HttpCacheOptions {
+                cache_status_headers: true,
+                ..Default::default()
+            },
+        ))
         .build();
 
     let url = format!("{}/", mock_server.uri());
@@ -45,7 +52,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let duration1 = start.elapsed();
 
     println!("First request: {:?}", duration1);
-    println!("Status: {}", response.status());
+    println!("Status: {}", response.status().as_u16());
+
+    // Capture cache headers from first response before consuming the body
+    let mut first_cache_headers = Vec::new();
+    for (name, value) in response.headers() {
+        let name_str = name.as_str();
+        if name_str.starts_with("x-cache") {
+            first_cache_headers.push((name.clone(), value.clone()));
+        }
+    }
 
     // Read the streaming response
     let mut stream = response.bytes_stream();
@@ -56,19 +72,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     }
     println!("First response body size: {} bytes", body_size);
 
+    // Print cache headers from first request
+    for (name, value) in first_cache_headers {
+        println!("Cache header {}: {}", name, value.to_str().unwrap_or(""));
+    }
+
+    println!();
+
     // Second request - should be served from cache
     let start = Instant::now();
     let response = client.get(&url).send().await?;
     let duration2 = start.elapsed();
 
     println!("Second request: {:?}", duration2);
-    println!("Status: {}", response.status());
+    println!("Status: {}", response.status().as_u16());
 
-    // Check cache headers before consuming the body
+    // Capture cache headers before consuming the body
+    let mut cache_headers = Vec::new();
     for (name, value) in response.headers() {
         let name_str = name.as_str();
-        if name_str.starts_with("x-cache") || name_str == "cache-control" {
-            println!("Header {}: {:?}", name, value);
+        if name_str.starts_with("x-cache") {
+            cache_headers.push((name.clone(), value.clone()));
         }
     }
 
@@ -80,6 +104,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         cached_body_size += chunk.len();
     }
     println!("Second response body size: {} bytes", cached_body_size);
+
+    // Print cache headers from second request
+    for (name, value) in cache_headers {
+        println!("Cache header {}: {}", name, value.to_str().unwrap_or(""));
+    }
 
     // Verify both responses have the same content
     if cached_body_size != body_size {

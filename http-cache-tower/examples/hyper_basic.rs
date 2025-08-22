@@ -76,7 +76,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let cache = HttpCache {
         mode: CacheMode::Default,
         manager: cache_manager,
-        options: HttpCacheOptions::default(),
+        options: HttpCacheOptions {
+            cache_status_headers: true,
+            ..Default::default()
+        },
     };
 
     // Create the cache layer
@@ -97,7 +100,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let duration1 = start.elapsed();
 
     println!("First request: {:?}", duration1);
-    println!("Status: {}", response.status());
+    println!("Status: {}", response.status().as_u16());
+
+    // Check cache headers after first request
+    for (name, value) in response.headers() {
+        let name_str = name.as_str();
+        if name_str.starts_with("x-cache") {
+            println!("Cache header {}: {}", name, value.to_str().unwrap_or(""));
+        }
+    }
+
+    println!();
 
     // Second request (should be much faster due to caching)
     let start = Instant::now();
@@ -108,13 +121,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let duration2 = start.elapsed();
 
     println!("Second request: {:?}", duration2);
-    println!("Status: {}", response.status());
+    println!("Status: {}", response.status().as_u16());
 
-    // Check cache headers
+    // Check cache headers after second request
     for (name, value) in response.headers() {
         let name_str = name.as_str();
-        if name_str.starts_with("x-cache") || name_str == "cache-control" {
-            println!("Header {}: {:?}", name, value);
+        if name_str.starts_with("x-cache") {
+            println!("Cache header {}: {}", name, value.to_str().unwrap_or(""));
         }
     }
 
