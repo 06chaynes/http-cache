@@ -16,9 +16,7 @@ edition = "2021"
 rust-version = "1.82.0"
 
 [dependencies]
-anyhow = "1.0.95"
 async-trait = "0.1.85"
-bytes = "1.8.0"
 http = "1.2.0"
 http-cache-semantics = "2.1.0"
 serde = { version = "1.0.217", features = ["derive"] }

@@ -20,7 +20,6 @@ async-trait = "0.1.85"
 http = "1.2.0"
 http-cache-semantics = "2.1.0"
 http-types = "2.12.0"
-serde = { version = "1.0.217", features = ["derive"] }
 surf = { version = "2.3.2", default-features = false }
 url = { version = "2.5.4", features = ["serde"] }
 

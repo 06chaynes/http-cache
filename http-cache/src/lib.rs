@@ -172,7 +172,7 @@
 //!     response_cache_mode_fn: Some(Arc::new(|_request_parts, response| {
 //!         // Check the Content-Type header to decide caching behavior
 //!         if let Some(content_type) = response.headers.get("content-type") {
-//!             match content_type.to_str().unwrap_or("") {
+//!             match content_type.as_str() {
 //!                 // Cache JSON APIs aggressively
 //!                 ct if ct.starts_with("application/json") => Some(CacheMode::ForceCache),
 //!                 // Cache images with default rules
@@ -1003,7 +1003,7 @@ pub type CacheBust = Arc<
 ///     response_cache_mode_fn: Some(Arc::new(|_parts: &Parts, response: &HttpResponse| {
 ///         // Cache different content types with different strategies
 ///         if let Some(content_type) = response.headers.get("content-type") {
-///             match content_type.to_str().unwrap_or("") {
+///             match content_type.as_str() {
 ///                 ct if ct.starts_with("application/json") => Some(CacheMode::ForceCache),
 ///                 ct if ct.starts_with("image/") => Some(CacheMode::Default),
 ///                 ct if ct.starts_with("text/html") => Some(CacheMode::NoStore),

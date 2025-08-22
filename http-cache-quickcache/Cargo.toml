@@ -22,10 +22,7 @@ http-cache-semantics = "2.1.0"
 serde = { version = "1.0.217", features = ["derive"] }
 url = { version = "2.5.4", features = ["serde"] }
 quick_cache = "0.6.9"
-bytes = "1.8.0"
 http = "1.2.0"
-http-body = "1.0.1"
-http-body-util = "0.1.2"
 
 [dependencies.http-cache]
 path = "../http-cache"
