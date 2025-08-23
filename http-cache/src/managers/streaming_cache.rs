@@ -17,10 +17,50 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 use url::Url;
-use uuid::Uuid;
 
 const CACHE_VERSION: &str = "cache-v2";
+
+/// Reference counting for content files to prevent premature deletion
+#[derive(Debug, Default)]
+struct ContentRefCounter {
+    refs: Arc<Mutex<HashMap<String, u32>>>,
+}
+
+impl ContentRefCounter {
+    fn new() -> Self {
+        Self { refs: Arc::new(Mutex::new(HashMap::new())) }
+    }
+
+    /// Increment reference count for a content digest
+    fn add_ref(&self, digest: &str) -> Result<()> {
+        let mut refs = self.refs.lock().map_err(|e| {
+            StreamingError::concurrency(format!(
+                "Failed to acquire lock for add_ref: {e}"
+            ))
+        })?;
+        *refs.entry(digest.to_string()).or_insert(0) += 1;
+        Ok(())
+    }
+
+    /// Decrement reference count for a content digest, returns true if safe to delete
+    fn remove_ref(&self, digest: &str) -> Result<bool> {
+        let mut refs = self.refs.lock().map_err(|e| {
+            StreamingError::concurrency(format!(
+                "Failed to acquire lock for remove_ref: {e}"
+            ))
+        })?;
+        if let Some(count) = refs.get_mut(digest) {
+            *count -= 1;
+            if *count == 0 {
+                refs.remove(digest);
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+}
 
 /// Metadata stored for each cached response
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -34,15 +74,34 @@ pub struct CacheMetadata {
 }
 
 /// File-based streaming cache manager
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct StreamingManager {
     root_path: PathBuf,
+    ref_counter: ContentRefCounter,
+}
+
+impl Clone for StreamingManager {
+    fn clone(&self) -> Self {
+        Self {
+            root_path: self.root_path.clone(),
+            ref_counter: ContentRefCounter {
+                refs: Arc::clone(&self.ref_counter.refs),
+            },
+        }
+    }
 }
 
 impl StreamingManager {
     /// Create a new streaming cache manager
     pub fn new(root_path: PathBuf) -> Self {
-        Self { root_path }
+        Self { root_path, ref_counter: ContentRefCounter::new() }
+    }
+
+    /// Create a new streaming cache manager and rebuild reference counts from existing cache
+    pub async fn new_with_existing_cache(root_path: PathBuf) -> Result<Self> {
+        let manager = Self::new(root_path);
+        manager.rebuild_reference_counts().await?;
+        Ok(manager)
     }
 
     /// Get the path for storing metadata
@@ -71,8 +130,69 @@ impl StreamingManager {
         if let Some(parent) = path.parent() {
             runtime::create_dir_all(parent)
                 .await
-                .map_err(StreamingError::new)?;
+                .map_err(StreamingError::io)?;
         }
+        Ok(())
+    }
+
+    /// Build reference counts from existing cache entries
+    /// This should be called on manager initialization to rebuild ref counts
+    async fn rebuild_reference_counts(&self) -> Result<()> {
+        let metadata_dir = self.root_path.join(CACHE_VERSION).join("metadata");
+
+        if !metadata_dir.exists() {
+            return Ok(());
+        }
+
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "streaming-tokio")] {
+                let mut entries = runtime::read_dir(&metadata_dir).await.map_err(StreamingError::io)?;
+
+                while let Some(entry) = entries.next_entry().await.map_err(StreamingError::io)? {
+                    let path = entry.path();
+
+                    if path.extension().and_then(|s| s.to_str()) == Some("json") {
+                        let content = runtime::read(&path).await.map_err(StreamingError::io)?;
+                        match serde_json::from_slice::<CacheMetadata>(&content) {
+                            Ok(metadata) => {
+                                // Add reference to this content digest
+                                if let Err(e) = self.ref_counter.add_ref(&metadata.content_digest) {
+                                    return Err(StreamingError::consistency(format!("Failed to rebuild reference count for {}: {}", metadata.content_digest, e)).into());
+                                }
+                            }
+                            Err(e) => {
+                                return Err(StreamingError::serialization(format!("Failed to parse metadata file {:?}: {}", path, e)).into());
+                            }
+                        }
+                    }
+                }
+            } else if #[cfg(feature = "streaming-smol")] {
+                use futures::stream::StreamExt;
+
+                let mut entries = runtime::read_dir(&metadata_dir).await.map_err(StreamingError::io)?;
+
+                while let Some(entry_result) = entries.next().await {
+                    let entry = entry_result.map_err(StreamingError::io)?;
+                    let path = entry.path();
+
+                    if path.extension().and_then(|s| s.to_str()) == Some("json") {
+                        let content = runtime::read(&path).await.map_err(StreamingError::io)?;
+                        match serde_json::from_slice::<CacheMetadata>(&content) {
+                            Ok(metadata) => {
+                                // Add reference to this content digest
+                                if let Err(e) = self.ref_counter.add_ref(&metadata.content_digest) {
+                                    return Err(StreamingError::consistency(format!("Failed to rebuild reference count for {}: {}", metadata.content_digest, e)).into());
+                                }
+                            }
+                            Err(e) => {
+                                return Err(StreamingError::serialization(format!("Failed to parse metadata file {:?}: {}", path, e)).into());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         Ok(())
     }
 }
@@ -99,9 +219,9 @@ impl crate::StreamingCacheManager for StreamingManager {
 
         // Read and parse metadata
         let metadata_content =
-            runtime::read(&metadata_path).await.map_err(StreamingError::new)?;
+            runtime::read(&metadata_path).await.map_err(StreamingError::io)?;
         let metadata: CacheMetadata = serde_json::from_slice(&metadata_content)
-            .map_err(StreamingError::new)?;
+            .map_err(StreamingError::serialization)?;
 
         // Check if content file exists
         let content_path = self.content_path(&metadata.content_digest);
@@ -112,7 +232,7 @@ impl crate::StreamingCacheManager for StreamingManager {
         // Open content file for streaming
         let file = runtime::File::open(&content_path)
             .await
-            .map_err(StreamingError::new)?;
+            .map_err(StreamingError::io)?;
 
         // Build response with streaming body
         let mut response_builder = Response::builder()
@@ -176,8 +296,11 @@ impl crate::StreamingCacheManager for StreamingManager {
             Self::ensure_dir_exists(&content_path).await?;
             runtime::write(&content_path, &body_bytes)
                 .await
-                .map_err(StreamingError::new)?;
+                .map_err(StreamingError::io)?;
         }
+
+        // Add reference count for this content file
+        self.ref_counter.add_ref(&content_digest)?;
 
         // Create metadata
         let metadata = CacheMetadata {
@@ -204,11 +327,11 @@ impl crate::StreamingCacheManager for StreamingManager {
         // Write metadata
         let metadata_path = self.metadata_path(&cache_key);
         Self::ensure_dir_exists(&metadata_path).await?;
-        let metadata_json =
-            serde_json::to_vec(&metadata).map_err(StreamingError::new)?;
+        let metadata_json = serde_json::to_vec(&metadata)
+            .map_err(StreamingError::serialization)?;
         runtime::write(&metadata_path, &metadata_json)
             .await
-            .map_err(StreamingError::new)?;
+            .map_err(StreamingError::io)?;
 
         // Return response with buffered body for immediate use
         let response =
@@ -230,26 +353,12 @@ impl crate::StreamingCacheManager for StreamingManager {
     {
         let (parts, body) = response.into_parts();
 
-        // Create a temporary file for streaming the non-cacheable response
-        let temp_dir = std::env::temp_dir().join("http-cache-streaming");
-        runtime::create_dir_all(&temp_dir)
-            .await
-            .map_err(StreamingError::new)?;
-        let temp_path = temp_dir.join(format!("stream_{}", Uuid::new_v4()));
-
-        // Collect body and write to temporary file
+        // For non-cacheable responses, simply collect the body and return it as buffered
+        // This is more efficient than creating temporary files
         let collected =
             body.collect().await.map_err(|e| StreamingError::new(e.into()))?;
         let body_bytes = collected.to_bytes();
-        runtime::write(&temp_path, &body_bytes)
-            .await
-            .map_err(StreamingError::new)?;
-
-        // Open file for streaming
-        let file = runtime::File::open(&temp_path)
-            .await
-            .map_err(StreamingError::new)?;
-        let streaming_body = StreamingBody::from_file(file);
+        let streaming_body = StreamingBody::buffered(body_bytes);
 
         Ok(Response::from_parts(parts, streaming_body))
     }
@@ -257,19 +366,31 @@ impl crate::StreamingCacheManager for StreamingManager {
     async fn delete(&self, cache_key: &str) -> Result<()> {
         let metadata_path = self.metadata_path(cache_key);
 
-        // Read metadata to get content digest
-        if let Ok(metadata_content) = runtime::read(&metadata_path).await {
-            if let Ok(metadata) =
-                serde_json::from_slice::<CacheMetadata>(&metadata_content)
-            {
-                let content_path = self.content_path(&metadata.content_digest);
-                // Remove content file (note: this could be shared, so we might want reference counting)
-                runtime::remove_file(&content_path).await.ok();
-            }
+        // Read metadata to get content digest before removing metadata file
+        let metadata_content =
+            runtime::read(&metadata_path).await.map_err(StreamingError::io)?;
+
+        let metadata: CacheMetadata = serde_json::from_slice(&metadata_content)
+            .map_err(StreamingError::serialization)?;
+
+        // Remove metadata file first
+        runtime::remove_file(&metadata_path)
+            .await
+            .map_err(StreamingError::io)?;
+
+        // Decrement reference count and remove content file if no longer referenced
+        let can_delete =
+            self.ref_counter.remove_ref(&metadata.content_digest)?;
+        if can_delete {
+            let content_path = self.content_path(&metadata.content_digest);
+            runtime::remove_file(&content_path).await.map_err(|e| {
+                StreamingError::io(format!(
+                    "Failed to remove content file {:?}: {}",
+                    content_path, e
+                ))
+            })?;
         }
 
-        // Remove metadata file
-        runtime::remove_file(&metadata_path).await.ok();
         Ok(())
     }
 

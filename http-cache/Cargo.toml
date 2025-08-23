@@ -35,11 +35,13 @@ serde = { version = "1.0.217", features = ["derive"] }
 serde_json = { version = "1.0", optional = true }
 sha2 = "0.10.8"
 smol = { version = "2.0.2", optional = true }
-tokio = { version = "1.44.0", features = ["fs", "io-util"], optional = true }
+tokio = { version = "1.44.0", features = ["fs", "io-util", "sync"], optional = true }
 url = { version = "2.5.4", features = ["serde"] }
 uuid = { version = "1.11.0", features = ["v4"], optional = true }
 cfg-if = { version = "1.0", optional = true }
 governor = { version = "0.7.0", optional = true }
+tempfile = { version = "3.13.0", optional = true }
+async-lock = { version = "3.4.0", optional = true }
 
 [dev-dependencies]
 smol = "2.0.2"
@@ -55,9 +57,9 @@ manager-cacache = ["cacache", "bincode"]
 cacache-tokio = ["cacache/tokio-runtime", "tokio", "bincode"]  
 cacache-smol = ["cacache/async-std", "smol"]
 manager-moka = ["moka", "bincode"]
-streaming = ["uuid", "bincode", "cfg-if", "serde_json", "futures-util"]
+streaming = ["uuid", "bincode", "cfg-if", "serde_json", "futures-util", "tempfile"]
 streaming-tokio = ["tokio", "streaming"]
-streaming-smol = ["smol", "streaming"]
+streaming-smol = ["smol", "streaming", "async-lock"]
 with-http-types = ["http-types"]
 rate-limiting = ["governor"]
 

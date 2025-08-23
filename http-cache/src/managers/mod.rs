@@ -4,6 +4,6 @@ pub mod cacache;
 #[cfg(feature = "manager-moka")]
 pub mod moka;
 
-// Streaming cache manager
+// Streaming cache managers
 #[cfg(feature = "streaming")]
 pub mod streaming_cache;

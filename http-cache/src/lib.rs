@@ -373,7 +373,7 @@ fn extract_url_from_request_parts(parts: &request::Parts) -> Result<Url> {
     if let Some(_scheme) = parts.uri.scheme() {
         // URI is absolute, use it directly
         return Url::parse(&parts.uri.to_string())
-            .map_err(|_| BadHeader.into());
+            .map_err(|_| -> BoxError { BadHeader.into() });
     }
 
     // Get the scheme - default to https for security, but check for explicit http
@@ -411,7 +411,7 @@ fn extract_url_from_request_parts(parts: &request::Parts) -> Result<Url> {
         parts.uri.path_and_query().map(|pq| pq.as_str()).unwrap_or("/")
     );
 
-    Url::parse(&url_string).map_err(|_| BadHeader.into())
+    Url::parse(&url_string).map_err(|_| -> BoxError { BadHeader.into() })
 }
 
 /// A basic generic type that represents an HTTP response
@@ -1738,7 +1738,22 @@ where
         &self,
         key: &str,
     ) -> Result<Option<(Response<Self::Body>, CachePolicy)>> {
-        self.manager.get(key).await
+        if let Some((mut response, policy)) = self.manager.get(key).await? {
+            // Add cache status headers if enabled
+            if self.options.cache_status_headers {
+                response.headers_mut().insert(
+                    XCACHE,
+                    "HIT".parse().map_err(StreamingError::new)?,
+                );
+                response.headers_mut().insert(
+                    XCACHELOOKUP,
+                    "HIT".parse().map_err(StreamingError::new)?,
+                );
+            }
+            Ok(Some((response, policy)))
+        } else {
+            Ok(None)
+        }
     }
 
     async fn process_response<B>(
@@ -1756,7 +1771,20 @@ where
     {
         // For non-cacheable requests based on initial analysis, convert them to manager's body type
         if !analysis.should_cache {
-            return self.manager.convert_body(response).await;
+            let mut converted_response =
+                self.manager.convert_body(response).await?;
+            // Add cache miss headers
+            if self.options.cache_status_headers {
+                converted_response.headers_mut().insert(
+                    XCACHE,
+                    "MISS".parse().map_err(StreamingError::new)?,
+                );
+                converted_response.headers_mut().insert(
+                    XCACHELOOKUP,
+                    "MISS".parse().map_err(StreamingError::new)?,
+                );
+            }
+            return Ok(converted_response);
         }
 
         // Bust cache keys if needed
@@ -1782,7 +1810,20 @@ where
 
         // If response-based override says NoStore, don't cache
         if effective_cache_mode == CacheMode::NoStore {
-            return self.manager.convert_body(response).await;
+            let mut converted_response =
+                self.manager.convert_body(response).await?;
+            // Add cache miss headers
+            if self.options.cache_status_headers {
+                converted_response.headers_mut().insert(
+                    XCACHE,
+                    "MISS".parse().map_err(StreamingError::new)?,
+                );
+                converted_response.headers_mut().insert(
+                    XCACHELOOKUP,
+                    "MISS".parse().map_err(StreamingError::new)?,
+                );
+            }
+            return Ok(converted_response);
         }
 
         // Create policy for the response
@@ -1806,12 +1847,39 @@ where
                 extract_url_from_request_parts(&analysis.request_parts)?;
 
             // Cache the response using the streaming manager
-            self.manager
+            let mut cached_response = self
+                .manager
                 .put(analysis.cache_key, response, policy, request_url)
-                .await
+                .await?;
+
+            // Add cache miss headers (response is being stored for first time)
+            if self.options.cache_status_headers {
+                cached_response.headers_mut().insert(
+                    XCACHE,
+                    "MISS".parse().map_err(StreamingError::new)?,
+                );
+                cached_response.headers_mut().insert(
+                    XCACHELOOKUP,
+                    "MISS".parse().map_err(StreamingError::new)?,
+                );
+            }
+            Ok(cached_response)
         } else {
             // Don't cache, just convert to manager's body type
-            self.manager.convert_body(response).await
+            let mut converted_response =
+                self.manager.convert_body(response).await?;
+            // Add cache miss headers
+            if self.options.cache_status_headers {
+                converted_response.headers_mut().insert(
+                    XCACHE,
+                    "MISS".parse().map_err(StreamingError::new)?,
+                );
+                converted_response.headers_mut().insert(
+                    XCACHELOOKUP,
+                    "MISS".parse().map_err(StreamingError::new)?,
+                );
+            }
+            Ok(converted_response)
         }
     }
 
