@@ -38,6 +38,14 @@ cfg_if::cfg_if! {
         pub async fn read_dir<P: AsRef<Path>>(path: P) -> io::Result<tokio::fs::ReadDir> {
             tokio::fs::read_dir(path).await
         }
+
+        pub async fn metadata<P: AsRef<Path>>(path: P) -> io::Result<std::fs::Metadata> {
+            tokio::fs::metadata(path).await
+        }
+
+        pub async fn rename<P: AsRef<Path>, Q: AsRef<Path>>(from: P, to: Q) -> io::Result<()> {
+            tokio::fs::rename(from, to).await
+        }
     } else if #[cfg(all(feature = "streaming-smol", not(feature = "streaming-tokio")))] {
         pub use smol::fs::File;
 
@@ -64,6 +72,14 @@ cfg_if::cfg_if! {
 
         pub async fn read_dir<P: AsRef<Path>>(path: P) -> io::Result<smol::fs::ReadDir> {
             smol::fs::read_dir(path).await
+        }
+
+        pub async fn metadata<P: AsRef<Path>>(path: P) -> io::Result<std::fs::Metadata> {
+            smol::fs::metadata(path).await
+        }
+
+        pub async fn rename<P: AsRef<Path>, Q: AsRef<Path>>(from: P, to: Q) -> io::Result<()> {
+            smol::fs::rename(from, to).await
         }
 
     }

@@ -14,11 +14,32 @@
 - `DirectRateLimiter` for global rate limiting using governor
 - New `rate-limiting` feature flag for optional rate limiting functionality
 - Rate limiting support for streaming cache operations with seamless integration
+- Cache size management and LRU eviction policy for the `StreamingManager`
+- Persistent reference counting using JSON serialization to survive process restarts
+- Async-compatible `RwLock` replacing synchronous `Mutex` for better async performance
+- Content integrity validation with SHA256 digest verification to detect corrupted cache files
+- Background cleanup tasks for orphaned files and cache maintenance
+- Atomic file operations using temporary files and rename for safe concurrent access
+- Configurable streaming buffer size option
 
 ### Changed
 
 - `max_ttl` implementation automatically enforces cache duration limits by modifying response cache-control headers
 - Documentation updated with comprehensive examples for `max_ttl` usage across all cache modes
+- `StreamingCacheConfig` extended with new fields:
+  - `enable_background_cleanup`: Controls background cleanup tasks (default: true)
+  - `cleanup_interval_secs`: Cleanup interval in seconds (default: 3600)
+  - `verify_integrity_on_cleanup`: Enable integrity verification during cleanup (default: false)
+  - `streaming_buffer_size`: Buffer size for streaming operations (default: 8192)
+  - `max_concurrent_operations`: Maximum concurrent operations (default: 10)
+- Enhanced error types and handling for cache corruption and concurrent access scenarios
+- Reduced lock contention and improved scalability under high concurrency
+
+### Fixed
+
+- Race conditions in reference counting during concurrent access
+- Potential memory leaks from orphaned content files
+- Cache corruption through atomic file operations
 
 ## [1.0.0-alpha.1] - 2025-07-27
 
