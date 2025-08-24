@@ -1,4 +1,4 @@
-use crate::{error, Cache};
+use crate::{BadRequest, Cache, HttpCacheError};
 
 use http_cache::*;
 use http_types::{Method, Request};
@@ -105,10 +105,10 @@ async fn test_non_cloneable_request_graceful_fallback() -> Result<()> {
 #[allow(clippy::default_constructed_unit_structs)]
 fn test_errors() -> Result<()> {
     // Testing the Debug trait for the error types
-    let bad_request_err = error::BadRequest::default();
+    let bad_request_err = BadRequest::default();
     assert!(format!("{:?}", bad_request_err).contains("BadRequest"));
 
-    let surf_err = error::SurfError::Cache("test".to_string());
+    let surf_err = HttpCacheError::cache("test".to_string());
     assert!(format!("{:?}", &surf_err).contains("Cache"));
     assert_eq!(surf_err.to_string(), "Cache error: test".to_string());
     Ok(())

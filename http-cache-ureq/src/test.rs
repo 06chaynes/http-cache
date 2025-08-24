@@ -1,4 +1,4 @@
-use crate::{error, CachedAgent};
+use crate::{BadRequest, CachedAgent, HttpCacheError};
 use http_cache::{CacheKey, *};
 use macro_rules_attribute::apply;
 use smol_macros::test;
@@ -34,8 +34,8 @@ fn build_mock(
 
 #[test]
 fn test_errors() {
-    assert!(format!("{:?}", error::BadRequest).contains("BadRequest"));
-    let ureq_err = error::UreqError::Cache("test".to_string());
+    assert!(format!("{:?}", BadRequest).contains("BadRequest"));
+    let ureq_err = HttpCacheError::cache("test".to_string());
     assert!(format!("{:?}", &ureq_err).contains("Cache"));
     assert_eq!(ureq_err.to_string(), "Cache error: test".to_string());
 }

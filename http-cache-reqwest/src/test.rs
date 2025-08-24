@@ -1,4 +1,4 @@
-use crate::{error, Cache};
+use crate::{BadRequest, Cache, HttpCacheError};
 use std::sync::Arc;
 
 use http_cache::*;
@@ -45,7 +45,7 @@ const CACHEABLE_PUBLIC: &str = "max-age=86400, public";
 #[allow(clippy::default_constructed_unit_structs)]
 fn test_errors() -> Result<()> {
     // Testing the Debug, Default, and Clone traits for the error types
-    let br = error::BadRequest::default();
+    let br = BadRequest::default();
     assert_eq!(format!("{:?}", br.clone()), "BadRequest",);
     assert_eq!(
         br.to_string(),
@@ -53,9 +53,8 @@ fn test_errors() -> Result<()> {
             .to_string(),
     );
 
-    // Test ReqwestError
-    let reqwest_err =
-        error::ReqwestError::Cache("test cache error".to_string());
+    // Test HttpCacheError
+    let reqwest_err = HttpCacheError::cache("test cache error".to_string());
     assert!(format!("{:?}", &reqwest_err).contains("Cache"));
     assert_eq!(
         reqwest_err.to_string(),

@@ -280,7 +280,10 @@ use serde::{Deserialize, Serialize};
 use url::Url;
 
 pub use body::StreamingBody;
-pub use error::{BadHeader, BadVersion, BoxError, Result, StreamingError};
+pub use error::{
+    BadHeader, BadRequest, BadVersion, BoxError, ClientStreamingError,
+    HttpCacheError, HttpCacheResult, Result, StreamingError,
+};
 
 #[cfg(feature = "manager-cacache")]
 pub use managers::cacache::CACacheManager;

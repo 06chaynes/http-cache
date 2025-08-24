@@ -12,7 +12,8 @@
 
 ### Changed
 
-- Renamed `HttpCacheError` to `TowerError` for consistent `{CrateName}Error` naming convention
+- Consolidated error handling: removed separate error module and replaced with type alias `pub use http_cache::HttpCacheError;`
+- Simplified error architecture by removing duplicate error implementations
 - Removed `anyhow` dependency, using manual error implementations throughout
 - Fixed author field to include both authors for consistency with other crates
 

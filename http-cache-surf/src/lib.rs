@@ -186,9 +186,8 @@ pub use http_cache::rate_limiting::{
 #[derive(Debug, Clone)]
 pub struct Cache<T: CacheManager>(pub HttpCache<T>);
 
-mod error;
-
-pub use error::{BadRequest, SurfError};
+// Re-export unified error types from http-cache core
+pub use http_cache::{BadRequest, HttpCacheError};
 
 /// Implements ['Middleware'] for surf
 pub(crate) struct SurfMiddleware<'a> {

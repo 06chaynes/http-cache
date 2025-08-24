@@ -199,9 +199,8 @@
 //! }
 //! ```
 
-mod error;
-
-pub use error::{BadRequest, UreqError};
+// Re-export unified error types from http-cache core
+pub use http_cache::{BadRequest, HttpCacheError};
 
 use std::{
     collections::HashMap, result::Result, str::FromStr, time::SystemTime,
@@ -301,7 +300,7 @@ impl<T: CacheManager> CachedAgentBuilder<T> {
     }
 
     /// Build the cached agent
-    pub fn build(self) -> Result<CachedAgent<T>, UreqError> {
+    pub fn build(self) -> Result<CachedAgent<T>, HttpCacheError> {
         let agent = if let Some(user_config) = self.agent_config {
             // Extract user preferences and rebuild with cache-compatible settings
             let mut config_builder =
@@ -351,7 +350,7 @@ impl<T: CacheManager> CachedAgentBuilder<T> {
         };
 
         let cache_manager = self.cache_manager.ok_or_else(|| {
-            UreqError::Cache("Cache manager is required".to_string())
+            HttpCacheError::Cache("Cache manager is required".to_string())
         })?;
 
         Ok(CachedAgent {
@@ -458,7 +457,7 @@ impl<'a, T: CacheManager> CachedRequestBuilder<'a, T> {
     pub async fn send_json(
         self,
         data: serde_json::Value,
-    ) -> Result<CachedResponse, UreqError> {
+    ) -> Result<CachedResponse, HttpCacheError> {
         let agent = self.agent.agent.clone();
         let url = self.url.clone();
         let method = self.method;
@@ -466,13 +465,18 @@ impl<'a, T: CacheManager> CachedRequestBuilder<'a, T> {
         let url_for_response = url.clone();
 
         let response = smol::unblock(move || {
-            execute_json_request(&agent, &method, &url, &headers, data)
-                .map_err(|e| UreqError::Http(e.to_string()))
+            execute_json_request(&agent, &method, &url, &headers, data).map_err(
+                |e| {
+                    HttpCacheError::http(Box::new(std::io::Error::other(
+                        e.to_string(),
+                    )))
+                },
+            )
         })
         .await?;
 
         let cached = smol::unblock(move || {
-            Ok::<_, UreqError>(CachedResponse::from_ureq_response(
+            Ok::<_, HttpCacheError>(CachedResponse::from_ureq_response(
                 response,
                 &url_for_response,
             ))
@@ -486,7 +490,7 @@ impl<'a, T: CacheManager> CachedRequestBuilder<'a, T> {
     pub async fn send_string(
         self,
         data: &str,
-    ) -> Result<CachedResponse, UreqError> {
+    ) -> Result<CachedResponse, HttpCacheError> {
         let data = data.to_string();
         let agent = self.agent.agent.clone();
         let url = self.url.clone();
@@ -496,12 +500,16 @@ impl<'a, T: CacheManager> CachedRequestBuilder<'a, T> {
 
         let response = smol::unblock(move || {
             execute_request(&agent, &method, &url, &headers, Some(&data))
-                .map_err(|e| UreqError::Http(e.to_string()))
+                .map_err(|e| {
+                    HttpCacheError::http(Box::new(std::io::Error::other(
+                        e.to_string(),
+                    )))
+                })
         })
         .await?;
 
         let cached = smol::unblock(move || {
-            Ok::<_, UreqError>(CachedResponse::from_ureq_response(
+            Ok::<_, HttpCacheError>(CachedResponse::from_ureq_response(
                 response,
                 &url_for_response,
             ))
@@ -512,7 +520,7 @@ impl<'a, T: CacheManager> CachedRequestBuilder<'a, T> {
     }
 
     /// Execute the request with caching
-    pub async fn call(self) -> Result<CachedResponse, UreqError> {
+    pub async fn call(self) -> Result<CachedResponse, HttpCacheError> {
         let mut middleware = UreqMiddleware {
             method: self.method.to_string(),
             url: self.url.clone(),
@@ -525,7 +533,7 @@ impl<'a, T: CacheManager> CachedRequestBuilder<'a, T> {
             .agent
             .cache
             .can_cache_request(&middleware)
-            .map_err(|e| UreqError::Cache(e.to_string()))?
+            .map_err(|e| HttpCacheError::Cache(e.to_string()))?
         {
             // Use the cache system
             let response = self
@@ -533,7 +541,7 @@ impl<'a, T: CacheManager> CachedRequestBuilder<'a, T> {
                 .cache
                 .run(middleware)
                 .await
-                .map_err(|e| UreqError::Cache(e.to_string()))?;
+                .map_err(|e| HttpCacheError::Cache(e.to_string()))?;
 
             Ok(CachedResponse::from(response))
         } else {
@@ -542,7 +550,7 @@ impl<'a, T: CacheManager> CachedRequestBuilder<'a, T> {
                 .cache
                 .run_no_cache(&mut middleware)
                 .await
-                .map_err(|e| UreqError::Cache(e.to_string()))?;
+                .map_err(|e| HttpCacheError::Cache(e.to_string()))?;
 
             // Execute the request directly
             let agent = self.agent.agent.clone();
@@ -554,13 +562,18 @@ impl<'a, T: CacheManager> CachedRequestBuilder<'a, T> {
                 self.agent.cache.options.cache_status_headers;
 
             let response = smol::unblock(move || {
-                execute_request(&agent, &method, &url, &headers, None)
-                    .map_err(|e| UreqError::Http(e.to_string()))
+                execute_request(&agent, &method, &url, &headers, None).map_err(
+                    |e| {
+                        HttpCacheError::http(Box::new(std::io::Error::other(
+                            e.to_string(),
+                        )))
+                    },
+                )
             })
             .await?;
 
             let mut cached_response = smol::unblock(move || {
-                Ok::<_, UreqError>(CachedResponse::from_ureq_response(
+                Ok::<_, HttpCacheError>(CachedResponse::from_ureq_response(
                     response,
                     &url_for_response,
                 ))
@@ -649,28 +662,37 @@ fn execute_json_request(
 fn convert_ureq_response_to_http_response(
     mut response: http::Response<ureq::Body>,
     url: &str,
-) -> Result<HttpResponse, UreqError> {
+) -> Result<HttpResponse, HttpCacheError> {
     let status = response.status();
     let mut headers = HashMap::new();
 
     // Copy headers
     for (name, value) in response.headers() {
         let value_str = value.to_str().map_err(|e| {
-            UreqError::Http(format!("Invalid header value: {}", e))
+            HttpCacheError::http(Box::new(std::io::Error::other(format!(
+                "Invalid header value: {}",
+                e
+            ))))
         })?;
         headers.insert(name.as_str().to_string(), value_str.to_string());
     }
 
     // Read body using read_to_string
     let body_string = response.body_mut().read_to_string().map_err(|e| {
-        UreqError::Http(format!("Failed to read response body: {}", e))
+        HttpCacheError::http(Box::new(std::io::Error::other(format!(
+            "Failed to read response body: {}",
+            e
+        ))))
     })?;
 
     let body = body_string.into_bytes();
 
     // Parse the provided URL
     let parsed_url = Url::parse(url).map_err(|e| {
-        UreqError::Http(format!("Invalid URL '{}': {}", url, e))
+        HttpCacheError::http(Box::new(std::io::Error::other(format!(
+            "Invalid URL '{}': {}",
+            url, e
+        ))))
     })?;
 
     Ok(HttpResponse {
@@ -719,9 +741,12 @@ impl CachedResponse {
     }
 
     /// Convert the response body to a string
-    pub fn into_string(self) -> Result<String, UreqError> {
+    pub fn into_string(self) -> Result<String, HttpCacheError> {
         String::from_utf8(self.body).map_err(|e| {
-            UreqError::Http(format!("Invalid UTF-8 in response body: {}", e))
+            HttpCacheError::http(Box::new(std::io::Error::other(format!(
+                "Invalid UTF-8 in response body: {}",
+                e
+            ))))
         })
     }
 
@@ -740,9 +765,13 @@ impl CachedResponse {
     #[cfg_attr(docsrs, doc(cfg(feature = "json")))]
     pub fn into_json<T: serde::de::DeserializeOwned>(
         self,
-    ) -> Result<T, UreqError> {
-        serde_json::from_slice(&self.body)
-            .map_err(|e| UreqError::Http(format!("JSON parse error: {}", e)))
+    ) -> Result<T, HttpCacheError> {
+        serde_json::from_slice(&self.body).map_err(|e| {
+            HttpCacheError::http(Box::new(std::io::Error::other(format!(
+                "JSON parse error: {}",
+                e
+            ))))
+        })
     }
 }
 

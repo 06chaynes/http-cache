@@ -176,35 +176,24 @@ use std::{
 };
 use tower::{Layer, Service, ServiceExt};
 
-pub mod error;
-pub use error::TowerError;
+// Re-export unified error types from http-cache core
+pub use http_cache::HttpCacheError;
+
 #[cfg(feature = "streaming")]
-pub use error::TowerStreamingError;
+/// Type alias for tower streaming errors, using the unified streaming error system
+pub type TowerStreamingError = http_cache::ClientStreamingError;
 
 /// Helper functions for error conversions
-trait TowerErrorExt<T> {
-    fn cache_err(self) -> Result<T, TowerError>;
+trait HttpCacheErrorExt<T> {
+    fn cache_err(self) -> Result<T, HttpCacheError>;
 }
 
-trait HttpErrorExt<T> {
-    fn http_err(self) -> Result<T, TowerError>;
-}
-
-impl<T, E> TowerErrorExt<T> for Result<T, E>
+impl<T, E> HttpCacheErrorExt<T> for Result<T, E>
 where
     E: ToString,
 {
-    fn cache_err(self) -> Result<T, TowerError> {
-        self.map_err(|e| TowerError::CacheError(e.to_string()))
-    }
-}
-
-impl<T, E> HttpErrorExt<T> for Result<T, E>
-where
-    E: Into<Box<dyn std::error::Error + Send + Sync>>,
-{
-    fn http_err(self) -> Result<T, TowerError> {
-        self.map_err(|e| TowerError::HttpError(e.into()))
+    fn cache_err(self) -> Result<T, HttpCacheError> {
+        self.map_err(|e| HttpCacheError::cache(e.to_string()))
     }
 }
 
@@ -626,7 +615,7 @@ where
     CM: CacheManager,
 {
     type Response = Response<HttpCacheBody<ResBody>>;
-    type Error = TowerError;
+    type Error = HttpCacheError;
     type Future = Pin<
         Box<
             dyn std::future::Future<
@@ -639,7 +628,11 @@ where
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<Result<(), Self::Error>> {
-        self.inner.poll_ready(cx).map_err(|e| TowerError::HttpError(e.into()))
+        self.inner.poll_ready(cx).map_err(|_e| {
+            HttpCacheError::http(Box::new(std::io::Error::other(
+                "service error".to_string(),
+            )))
+        })
     }
 
     fn call(&mut self, req: Request<ReqBody>) -> Self::Future {
@@ -669,17 +662,32 @@ where
             // If not cacheable, just pass through
             if !analysis.should_cache {
                 let req = Request::from_parts(parts, body);
-                let response = inner_service.oneshot(req).await.http_err()?;
+                let response =
+                    inner_service.oneshot(req).await.map_err(|_e| {
+                        HttpCacheError::http(Box::new(std::io::Error::other(
+                            "service error".to_string(),
+                        )))
+                    })?;
                 return Ok(response.map(HttpCacheBody::Original));
             }
 
             // Special case for Reload mode: skip cache lookup but still cache response
             if analysis.cache_mode == CacheMode::Reload {
                 let req = Request::from_parts(parts, body);
-                let response = inner_service.oneshot(req).await.http_err()?;
+                let response =
+                    inner_service.oneshot(req).await.map_err(|_e| {
+                        HttpCacheError::http(Box::new(std::io::Error::other(
+                            "service error".to_string(),
+                        )))
+                    })?;
 
                 let (res_parts, res_body) = response.into_parts();
-                let body_bytes = collect_body(res_body).await.http_err()?;
+                let body_bytes =
+                    collect_body(res_body).await.map_err(|_e| {
+                        HttpCacheError::http(Box::new(std::io::Error::other(
+                            "service error".to_string(),
+                        )))
+                    })?;
 
                 let cached_response = cache
                     .process_response(
@@ -706,7 +714,7 @@ where
                         let mut response = http_cache::HttpCacheOptions::http_response_to_response(
                             &cached_response,
                             HttpCacheBody::Buffered(cached_response.body.clone()),
-                        ).map_err(TowerError::HttpError)?;
+                        ).map_err(HttpCacheError::other)?;
 
                         // Add cache status headers if enabled
                         if cache.options.cache_status_headers {
@@ -726,7 +734,13 @@ where
                         let conditional_response = inner_service
                             .oneshot(conditional_req)
                             .await
-                            .http_err()?;
+                            .map_err(|_e| {
+                                HttpCacheError::http(Box::new(
+                                    std::io::Error::other(
+                                        "service error".to_string(),
+                                    ),
+                                ))
+                            })?;
 
                         if conditional_response.status() == 304 {
                             // Use cached response with updated headers
@@ -743,7 +757,7 @@ where
                             let mut response = http_cache::HttpCacheOptions::http_response_to_response(
                                 &updated_response,
                                 HttpCacheBody::Buffered(updated_response.body.clone()),
-                            ).map_err(TowerError::HttpError)?;
+                            ).map_err(HttpCacheError::other)?;
 
                             // Add cache status headers if enabled
                             if cache.options.cache_status_headers {
@@ -758,7 +772,13 @@ where
                             let (parts, res_body) =
                                 conditional_response.into_parts();
                             let body_bytes =
-                                collect_body(res_body).await.http_err()?;
+                                collect_body(res_body).await.map_err(|_e| {
+                                    HttpCacheError::http(Box::new(
+                                        std::io::Error::other(
+                                            "service error".to_string(),
+                                        ),
+                                    ))
+                                })?;
 
                             let cached_response = cache
                                 .process_response(
@@ -789,10 +809,18 @@ where
 
             // Fetch fresh response
             let req = Request::from_parts(parts, body);
-            let response = inner_service.oneshot(req).await.http_err()?;
+            let response = inner_service.oneshot(req).await.map_err(|_e| {
+                HttpCacheError::http(Box::new(std::io::Error::other(
+                    "service error".to_string(),
+                )))
+            })?;
 
             let (res_parts, res_body) = response.into_parts();
-            let body_bytes = collect_body(res_body).await.http_err()?;
+            let body_bytes = collect_body(res_body).await.map_err(|_e| {
+                HttpCacheError::http(Box::new(std::io::Error::other(
+                    "service error".to_string(),
+                )))
+            })?;
 
             // Process and cache using interface
             let cached_response = cache
@@ -826,7 +854,7 @@ where
     CM: CacheManager,
 {
     type Response = Response<HttpCacheBody<http_body_util::Full<Bytes>>>;
-    type Error = TowerError;
+    type Error = HttpCacheError;
     type Future = Pin<
         Box<
             dyn std::future::Future<
@@ -864,7 +892,7 @@ where
         Into<StreamingError> + Send + Sync + 'static,
 {
     type Response = Response<CM::Body>;
-    type Error = TowerError;
+    type Error = HttpCacheError;
     type Future = Pin<
         Box<
             dyn std::future::Future<
@@ -877,7 +905,11 @@ where
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<Result<(), Self::Error>> {
-        self.inner.poll_ready(cx).map_err(|e| TowerError::HttpError(e.into()))
+        self.inner.poll_ready(cx).map_err(|_e| {
+            HttpCacheError::http(Box::new(std::io::Error::other(
+                "service error".to_string(),
+            )))
+        })
     }
 
     fn call(&mut self, req: Request<ReqBody>) -> Self::Future {
@@ -918,7 +950,12 @@ where
                 }
 
                 let req = Request::from_parts(parts, body);
-                let response = inner_service.oneshot(req).await.http_err()?;
+                let response =
+                    inner_service.oneshot(req).await.map_err(|_e| {
+                        HttpCacheError::http(Box::new(std::io::Error::other(
+                            "service error".to_string(),
+                        )))
+                    })?;
                 let mut converted_response =
                     cache.manager.convert_body(response).await.cache_err()?;
 
@@ -948,7 +985,12 @@ where
                 }
 
                 let req = Request::from_parts(parts, body);
-                let response = inner_service.oneshot(req).await.http_err()?;
+                let response =
+                    inner_service.oneshot(req).await.map_err(|_e| {
+                        HttpCacheError::http(Box::new(std::io::Error::other(
+                            "service error".to_string(),
+                        )))
+                    })?;
 
                 let cached_response = cache
                     .process_response(analysis, response)
@@ -1015,7 +1057,13 @@ where
                         let conditional_response = inner_service
                             .oneshot(conditional_req)
                             .await
-                            .http_err()?;
+                            .map_err(|_e| {
+                                HttpCacheError::http(Box::new(
+                                    std::io::Error::other(
+                                        "service error".to_string(),
+                                    ),
+                                ))
+                            })?;
 
                         if conditional_response.status() == 304 {
                             let (fresh_parts, _) =
@@ -1073,7 +1121,11 @@ where
 
             // Fetch fresh response
             let req = Request::from_parts(parts, body);
-            let response = inner_service.oneshot(req).await.http_err()?;
+            let response = inner_service.oneshot(req).await.map_err(|_e| {
+                HttpCacheError::http(Box::new(std::io::Error::other(
+                    "service error".to_string(),
+                )))
+            })?;
 
             // Process using streaming interface
             let cached_response =

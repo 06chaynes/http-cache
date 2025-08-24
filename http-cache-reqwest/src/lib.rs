@@ -269,11 +269,12 @@
 //! # #[cfg(not(feature = "manager-moka"))]
 //! # fn main() {}
 //! ```
-mod error;
+// Re-export unified error types from http-cache core
+pub use http_cache::{BadRequest, HttpCacheError};
 
 #[cfg(feature = "streaming")]
-pub use error::ReqwestStreamingError;
-pub use error::{BadRequest, ReqwestError};
+/// Type alias for reqwest streaming errors, using the unified streaming error system
+pub type ReqwestStreamingError = http_cache::ClientStreamingError;
 
 #[cfg(feature = "streaming")]
 use http_cache::StreamingCacheManager;
@@ -571,11 +572,11 @@ where
 }
 
 fn bad_header(e: reqwest::header::InvalidHeaderValue) -> Error {
-    to_middleware_error(ReqwestError::Cache(e.to_string()))
+    to_middleware_error(HttpCacheError::Cache(e.to_string()))
 }
 
 fn from_box_error(e: BoxError) -> Error {
-    to_middleware_error(ReqwestError::Cache(e.to_string()))
+    to_middleware_error(HttpCacheError::Cache(e.to_string()))
 }
 
 #[async_trait::async_trait]
@@ -593,7 +594,7 @@ impl<T: CacheManager> reqwest_middleware::Middleware for Cache<T> {
         if can_cache {
             let res = self.0.run(middleware).await.map_err(from_box_error)?;
             let converted = convert_response(res).map_err(|e| {
-                to_middleware_error(ReqwestError::Cache(e.to_string()))
+                to_middleware_error(HttpCacheError::Cache(e.to_string()))
             })?;
             Ok(converted)
         } else {
@@ -647,7 +648,7 @@ where
         let http_req = match http::Request::try_from(copied_req) {
             Ok(r) => r,
             Err(e) => {
-                return Err(to_middleware_error(ReqwestError::Cache(
+                return Err(to_middleware_error(HttpCacheError::Cache(
                     e.to_string(),
                 )))
             }
@@ -661,7 +662,7 @@ where
         let analysis = match self.cache.analyze_request(&parts, mode_override) {
             Ok(a) => a,
             Err(e) => {
-                return Err(to_middleware_error(ReqwestError::Cache(
+                return Err(to_middleware_error(HttpCacheError::Cache(
                     e.to_string(),
                 )))
             }
@@ -679,7 +680,7 @@ where
             .lookup_cached_response(&analysis.cache_key)
             .await
             .map_err(|e| {
-                to_middleware_error(ReqwestError::Cache(e.to_string()))
+                to_middleware_error(HttpCacheError::Cache(e.to_string()))
             })?
         {
             // Check if cached response is still fresh
@@ -705,7 +706,9 @@ where
                     )
                     .await
                     .map_err(|e| {
-                        to_middleware_error(ReqwestError::Cache(e.to_string()))
+                        to_middleware_error(HttpCacheError::Cache(
+                            e.to_string(),
+                        ))
                     });
                 }
                 BeforeRequest::Stale { request: conditional_parts, .. } => {
@@ -737,7 +740,7 @@ where
                                 conditional_response,
                             )
                             .map_err(|e| {
-                                to_middleware_error(ReqwestError::Cache(
+                                to_middleware_error(HttpCacheError::Cache(
                                     e.to_string(),
                                 ))
                             })?;
@@ -746,7 +749,7 @@ where
                             .handle_not_modified(cached_response, &fresh_parts)
                             .await
                             .map_err(|e| {
-                                to_middleware_error(ReqwestError::Cache(
+                                to_middleware_error(HttpCacheError::Cache(
                                     e.to_string(),
                                 ))
                             })?;
@@ -768,7 +771,7 @@ where
                         )
                         .await
                         .map_err(|e| {
-                            to_middleware_error(ReqwestError::Cache(
+                            to_middleware_error(HttpCacheError::Cache(
                                 e.to_string(),
                             ))
                         });
@@ -780,7 +783,7 @@ where
                             )
                             .await
                             .map_err(|e| {
-                                to_middleware_error(ReqwestError::Cache(
+                                to_middleware_error(HttpCacheError::Cache(
                                     e.to_string(),
                                 ))
                             })?;
@@ -789,7 +792,7 @@ where
                             .process_response(analysis, http_response)
                             .await
                             .map_err(|e| {
-                                to_middleware_error(ReqwestError::Cache(
+                                to_middleware_error(HttpCacheError::Cache(
                                     e.to_string(),
                                 ))
                             })?;
@@ -811,7 +814,7 @@ where
                         )
                         .await
                         .map_err(|e| {
-                            to_middleware_error(ReqwestError::Cache(
+                            to_middleware_error(HttpCacheError::Cache(
                                 e.to_string(),
                             ))
                         });
@@ -834,7 +837,7 @@ where
             convert_reqwest_response_to_http_full_body(response)
                 .await
                 .map_err(|e| {
-                    to_middleware_error(ReqwestError::Cache(e.to_string()))
+                    to_middleware_error(HttpCacheError::Cache(e.to_string()))
                 })?;
 
         // Process and potentially cache the response
@@ -843,7 +846,7 @@ where
             .process_response(analysis, http_response)
             .await
             .map_err(|e| {
-                to_middleware_error(ReqwestError::Cache(e.to_string()))
+                to_middleware_error(HttpCacheError::Cache(e.to_string()))
             })?;
 
         let mut final_response = cached_response;
@@ -858,7 +861,7 @@ where
         }
 
         convert_streaming_body_to_reqwest::<T>(final_response).await.map_err(
-            |e| to_middleware_error(ReqwestError::Cache(e.to_string())),
+            |e| to_middleware_error(HttpCacheError::Cache(e.to_string())),
         )
     }
 }

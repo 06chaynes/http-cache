@@ -10,8 +10,8 @@
 
 ### Changed
 
-- Renamed `Error` enum to `SurfError` for consistent `{CrateName}Error` naming
-- Replaced `thiserror` with manual `std::error::Error` implementation for consistency
+- Consolidated error handling: removed separate error module and replaced with type alias `pub use http_cache::{BadRequest, HttpCacheError};`
+- Simplified error architecture by removing duplicate error implementations
 - Removed `anyhow` dependency
 
 ### Removed

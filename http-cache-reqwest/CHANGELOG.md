@@ -11,7 +11,8 @@
 
 ### Changed
 
-- Added `ReqwestError` enum with manual `std::error::Error` implementation for improved error handling consistency
+- Consolidated error handling: removed separate error module and replaced with type alias `pub use http_cache::{BadRequest, HttpCacheError};`
+- Simplified error architecture by removing duplicate error implementations
 - Standardized error types to follow `{CrateName}Error` naming convention
 
 ### Fixed

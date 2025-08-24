@@ -2,7 +2,7 @@
 mod tests {
     #[cfg(feature = "streaming")]
     use crate::HttpCacheStreamingLayer;
-    use crate::{HttpCacheBody, HttpCacheLayer, TowerError};
+    use crate::{HttpCacheBody, HttpCacheError, HttpCacheLayer};
     use bytes::Bytes;
     use http::{Request, Response, StatusCode};
     use http_body::Body;
@@ -27,8 +27,8 @@ mod tests {
     #[test]
     fn test_errors() -> Result<()> {
         // Testing the Debug trait for the error type
-        let err = TowerError::CacheError("test".to_string());
-        assert!(format!("{:?}", &err).contains("CacheError"));
+        let err = HttpCacheError::cache("test".to_string());
+        assert!(format!("{:?}", &err).contains("Cache"));
         assert!(err.to_string().contains("test"));
         Ok(())
     }
