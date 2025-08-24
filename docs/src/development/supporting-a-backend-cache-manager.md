@@ -62,8 +62,19 @@ For streaming caching, we'll use a struct that stores the root path for the cach
 #[derive(Debug, Clone)]
 pub struct StreamingManager {
     root_path: PathBuf,
+    ref_counter: ContentRefCounter,
+    config: StreamingCacheConfig,
 }
 ```
+
+The `StreamingManager` follows a **"simple and reliable"** design philosophy:
+
+- **Focused functionality**: Core streaming operations without unnecessary complexity
+- **Simple configuration**: Minimal options with sensible defaults
+- **Predictable behavior**: Straightforward LRU eviction and error handling
+- **Easy maintenance**: Clean code paths for debugging and troubleshooting
+
+This approach prioritizes maintainability and reliability over feature completeness, making it easier to understand, debug, and extend.
 
 For traditional caching, we use a simple `Store` struct that contains both the response and policy together:
 
@@ -159,9 +170,21 @@ First, let's implement some helper methods that our cache will need:
 
 ```rust
 impl StreamingManager {
-    /// Create a new streaming cache manager
+    /// Create a new streaming cache manager with default configuration
     pub fn new(root_path: PathBuf) -> Self {
-        Self { root_path }
+        Self::new_with_config(root_path, StreamingCacheConfig::default())
+    }
+
+    /// Create a new streaming cache manager with custom configuration
+    pub fn new_with_config(
+        root_path: PathBuf,
+        config: StreamingCacheConfig,
+    ) -> Self {
+        Self { 
+            root_path, 
+            ref_counter: ContentRefCounter::new(), 
+            config 
+        }
     }
 
     /// Get the path for storing metadata

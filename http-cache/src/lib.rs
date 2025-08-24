@@ -379,26 +379,7 @@ fn extract_url_from_request_parts(parts: &request::Parts) -> Result<Url> {
             .map_err(|_| -> BoxError { BadHeader.into() });
     }
 
-    // Get the scheme - default to https for security, but check for explicit http
-    let scheme = if let Some(host) = parts.headers.get("host") {
-        let host_str = host.to_str().map_err(|_| BadHeader)?;
-        // Check if this looks like a local development host
-        if host_str.starts_with("localhost")
-            || host_str.starts_with("127.0.0.1")
-        {
-            "http"
-        } else if let Some(forwarded_proto) =
-            parts.headers.get("x-forwarded-proto")
-        {
-            forwarded_proto.to_str().map_err(|_| BadHeader)?
-        } else {
-            "https" // Default to secure
-        }
-    } else {
-        "https" // Default to secure if no host header
-    };
-
-    // Get the host
+    // Get the host header
     let host = parts
         .headers
         .get("host")
@@ -406,15 +387,41 @@ fn extract_url_from_request_parts(parts: &request::Parts) -> Result<Url> {
         .to_str()
         .map_err(|_| BadHeader)?;
 
-    // Construct the full URL
-    let url_string = format!(
-        "{}://{}{}",
-        scheme,
-        host,
-        parts.uri.path_and_query().map(|pq| pq.as_str()).unwrap_or("/")
-    );
+    // Determine scheme based on host and headers
+    let scheme = determine_scheme(host, &parts.headers)?;
 
-    Url::parse(&url_string).map_err(|_| -> BoxError { BadHeader.into() })
+    // Create base URL using url crate's builder pattern for safety
+    let mut base_url = Url::parse(&format!("{}://{}/", &scheme, host))
+        .map_err(|_| -> BoxError { BadHeader.into() })?;
+
+    // Set the path and query from the URI
+    if let Some(path_and_query) = parts.uri.path_and_query() {
+        base_url.set_path(path_and_query.path());
+        if let Some(query) = path_and_query.query() {
+            base_url.set_query(Some(query));
+        }
+    }
+
+    Ok(base_url)
+}
+
+/// Determine the appropriate scheme for URL construction
+fn determine_scheme(host: &str, headers: &http::HeaderMap) -> Result<String> {
+    // Check for explicit protocol forwarding header first
+    if let Some(forwarded_proto) = headers.get("x-forwarded-proto") {
+        let proto = forwarded_proto.to_str().map_err(|_| BadHeader)?;
+        return match proto {
+            "http" | "https" => Ok(proto.to_string()),
+            _ => Ok("https".to_string()), // Default to secure for unknown protocols
+        };
+    }
+
+    // Check if this looks like a local development host
+    if host.starts_with("localhost") || host.starts_with("127.0.0.1") {
+        Ok("http".to_string())
+    } else {
+        Ok("https".to_string()) // Default to secure for all other hosts
+    }
 }
 
 /// A basic generic type that represents an HTTP response
@@ -468,13 +475,20 @@ impl HttpResponse {
         // warn-text  = quoted-string
         // warn-date  = <"> HTTP-date <">
         // (https://tools.ietf.org/html/rfc2616#section-14.46)
+        let host = url
+            .host()
+            .map(|h| h.to_string())
+            .unwrap_or_else(|| "unknown".to_string());
+        // Escape message to prevent header injection and ensure valid HTTP format
+        let escaped_message =
+            message.replace('"', "'").replace(['\n', '\r'], " ");
         self.headers.insert(
             WARNING.to_string(),
             format!(
-                "{} {} {:?} \"{}\"",
+                "{} {} \"{}\" \"{}\"",
                 code,
-                url.host().expect("Invalid URL"),
-                message,
+                host,
+                escaped_message,
                 httpdate::fmt_http_date(SystemTime::now())
             ),
         );
@@ -1234,8 +1248,6 @@ impl HttpCacheOptions {
 
         // If max_ttl is specified, we need to modify the response headers to enforce it
         if let Some(max_ttl) = self.max_ttl {
-            let mut modified_response_parts = response_parts.clone();
-
             // Parse existing cache-control header
             let cache_control = response_parts
                 .headers
@@ -1277,6 +1289,9 @@ impl HttpCacheOptions {
             new_directives.push(format!("max-age={}", effective_max_age));
 
             let new_cache_control = new_directives.join(", ");
+
+            // Create modified response parts - we have to clone since response::Parts has private fields
+            let mut modified_response_parts = response_parts.clone();
             modified_response_parts.headers.insert(
                 "cache-control",
                 HeaderValue::from_str(&new_cache_control)

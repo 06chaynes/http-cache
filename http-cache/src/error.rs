@@ -307,6 +307,8 @@ pub enum StreamingErrorKind {
     TempFile,
     /// Content addressing error (SHA256, file paths)
     ContentAddressing,
+    /// Client library error (e.g., reqwest, surf)
+    Client,
     /// Generic streaming error
     Other,
 }
@@ -353,6 +355,11 @@ impl StreamingError {
     /// Create a content addressing error
     pub fn content_addressing<E: Into<BoxError>>(error: E) -> Self {
         Self::with_kind(error, StreamingErrorKind::ContentAddressing)
+    }
+
+    /// Create a client error
+    pub fn client<E: Into<BoxError>>(error: E) -> Self {
+        Self::with_kind(error, StreamingErrorKind::Client)
     }
 
     /// Get the error kind
@@ -418,7 +425,7 @@ impl From<HttpCacheError> for StreamingError {
 pub enum ClientStreamingError {
     /// Client-specific streaming error with context
     Client {
-        /// The name of the client library (e.g., "reqwest", "surf")
+        /// The name of the client library (e.g., "reqwest", "tower")
         client: String,
         /// The underlying client error
         error: BoxError,
@@ -527,7 +534,12 @@ impl From<ClientStreamingError> for StreamingError {
     fn from(error: ClientStreamingError) -> Self {
         match error {
             ClientStreamingError::HttpCache(streaming_err) => streaming_err,
-            ClientStreamingError::Client { error, .. } => Self::new(error),
+            ClientStreamingError::Client { client, error } => {
+                // Preserve client context by wrapping in a descriptive error
+                let client_error =
+                    format!("Client '{}' error: {}", client, error);
+                Self::client(client_error)
+            }
             ClientStreamingError::Other(error) => Self::new(error),
         }
     }

@@ -184,57 +184,42 @@ cache-directory/
 │   │   ├── 1a2b3c4d....json  # Response metadata (headers, status, policy)
 │   │   └── 5e6f7g8h....json
 │   └── content/
-│       ├── sha256_hash1      # Raw response body content
-│       └── sha256_hash2
+│       ├── blake3_hash1      # Raw response body content
+│       └── blake3_hash2
 ```
 
 - **Metadata files**: JSON files containing response status, headers, cache policy, and content digest
-- **Content files**: Raw binary content files identified by SHA256 hash for deduplication
+- **Content files**: Raw binary content files identified by Blake3 hash for deduplication
 - **Content-addressable**: Identical content is stored only once regardless of URL
-
-## Performance Characteristics
-
-### Memory Usage
-
-- **Constant memory usage** regardless of response size
-- Only metadata loaded into memory (~few KB per response)
-- Response bodies stream directly from disk files
-
-### Disk Usage
-
-- **Content deduplication** via SHA256 hashing
-- **Efficient storage** with separate metadata and content
-- **Persistent cache** survives application restarts
-
-### Use Cases
-
-- **Large file responses** (images, videos, archives)
-- **Memory-constrained environments**
-- **High-throughput applications** with large responses
-- **Long-running services** that need persistent caching
-
-## Comparison with Other Managers
-
-| Manager | Memory Usage | Storage | Streaming | Best For |
-|---------|--------------|---------|-----------|----------|
-| StreamingManager | Constant | Disk | Yes | Large responses, memory efficiency |
-| CACacheManager | Buffers responses | Disk | No | General purpose, moderate sizes |
-| MokaManager | Buffers responses | Memory | No | Fast access, small responses |
-| QuickManager | Buffers responses | Memory | No | Low overhead, small responses |
 
 ## Configuration
 
-The StreamingManager uses sensible defaults but can be configured through environment:
+The StreamingManager supports basic configuration through `StreamingCacheConfig`:
 
 ```rust
-// Cache directory structure is automatically created
+use http_cache::{StreamingManager, StreamingCacheConfig};
+use std::path::PathBuf;
+
+// Create with default configuration
 let manager = StreamingManager::new(PathBuf::from("./cache"));
 
-// The manager handles:
-// - Directory creation
-// - Content deduplication  
-// - Metadata organization
-// - File cleanup on delete
+// Or create with custom configuration
+let config = StreamingCacheConfig {
+    max_cache_size: Some(1024 * 1024 * 1024), // 1GB limit
+    max_entries: Some(10000), // Maximum 10k cached entries
+    streaming_buffer_size: 16384, // 16KB streaming buffer
+};
+let manager = StreamingManager::new_with_config(PathBuf::from("./cache"), config);
+
+// For existing cache directories, use this to rebuild reference counts
+let manager = StreamingManager::new_with_existing_cache_and_config(
+    PathBuf::from("./cache"),
+    config
+).await?;
 ```
 
-For advanced configuration, you can implement custom cleanup policies or directory management by extending the manager.
+### Configuration Options
+
+- `max_cache_size`: Optional maximum cache size in bytes. When exceeded, least recently used entries are evicted.
+- `max_entries`: Optional maximum number of cached entries. When exceeded, LRU eviction occurs.
+- `streaming_buffer_size`: Buffer size in bytes for streaming operations (default: 8192).
