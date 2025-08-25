@@ -1,6 +1,6 @@
 [package]
 name = "http-cache-ureq"
-version = "1.0.0-alpha.2"
+version = "1.0.0-alpha.1"
 description = "http-cache middleware implementation for ureq"
 authors = ["Christian Haynes <06chaynes@gmail.com>", "Kat Marchán <kzm@zkat.tech>"]
 repository = "https://github.com/06chaynes/http-cache"
