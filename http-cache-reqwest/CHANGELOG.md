@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.0.0-alpha.2] - 2025-08-24
+
+### Added
+
+- Support for cache-aware rate limiting through `rate_limiter` field in `HttpCacheOptions`
+- New `rate-limiting` feature flag for optional rate limiting functionality
+- Re-export of rate limiting types: `CacheAwareRateLimiter`, `DomainRateLimiter`, `DirectRateLimiter`, `Quota`
+- Rate limiting integration for streaming cache operations via `StreamingCache` middleware
+
+### Changed
+
+- Consolidated error handling: removed separate error module and replaced with type alias `pub use http_cache::{BadRequest, HttpCacheError};`
+- Simplified error architecture by removing duplicate error implementations
+- Standardized error types to follow `{CrateName}Error` naming convention
+
+### Fixed
+
+- Request cloning failures for multipart forms and streaming bodies now fallback gracefully instead of throwing errors
+- Cache middleware now bypasses caching for non-cloneable requests while still performing cache maintenance operations
+
 ## [1.0.0-alpha.1] - 2025-07-27
 
 ### Added

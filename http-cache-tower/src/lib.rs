@@ -149,11 +149,17 @@
 //! ```
 
 use bytes::Bytes;
-use http::{Request, Response};
+use http::{HeaderValue, Request, Response};
 use http_body::Body;
 use http_body_util::BodyExt;
+
 #[cfg(feature = "manager-cacache")]
 pub use http_cache::CACacheManager;
+
+#[cfg(feature = "rate-limiting")]
+pub use http_cache::rate_limiting::{
+    CacheAwareRateLimiter, DirectRateLimiter, DomainRateLimiter, Quota,
+};
 #[cfg(feature = "streaming")]
 use http_cache::StreamingError;
 use http_cache::{
@@ -170,18 +176,16 @@ use std::{
 };
 use tower::{Layer, Service, ServiceExt};
 
-pub mod error;
-pub use error::HttpCacheError;
+// Re-export unified error types from http-cache core
+pub use http_cache::HttpCacheError;
+
 #[cfg(feature = "streaming")]
-pub use error::TowerStreamingError;
+/// Type alias for tower streaming errors, using the unified streaming error system
+pub type TowerStreamingError = http_cache::ClientStreamingError;
 
 /// Helper functions for error conversions
 trait HttpCacheErrorExt<T> {
     fn cache_err(self) -> Result<T, HttpCacheError>;
-}
-
-trait HttpErrorExt<T> {
-    fn http_err(self) -> Result<T, HttpCacheError>;
 }
 
 impl<T, E> HttpCacheErrorExt<T> for Result<T, E>
@@ -189,16 +193,7 @@ where
     E: ToString,
 {
     fn cache_err(self) -> Result<T, HttpCacheError> {
-        self.map_err(|e| HttpCacheError::CacheError(e.to_string()))
-    }
-}
-
-impl<T, E> HttpErrorExt<T> for Result<T, E>
-where
-    E: Into<Box<dyn std::error::Error + Send + Sync>>,
-{
-    fn http_err(self) -> Result<T, HttpCacheError> {
-        self.map_err(|e| HttpCacheError::HttpError(e.into()))
+        self.map_err(|e| HttpCacheError::cache(e.to_string()))
     }
 }
 
@@ -209,6 +204,42 @@ where
 {
     let collected = BodyExt::collect(body).await?;
     Ok(collected.to_bytes().to_vec())
+}
+
+/// Helper function to add cache status headers to a response
+fn add_cache_status_headers<B>(
+    mut response: Response<HttpCacheBody<B>>,
+    hit_or_miss: &str,
+    cache_lookup: &str,
+) -> Response<HttpCacheBody<B>> {
+    let headers = response.headers_mut();
+    headers.insert(
+        http_cache::XCACHE,
+        HeaderValue::from_str(hit_or_miss).unwrap(),
+    );
+    headers.insert(
+        http_cache::XCACHELOOKUP,
+        HeaderValue::from_str(cache_lookup).unwrap(),
+    );
+    response
+}
+
+#[cfg(feature = "streaming")]
+fn add_cache_status_headers_streaming<B>(
+    mut response: Response<B>,
+    hit_or_miss: &str,
+    cache_lookup: &str,
+) -> Response<B> {
+    let headers = response.headers_mut();
+    headers.insert(
+        http_cache::XCACHE,
+        HeaderValue::from_str(hit_or_miss).unwrap(),
+    );
+    headers.insert(
+        http_cache::XCACHELOOKUP,
+        HeaderValue::from_str(cache_lookup).unwrap(),
+    );
+    response
 }
 
 /// HTTP cache layer for Tower services.
@@ -597,9 +628,11 @@ where
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<Result<(), Self::Error>> {
-        self.inner
-            .poll_ready(cx)
-            .map_err(|e| HttpCacheError::HttpError(e.into()))
+        self.inner.poll_ready(cx).map_err(|_e| {
+            HttpCacheError::http(Box::new(std::io::Error::other(
+                "service error".to_string(),
+            )))
+        })
     }
 
     fn call(&mut self, req: Request<ReqBody>) -> Self::Future {
@@ -629,17 +662,32 @@ where
             // If not cacheable, just pass through
             if !analysis.should_cache {
                 let req = Request::from_parts(parts, body);
-                let response = inner_service.oneshot(req).await.http_err()?;
+                let response =
+                    inner_service.oneshot(req).await.map_err(|_e| {
+                        HttpCacheError::http(Box::new(std::io::Error::other(
+                            "service error".to_string(),
+                        )))
+                    })?;
                 return Ok(response.map(HttpCacheBody::Original));
             }
 
             // Special case for Reload mode: skip cache lookup but still cache response
             if analysis.cache_mode == CacheMode::Reload {
                 let req = Request::from_parts(parts, body);
-                let response = inner_service.oneshot(req).await.http_err()?;
+                let response =
+                    inner_service.oneshot(req).await.map_err(|_e| {
+                        HttpCacheError::http(Box::new(std::io::Error::other(
+                            "service error".to_string(),
+                        )))
+                    })?;
 
                 let (res_parts, res_body) = response.into_parts();
-                let body_bytes = collect_body(res_body).await.http_err()?;
+                let body_bytes =
+                    collect_body(res_body).await.map_err(|_e| {
+                        HttpCacheError::http(Box::new(std::io::Error::other(
+                            "service error".to_string(),
+                        )))
+                    })?;
 
                 let cached_response = cache
                     .process_response(
@@ -663,10 +711,18 @@ where
                 match before_req {
                     BeforeRequest::Fresh(_) => {
                         // Return cached response
-                        let response = http_cache::HttpCacheOptions::http_response_to_response(
+                        let mut response = http_cache::HttpCacheOptions::http_response_to_response(
                             &cached_response,
                             HttpCacheBody::Buffered(cached_response.body.clone()),
-                        ).map_err(HttpCacheError::HttpError)?;
+                        ).map_err(HttpCacheError::other)?;
+
+                        // Add cache status headers if enabled
+                        if cache.options.cache_status_headers {
+                            response = add_cache_status_headers(
+                                response, "HIT", "HIT",
+                            );
+                        }
+
                         return Ok(response);
                     }
                     BeforeRequest::Stale {
@@ -678,7 +734,13 @@ where
                         let conditional_response = inner_service
                             .oneshot(conditional_req)
                             .await
-                            .http_err()?;
+                            .map_err(|_e| {
+                                HttpCacheError::http(Box::new(
+                                    std::io::Error::other(
+                                        "service error".to_string(),
+                                    ),
+                                ))
+                            })?;
 
                         if conditional_response.status() == 304 {
                             // Use cached response with updated headers
@@ -692,17 +754,31 @@ where
                                 .await
                                 .cache_err()?;
 
-                            let response = http_cache::HttpCacheOptions::http_response_to_response(
+                            let mut response = http_cache::HttpCacheOptions::http_response_to_response(
                                 &updated_response,
                                 HttpCacheBody::Buffered(updated_response.body.clone()),
-                            ).map_err(HttpCacheError::HttpError)?;
+                            ).map_err(HttpCacheError::other)?;
+
+                            // Add cache status headers if enabled
+                            if cache.options.cache_status_headers {
+                                response = add_cache_status_headers(
+                                    response, "HIT", "HIT",
+                                );
+                            }
+
                             return Ok(response);
                         } else {
                             // Process fresh response
                             let (parts, res_body) =
                                 conditional_response.into_parts();
                             let body_bytes =
-                                collect_body(res_body).await.http_err()?;
+                                collect_body(res_body).await.map_err(|_e| {
+                                    HttpCacheError::http(Box::new(
+                                        std::io::Error::other(
+                                            "service error".to_string(),
+                                        ),
+                                    ))
+                                })?;
 
                             let cached_response = cache
                                 .process_response(
@@ -715,9 +791,17 @@ where
                                 .await
                                 .cache_err()?;
 
-                            return Ok(
-                                cached_response.map(HttpCacheBody::Buffered)
-                            );
+                            let mut response =
+                                cached_response.map(HttpCacheBody::Buffered);
+
+                            // Add cache status headers if enabled
+                            if cache.options.cache_status_headers {
+                                response = add_cache_status_headers(
+                                    response, "MISS", "MISS",
+                                );
+                            }
+
+                            return Ok(response);
                         }
                     }
                 }
@@ -725,10 +809,18 @@ where
 
             // Fetch fresh response
             let req = Request::from_parts(parts, body);
-            let response = inner_service.oneshot(req).await.http_err()?;
+            let response = inner_service.oneshot(req).await.map_err(|_e| {
+                HttpCacheError::http(Box::new(std::io::Error::other(
+                    "service error".to_string(),
+                )))
+            })?;
 
             let (res_parts, res_body) = response.into_parts();
-            let body_bytes = collect_body(res_body).await.http_err()?;
+            let body_bytes = collect_body(res_body).await.map_err(|_e| {
+                HttpCacheError::http(Box::new(std::io::Error::other(
+                    "service error".to_string(),
+                )))
+            })?;
 
             // Process and cache using interface
             let cached_response = cache
@@ -739,7 +831,14 @@ where
                 .await
                 .cache_err()?;
 
-            Ok(cached_response.map(HttpCacheBody::Buffered))
+            let mut response = cached_response.map(HttpCacheBody::Buffered);
+
+            // Add cache status headers if enabled
+            if cache.options.cache_status_headers {
+                response = add_cache_status_headers(response, "MISS", "MISS");
+            }
+
+            Ok(response)
         })
     }
 }
@@ -806,9 +905,11 @@ where
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<Result<(), Self::Error>> {
-        self.inner
-            .poll_ready(cx)
-            .map_err(|e| HttpCacheError::HttpError(e.into()))
+        self.inner.poll_ready(cx).map_err(|_e| {
+            HttpCacheError::http(Box::new(std::io::Error::other(
+                "service error".to_string(),
+            )))
+        })
     }
 
     fn call(&mut self, req: Request<ReqBody>) -> Self::Future {
@@ -837,22 +938,77 @@ where
 
             // If not cacheable, convert body type and return
             if !analysis.should_cache {
+                // Apply rate limiting before non-cached request
+                #[cfg(feature = "rate-limiting")]
+                if let Some(rate_limiter) = &cache.options.rate_limiter {
+                    if let Ok(url) = parts.uri.to_string().parse::<::url::Url>()
+                    {
+                        let rate_limit_key =
+                            url.host_str().unwrap_or("unknown");
+                        rate_limiter.until_key_ready(rate_limit_key).await;
+                    }
+                }
+
                 let req = Request::from_parts(parts, body);
-                let response = inner_service.oneshot(req).await.http_err()?;
-                return cache.manager.convert_body(response).await.cache_err();
+                let response =
+                    inner_service.oneshot(req).await.map_err(|_e| {
+                        HttpCacheError::http(Box::new(std::io::Error::other(
+                            "service error".to_string(),
+                        )))
+                    })?;
+                let mut converted_response =
+                    cache.manager.convert_body(response).await.cache_err()?;
+
+                // Add cache status headers if enabled
+                if cache.options.cache_status_headers {
+                    converted_response = add_cache_status_headers_streaming(
+                        converted_response,
+                        "MISS",
+                        "MISS",
+                    );
+                }
+
+                return Ok(converted_response);
             }
 
             // Special case for Reload mode: skip cache lookup but still cache response
             if analysis.cache_mode == CacheMode::Reload {
+                // Apply rate limiting before reload request
+                #[cfg(feature = "rate-limiting")]
+                if let Some(rate_limiter) = &cache.options.rate_limiter {
+                    if let Ok(url) = parts.uri.to_string().parse::<::url::Url>()
+                    {
+                        let rate_limit_key =
+                            url.host_str().unwrap_or("unknown");
+                        rate_limiter.until_key_ready(rate_limit_key).await;
+                    }
+                }
+
                 let req = Request::from_parts(parts, body);
-                let response = inner_service.oneshot(req).await.http_err()?;
+                let response =
+                    inner_service.oneshot(req).await.map_err(|_e| {
+                        HttpCacheError::http(Box::new(std::io::Error::other(
+                            "service error".to_string(),
+                        )))
+                    })?;
 
                 let cached_response = cache
                     .process_response(analysis, response)
                     .await
                     .cache_err()?;
 
-                return Ok(cached_response);
+                let mut final_response = cached_response;
+
+                // Add cache status headers if enabled
+                if cache.options.cache_status_headers {
+                    final_response = add_cache_status_headers_streaming(
+                        final_response,
+                        "MISS",
+                        "MISS",
+                    );
+                }
+
+                return Ok(final_response);
             }
 
             // Look up cached response using interface
@@ -865,17 +1021,49 @@ where
                     policy.before_request(&parts, std::time::SystemTime::now());
                 match before_req {
                     BeforeRequest::Fresh(_) => {
-                        return Ok(cached_response);
+                        let mut response = cached_response;
+
+                        // Add cache status headers if enabled
+                        if cache.options.cache_status_headers {
+                            response = add_cache_status_headers_streaming(
+                                response, "HIT", "HIT",
+                            );
+                        }
+
+                        return Ok(response);
                     }
                     BeforeRequest::Stale {
                         request: conditional_parts, ..
                     } => {
+                        // Apply rate limiting before conditional request
+                        #[cfg(feature = "rate-limiting")]
+                        if let Some(rate_limiter) = &cache.options.rate_limiter
+                        {
+                            if let Ok(url) = conditional_parts
+                                .uri
+                                .to_string()
+                                .parse::<::url::Url>()
+                            {
+                                let rate_limit_key =
+                                    url.host_str().unwrap_or("unknown");
+                                rate_limiter
+                                    .until_key_ready(rate_limit_key)
+                                    .await;
+                            }
+                        }
+
                         let conditional_req =
                             Request::from_parts(conditional_parts, body);
                         let conditional_response = inner_service
                             .oneshot(conditional_req)
                             .await
-                            .http_err()?;
+                            .map_err(|_e| {
+                                HttpCacheError::http(Box::new(
+                                    std::io::Error::other(
+                                        "service error".to_string(),
+                                    ),
+                                ))
+                            })?;
 
                         if conditional_response.status() == 304 {
                             let (fresh_parts, _) =
@@ -887,7 +1075,17 @@ where
                                 )
                                 .await
                                 .cache_err()?;
-                            return Ok(updated_response);
+
+                            let mut response = updated_response;
+
+                            // Add cache status headers if enabled
+                            if cache.options.cache_status_headers {
+                                response = add_cache_status_headers_streaming(
+                                    response, "HIT", "HIT",
+                                );
+                            }
+
+                            return Ok(response);
                         } else {
                             let cached_response = cache
                                 .process_response(
@@ -896,21 +1094,55 @@ where
                                 )
                                 .await
                                 .cache_err()?;
-                            return Ok(cached_response);
+
+                            let mut response = cached_response;
+
+                            // Add cache status headers if enabled
+                            if cache.options.cache_status_headers {
+                                response = add_cache_status_headers_streaming(
+                                    response, "MISS", "MISS",
+                                );
+                            }
+
+                            return Ok(response);
                         }
                     }
                 }
             }
 
+            // Apply rate limiting before fresh request
+            #[cfg(feature = "rate-limiting")]
+            if let Some(rate_limiter) = &cache.options.rate_limiter {
+                if let Ok(url) = parts.uri.to_string().parse::<url::Url>() {
+                    let rate_limit_key = url.host_str().unwrap_or("unknown");
+                    rate_limiter.until_key_ready(rate_limit_key).await;
+                }
+            }
+
             // Fetch fresh response
             let req = Request::from_parts(parts, body);
-            let response = inner_service.oneshot(req).await.http_err()?;
+            let response = inner_service.oneshot(req).await.map_err(|_e| {
+                HttpCacheError::http(Box::new(std::io::Error::other(
+                    "service error".to_string(),
+                )))
+            })?;
 
             // Process using streaming interface
             let cached_response =
                 cache.process_response(analysis, response).await.cache_err()?;
 
-            Ok(cached_response)
+            let mut final_response = cached_response;
+
+            // Add cache status headers if enabled
+            if cache.options.cache_status_headers {
+                final_response = add_cache_status_headers_streaming(
+                    final_response,
+                    "MISS",
+                    "MISS",
+                );
+            }
+
+            Ok(final_response)
         })
     }
 }

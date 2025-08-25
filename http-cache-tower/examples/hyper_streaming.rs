@@ -1,38 +1,36 @@
-//! Streaming HTTP caching example with large response bodies.
-//!
-//! This example demonstrates how to use the http-cache-tower streaming middleware
-//! with large response bodies to test streaming caching performance and behavior.
+//! Streaming HTTP caching with tower/hyper
 //!
 //! Run with: cargo run --example hyper_streaming --features streaming
 
 #![cfg(feature = "streaming")]
 
 use bytes::Bytes;
-use http::{Request, Response, StatusCode};
+use http::{Request, StatusCode};
 use http_body_util::Full;
-use http_cache::StreamingManager;
+use http_cache::{HttpCacheOptions, StreamingManager};
 use http_cache_tower::HttpCacheStreamingLayer;
 use std::future::Future;
 use std::pin::Pin;
+use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::Arc;
 use std::task::{Context, Poll};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::Instant;
 use tower::{Service, ServiceBuilder};
 
-// Generate large response content for testing streaming behavior
-fn generate_large_content(size_kb: usize) -> String {
-    let chunk =
-        "This is a sample line of text for testing streaming cache behavior.\n";
-    let lines_needed = (size_kb * 1024) / chunk.len();
-    chunk.repeat(lines_needed)
+/// Mock service that simulates streaming content
+#[derive(Clone)]
+struct StreamingMockService {
+    request_count: Arc<AtomicU32>,
 }
 
-/// A mock HTTP service that simulates different server responses with large payloads
-/// This replaces the need for an actual HTTP server for the example
-#[derive(Clone)]
-struct LargeContentService;
+impl StreamingMockService {
+    fn new() -> Self {
+        Self { request_count: Arc::new(AtomicU32::new(0)) }
+    }
+}
 
-impl Service<Request<Full<Bytes>>> for LargeContentService {
-    type Response = Response<Full<Bytes>>;
+impl Service<Request<Full<Bytes>>> for StreamingMockService {
+    type Response = http::Response<Full<Bytes>>;
     type Error = Box<dyn std::error::Error + Send + Sync>;
     type Future = Pin<
         Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>,
@@ -45,325 +43,117 @@ impl Service<Request<Full<Bytes>>> for LargeContentService {
         Poll::Ready(Ok(()))
     }
 
-    fn call(&mut self, req: Request<Full<Bytes>>) -> Self::Future {
-        let path = req.uri().path().to_string();
+    fn call(&mut self, _req: Request<Full<Bytes>>) -> Self::Future {
+        let count = self.request_count.fetch_add(1, Ordering::SeqCst);
 
         Box::pin(async move {
-            // Simulate network delay
-            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            // Simulate network delay and large content generation
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 
-            match path.as_str() {
-                "/" => {
-                    let timestamp = SystemTime::now()
-                        .duration_since(UNIX_EPOCH)
-                        .unwrap()
-                        .as_secs();
+            // Generate large content (simulate streaming)
+            let large_content = "X".repeat(50000); // 50KB of data
+            let response_body = format!(
+                "Streaming response #{}\nContent size: {} bytes\n{}",
+                count + 1,
+                large_content.len(),
+                large_content
+            );
 
-                    Ok(Response::builder()
-                        .status(StatusCode::OK)
-                        .header("content-type", "text/plain")
-                        .header("cache-control", "max-age=60, public")
-                        .body(Full::new(Bytes::from(format!(
-                            "Large Content Cache Demo - Generated at: {timestamp}\n\nThis example tests caching with different payload sizes."
-                        ))))?)
-                }
-                "/small" => {
-                    let content = generate_large_content(1); // 1KB
-                    let timestamp = SystemTime::now()
-                        .duration_since(UNIX_EPOCH)
-                        .unwrap()
-                        .as_secs();
-
-                    println!(
-                        "Generated small content ({} bytes)",
-                        content.len()
-                    );
-
-                    Ok(Response::builder()
-                        .status(StatusCode::OK)
-                        .header("content-type", "text/plain")
-                        .header("cache-control", "max-age=300, public") // Cache for 5 minutes
-                        .header("x-content-size", &content.len().to_string())
-                        .body(Full::new(Bytes::from(format!(
-                            "Small Content (1KB) - Generated at: {}\n{}",
-                            timestamp,
-                            &content[..200.min(content.len())] // Truncate for readability
-                        ))))?)
-                }
-                "/large" => {
-                    let content = generate_large_content(1024); // 1MB
-                    let timestamp = SystemTime::now()
-                        .duration_since(UNIX_EPOCH)
-                        .unwrap()
-                        .as_secs();
-
-                    println!(
-                        "Generated large content ({} bytes)",
-                        content.len()
-                    );
-
-                    Ok(Response::builder()
-                        .status(StatusCode::OK)
-                        .header("content-type", "text/plain")
-                        .header("cache-control", "max-age=600, public") // Cache for 10 minutes
-                        .header("x-content-size", &content.len().to_string())
-                        .body(Full::new(Bytes::from(format!(
-                            "Large Content (1MB) - Generated at: {}\n{}",
-                            timestamp,
-                            &content[..500.min(content.len())] // Truncate for readability
-                        ))))?)
-                }
-                "/huge" => {
-                    let content = generate_large_content(5120); // 5MB
-                    let timestamp = SystemTime::now()
-                        .duration_since(UNIX_EPOCH)
-                        .unwrap()
-                        .as_secs();
-
-                    println!(
-                        "Generated huge content ({} bytes)",
-                        content.len()
-                    );
-
-                    // Simulate longer processing for huge content
-                    tokio::time::sleep(std::time::Duration::from_millis(200))
-                        .await;
-
-                    Ok(Response::builder()
-                        .status(StatusCode::OK)
-                        .header("content-type", "text/plain")
-                        .header("cache-control", "max-age=1800, public") // Cache for 30 minutes
-                        .header("x-content-size", &content.len().to_string())
-                        .header("x-streaming", "true")
-                        .body(Full::new(Bytes::from(format!(
-                            "Huge Content (5MB) - Generated at: {}\n{}",
-                            timestamp,
-                            &content[..1000.min(content.len())] // Truncate for readability
-                        ))))?)
-                }
-                "/fresh" => {
-                    let content = generate_large_content(512); // 512KB
-                    let timestamp = SystemTime::now()
-                        .duration_since(UNIX_EPOCH)
-                        .unwrap()
-                        .as_secs();
-
-                    println!(
-                        "Generated fresh content ({} bytes)",
-                        content.len()
-                    );
-
-                    Ok(Response::builder()
-                        .status(StatusCode::OK)
-                        .header("content-type", "text/plain")
-                        .header("cache-control", "no-cache") // Always fresh
-                        .header("x-content-size", &content.len().to_string())
-                        .body(Full::new(Bytes::from(format!(
-                            "Fresh Content (512KB) - Always Generated at: {}\n{}",
-                            timestamp, &content[..300.min(content.len())] // Truncate for readability
-                        ))))?)
-                }
-                "/api/data" => {
-                    let timestamp = SystemTime::now()
-                        .duration_since(UNIX_EPOCH)
-                        .unwrap()
-                        .as_secs();
-
-                    // Generate a large JSON response
-                    let mut items = Vec::new();
-                    for i in 0..1000 {
-                        items.push(format!(
-                            r#"{{"id": {i}, "name": "item_{i}", "description": "This is a sample item with some data", "timestamp": {timestamp}}}"#
-                        ));
-                    }
-                    let json_data = format!(
-                        r#"{{"message": "Large API response", "timestamp": {}, "items": [{}], "total": {}}}"#,
-                        timestamp,
-                        items.join(","),
-                        items.len()
-                    );
-
-                    println!(
-                        "Generated large JSON API response ({} bytes)",
-                        json_data.len()
-                    );
-
-                    Ok(Response::builder()
-                        .status(StatusCode::OK)
-                        .header("content-type", "application/json")
-                        .header("cache-control", "max-age=900, public") // Cache for 15 minutes
-                        .body(Full::new(Bytes::from(json_data)))?)
-                }
-                "/slow" => {
-                    let content = generate_large_content(256); // 256KB
-
-                    // Simulate a slow endpoint with large content
-                    tokio::time::sleep(std::time::Duration::from_millis(1000))
-                        .await;
-
-                    Ok(Response::builder()
-                        .status(StatusCode::OK)
-                        .header("content-type", "text/plain")
-                        .header("cache-control", "max-age=120, public") // Cache for 2 minutes
-                        .header("x-content-size", &content.len().to_string())
-                        .body(Full::new(Bytes::from(format!(
-                            "This was a slow response with large content!\n{}",
-                            &content[..400.min(content.len())] // Truncate for readability
-                        ))))?)
-                }
-                _ => Ok(Response::builder()
-                    .status(StatusCode::NOT_FOUND)
-                    .header("content-type", "text/plain")
-                    .body(Full::new(Bytes::from("Not Found\n")))?),
-            }
+            Ok(http::Response::builder()
+                .status(StatusCode::OK)
+                .header("cache-control", "max-age=300, public")
+                .header("content-type", "text/plain")
+                .header("x-content-size", response_body.len().to_string())
+                .body(Full::new(Bytes::from(response_body)))?)
         })
     }
 }
 
-async fn make_request<S, B, E>(
-    service: &mut S,
-    uri: &str,
-    description: &str,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>>
-where
-    S: Service<Request<Full<Bytes>>, Response = Response<B>, Error = E>,
-    E: std::fmt::Debug,
-{
-    let request = Request::builder().uri(uri).body(Full::new(Bytes::new()))?;
-
-    println!("\n--- {description} ---");
-    println!("Making request to: {uri}");
-
-    let start = std::time::Instant::now();
-    let response = service
-        .call(request)
-        .await
-        .map_err(|e| format!("Service error: {e:?}"))?;
-    let duration = start.elapsed();
-
-    println!("Status: {}", response.status());
-    println!("Response time: {duration:?}");
-
-    // Print cache-related and content-size headers
-    for (name, value) in response.headers() {
-        let name_str = name.as_str();
-        if name_str.starts_with("cache-")
-            || name_str.starts_with("x-cache")
-            || name_str.starts_with("x-content")
-        {
-            println!("Header {name}: {value:?}");
-        }
-    }
-
-    println!("Response received successfully");
-    Ok(())
-}
-
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    println!("HTTP Cache Tower Example - Large Content Streaming Testing");
-    println!("==========================================================");
-
-    // Create streaming cache manager with disk storage
-    let cache_dir = tempfile::tempdir()?;
+    let cache_dir = tempfile::tempdir().unwrap();
     let streaming_manager =
         StreamingManager::new(cache_dir.path().to_path_buf());
 
-    // Configure cache options (StreamingManager doesn't use traditional cache options)
-    // Instead, we'll create the layer directly
-    let cache_layer = HttpCacheStreamingLayer::new(streaming_manager);
+    // Create the streaming cache layer with cache status headers enabled
+    let options =
+        HttpCacheOptions { cache_status_headers: true, ..Default::default() };
+    let streaming_layer =
+        HttpCacheStreamingLayer::with_options(streaming_manager, options);
 
-    // Build the service with streaming caching middleware
-    let mut service =
-        ServiceBuilder::new().layer(cache_layer).service(LargeContentService);
+    // Build the service with streaming cache middleware
+    let mut service = ServiceBuilder::new()
+        .layer(streaming_layer)
+        .service(StreamingMockService::new());
 
-    println!(
-        "Demonstrating HTTP streaming caching with large response bodies...\n"
-    );
+    println!("Testing streaming HTTP caching with tower/hyper...");
 
-    // Scenario 1: Small content caching
-    make_request(
-        &mut service,
-        "http://example.com/small",
-        "Small content (1KB) - First request",
-    )
-    .await?;
-    make_request(
-        &mut service,
-        "http://example.com/small",
-        "Small content (1KB) - Second request (should be cached)",
-    )
-    .await?;
+    // First request - content will be cached as stream
+    let start = Instant::now();
+    let req = Request::builder()
+        .uri("http://example.com/large-content")
+        .body(Full::new(Bytes::new()))?;
+    let response = service.call(req).await?;
+    let duration1 = start.elapsed();
 
-    // Scenario 2: Large content caching
-    make_request(
-        &mut service,
-        "http://example.com/large",
-        "Large content (1MB) - First request",
-    )
-    .await?;
-    make_request(
-        &mut service,
-        "http://example.com/large",
-        "Large content (1MB) - Second request (should be cached)",
-    )
-    .await?;
+    println!("First request: {:?}", duration1);
+    println!("Status: {}", response.status().as_u16());
 
-    // Scenario 3: Huge content caching (this will take longer to generate and cache)
-    make_request(
-        &mut service,
-        "http://example.com/huge",
-        "Huge content (5MB) - First request",
-    )
-    .await?;
-    make_request(
-        &mut service,
-        "http://example.com/huge",
-        "Huge content (5MB) - Second request (should be cached)",
-    )
-    .await?;
+    // Capture cache headers from first response before consuming the body
+    let mut first_cache_headers = Vec::new();
+    for (name, value) in response.headers() {
+        let name_str = name.as_str();
+        if name_str.starts_with("x-cache") {
+            first_cache_headers.push((name.clone(), value.clone()));
+        }
+    }
 
-    // Scenario 4: Non-cacheable large content
-    make_request(
-        &mut service,
-        "http://example.com/fresh",
-        "Fresh content (512KB) - First request",
-    )
-    .await?;
-    make_request(
-        &mut service,
-        "http://example.com/fresh",
-        "Fresh content (512KB) - Second request (always fresh)",
-    )
-    .await?;
+    let body1 = http_body_util::BodyExt::collect(response.into_body())
+        .await?
+        .to_bytes();
+    println!("First response size: {} bytes", body1.len());
 
-    // Scenario 5: Large JSON API response
-    make_request(
-        &mut service,
-        "http://example.com/api/data",
-        "Large JSON API - First request",
-    )
-    .await?;
-    make_request(
-        &mut service,
-        "http://example.com/api/data",
-        "Large JSON API - Second request (should be cached)",
-    )
-    .await?;
+    // Print cache headers from first request
+    for (name, value) in first_cache_headers {
+        println!("Cache header {}: {}", name, value.to_str().unwrap_or(""));
+    }
 
-    // Scenario 6: Slow endpoint with large content
-    make_request(
-        &mut service,
-        "http://example.com/slow",
-        "Slow endpoint with large content (first request)",
-    )
-    .await?;
-    make_request(
-        &mut service,
-        "http://example.com/slow",
-        "Slow endpoint (cached - should be fast)",
-    )
-    .await?;
+    println!();
+
+    // Second request - should be served from streaming cache (much faster)
+    let start = Instant::now();
+    let req = Request::builder()
+        .uri("http://example.com/large-content")
+        .body(Full::new(Bytes::new()))?;
+    let response = service.call(req).await?;
+    let duration2 = start.elapsed();
+
+    println!("Second request: {:?}", duration2);
+    println!("Status: {}", response.status().as_u16());
+
+    // Capture cache headers before consuming the body
+    let mut cache_headers = Vec::new();
+    for (name, value) in response.headers() {
+        let name_str = name.as_str();
+        if name_str.starts_with("x-cache") {
+            cache_headers.push((name.clone(), value.clone()));
+        }
+    }
+
+    let body2 = http_body_util::BodyExt::collect(response.into_body())
+        .await?
+        .to_bytes();
+    println!("Second response size: {} bytes", body2.len());
+
+    // Print cache headers from second request
+    for (name, value) in cache_headers {
+        println!("Cache header {}: {}", name, value.to_str().unwrap_or(""));
+    }
+
+    // Verify content consistency
+    if body1.len() != body2.len() {
+        println!("Warning: Content size mismatch");
+    }
 
     Ok(())
 }

@@ -8,10 +8,17 @@
     cd http-cache && cargo nextest run --no-default-features --features manager-cacache,cacache-smol,with-http-types,manager-moka,streaming-smol
     echo "\n----------\nCore library (tokio):\n"
     cd http-cache && cargo nextest run --no-default-features --features manager-cacache,cacache-tokio,with-http-types,manager-moka,streaming-tokio
+    echo "\n----------\nCore library (smol + rate-limiting):\n"
+    cd http-cache && cargo nextest run --no-default-features --features manager-cacache,cacache-smol,with-http-types,manager-moka,streaming-smol,rate-limiting
+    echo "\n----------\nCore library (tokio + rate-limiting):\n"
+    cd http-cache && cargo nextest run --no-default-features --features manager-cacache,cacache-tokio,with-http-types,manager-moka,streaming-tokio,rate-limiting
     echo "\n----------\nReqwest middleware:\n"
     cd http-cache-reqwest && cargo nextest run --all-features
     echo "\n----------\nSurf middleware:\n"
     cd http-cache-surf && cargo nextest run --all-features
+    echo "\n----------\nUreq middleware:\n"
+    cd http-cache-ureq && cargo nextest run --no-default-features --features manager-cacache
+    cd http-cache-ureq && cargo nextest run --all-features
     echo "\n----------\nTower middleware:\n"
     cd http-cache-tower && cargo nextest run --all-features
     echo "\n----------\nQuickcache middleware:\n"
@@ -23,10 +30,17 @@
     cd http-cache && cargo test --doc --no-default-features --features manager-cacache,cacache-smol,with-http-types,manager-moka,streaming-smol
     echo "\n----------\nCore library (tokio):\n"
     cd http-cache && cargo test --doc --no-default-features --features manager-cacache,cacache-tokio,with-http-types,manager-moka,streaming-tokio
+    echo "\n----------\nCore library (smol + rate-limiting):\n"
+    cd http-cache && cargo test --doc --no-default-features --features manager-cacache,cacache-smol,with-http-types,manager-moka,streaming-smol,rate-limiting
+    echo "\n----------\nCore library (tokio + rate-limiting):\n"
+    cd http-cache && cargo test --doc --no-default-features --features manager-cacache,cacache-tokio,with-http-types,manager-moka,streaming-tokio,rate-limiting
     echo "\n----------\nReqwest middleware:\n"
     cd http-cache-reqwest && cargo test --doc --all-features
     echo "\n----------\nSurf middleware:\n"
     cd http-cache-surf && cargo test --doc --all-features
+    echo "\n----------\nUreq middleware:\n"
+    cd http-cache-ureq && cargo test --doc --no-default-features --features manager-cacache
+    cd http-cache-ureq && cargo test --doc --all-features
     echo "\n----------\nTower middleware:\n"
     cd http-cache-tower && cargo test --doc --all-features
     echo "\n----------\nQuickcache middleware:\n"
@@ -37,10 +51,17 @@
     cd http-cache && cargo check --no-default-features --features manager-cacache,cacache-smol,with-http-types,manager-moka,streaming-smol
     echo "\n----------\nCore library (tokio):\n"
     cd http-cache && cargo check --no-default-features --features manager-cacache,cacache-tokio,with-http-types,manager-moka,streaming-tokio
+    echo "\n----------\nCore library (smol + rate-limiting):\n"
+    cd http-cache && cargo check --no-default-features --features manager-cacache,cacache-smol,with-http-types,manager-moka,streaming-smol,rate-limiting
+    echo "\n----------\nCore library (tokio + rate-limiting):\n"
+    cd http-cache && cargo check --no-default-features --features manager-cacache,cacache-tokio,with-http-types,manager-moka,streaming-tokio,rate-limiting
     echo "\n----------\nReqwest middleware:\n"
     cd http-cache-reqwest && cargo check --all-features
     echo "\n----------\nSurf middleware:\n"
     cd http-cache-surf && cargo check --all-features
+    echo "\n----------\nUreq middleware:\n"
+    cd http-cache-ureq && cargo check --no-default-features --features manager-cacache
+    cd http-cache-ureq && cargo check --all-features
     echo "\n----------\nTower middleware:\n"
     cd http-cache-tower && cargo check --all-features
     echo "\n----------\nQuickcache middleware:\n"
@@ -82,6 +103,8 @@ memory-profile:
     cd http-cache-reqwest && cargo run --example reqwest_streaming --features streaming
     echo "\n----------\nSurf Basic Example:\n"
     cd http-cache-surf && cargo run --example surf_basic --features manager-cacache
+    echo "\n----------\nUreq Basic Example:\n"
+    cd http-cache-ureq && cargo run --example ureq_basic --features manager-cacache
 
 # Generate a changelog with git-cliff
 changelog TAG:
@@ -100,10 +123,16 @@ changelog TAG:
     cd http-cache && cargo clippy --lib --tests --all-targets --no-default-features --features manager-cacache,cacache-smol,with-http-types,manager-moka,streaming-smol -- -D warnings
     echo "\n----------\nCore library (tokio):\n"
     cd http-cache && cargo clippy --lib --tests --all-targets --no-default-features --features manager-cacache,cacache-tokio,with-http-types,manager-moka,streaming-tokio -- -D warnings
+    echo "\n----------\nCore library (smol + rate-limiting):\n"
+    cd http-cache && cargo clippy --lib --tests --all-targets --no-default-features --features manager-cacache,cacache-smol,with-http-types,manager-moka,streaming-smol,rate-limiting -- -D warnings
+    echo "\n----------\nCore library (tokio + rate-limiting):\n"
+    cd http-cache && cargo clippy --lib --tests --all-targets --no-default-features --features manager-cacache,cacache-tokio,with-http-types,manager-moka,streaming-tokio,rate-limiting -- -D warnings
     echo "\n----------\nReqwest middleware:\n"
     cd http-cache-reqwest && cargo clippy --lib --tests --all-targets --all-features -- -D warnings
     echo "\n----------\nSurf middleware:\n"
     cd http-cache-surf && cargo clippy --lib --tests --all-targets --all-features -- -D warnings
+    echo "\n----------\nUreq middleware:\n"
+    cd http-cache-ureq && cargo clippy --lib --tests --all-targets --all-features -- -D warnings
     echo "\n----------\nTower middleware:\n"
     cd http-cache-tower && cargo clippy --lib --tests --all-targets --all-features -- -D warnings
     echo "\n----------\nQuickcache middleware:\n"
@@ -123,6 +152,8 @@ changelog TAG:
     cd http-cache-reqwest && cargo msrv find
     echo "\n----------\nSurf middleware:\n"
     cd http-cache-surf && cargo msrv find
+    echo "\n----------\nUreq middleware:\n"
+    cd http-cache-ureq && cargo msrv find
     echo "\n----------\nTower middleware:\n"
     cd http-cache-tower && cargo msrv find
     echo "\n----------\nQuickcache middleware:\n"
@@ -136,6 +167,8 @@ changelog TAG:
     cd http-cache-reqwest && cargo msrv verify
     echo "\n----------\nSurf middleware:\n"
     cd http-cache-surf && cargo msrv verify
+    echo "\n----------\nUreq middleware:\n"
+    cd http-cache-ureq && cargo msrv verify
     echo "\n----------\nTower middleware:\n"
     cd http-cache-tower && cargo msrv verify
     echo "\n----------\nQuickcache middleware:\n"
@@ -153,6 +186,8 @@ changelog TAG:
     cd http-cache-reqwest && cargo publish --dry-run
     echo "Surf middleware:"
     cd http-cache-surf && cargo publish --dry-run
+    echo "Ureq middleware:"
+    cd http-cache-ureq && cargo publish --dry-run
     echo "Tower middleware:"
     cd http-cache-tower && cargo publish --dry-run
     echo "Quickcache middleware:"
@@ -173,6 +208,8 @@ changelog TAG:
     cd http-cache-reqwest && cargo publish
     echo "Surf middleware:"
     cd http-cache-surf && cargo publish
+    echo "Ureq middleware:"
+    cd http-cache-ureq && cargo publish
     echo "Tower middleware:"
     cd http-cache-tower && cargo publish
     echo "Quickcache middleware:"

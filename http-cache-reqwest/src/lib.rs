@@ -269,22 +269,18 @@
 //! # #[cfg(not(feature = "manager-moka"))]
 //! # fn main() {}
 //! ```
-mod error;
+// Re-export unified error types from http-cache core
+pub use http_cache::{BadRequest, HttpCacheError};
 
-pub use error::BadRequest;
 #[cfg(feature = "streaming")]
-pub use error::ReqwestStreamingError;
+/// Type alias for reqwest streaming errors, using the unified streaming error system
+pub type ReqwestStreamingError = http_cache::ClientStreamingError;
 
 #[cfg(feature = "streaming")]
 use http_cache::StreamingCacheManager;
 
-use anyhow::anyhow;
-
 use std::{
-    collections::HashMap,
-    convert::{TryFrom, TryInto},
-    str::FromStr,
-    time::SystemTime,
+    collections::HashMap, convert::TryInto, str::FromStr, time::SystemTime,
 };
 
 pub use http::request::Parts;
@@ -298,6 +294,14 @@ use http_cache::{
 use http_cache_semantics::CachePolicy;
 use reqwest::{Request, Response, ResponseBuilderExt};
 use reqwest_middleware::{Error, Next};
+
+/// Helper function to convert our error types to reqwest middleware errors
+fn to_middleware_error<E: std::error::Error + Send + Sync + 'static>(
+    error: E,
+) -> Error {
+    // Convert to anyhow::Error which is what reqwest-middleware expects
+    Error::Middleware(anyhow::Error::new(error))
+}
 use url::Url;
 
 pub use http_cache::{
@@ -319,6 +323,12 @@ pub use http_cache::CACacheManager;
 #[cfg(feature = "manager-moka")]
 #[cfg_attr(docsrs, doc(cfg(feature = "manager-moka")))]
 pub use http_cache::{MokaCache, MokaCacheBuilder, MokaManager};
+
+#[cfg(feature = "rate-limiting")]
+#[cfg_attr(docsrs, doc(cfg(feature = "rate-limiting")))]
+pub use http_cache::rate_limiting::{
+    CacheAwareRateLimiter, DirectRateLimiter, DomainRateLimiter, Quota,
+};
 
 /// Wrapper for [`HttpCache`]
 #[derive(Debug)]
@@ -364,7 +374,7 @@ pub(crate) struct ReqwestMiddleware<'a> {
 fn clone_req(request: &Request) -> std::result::Result<Request, Error> {
     match request.try_clone() {
         Some(r) => Ok(r),
-        None => Err(Error::Middleware(anyhow!(BadRequest))),
+        None => Err(to_middleware_error(BadRequest)),
     }
 }
 
@@ -404,10 +414,20 @@ impl Middleware for ReqwestMiddleware<'_> {
         Ok(())
     }
     fn parts(&self) -> Result<Parts> {
-        let copied_req = clone_req(&self.req)?;
-        let converted =
-            http::Request::try_from(copied_req).map_err(BoxError::from)?;
-        Ok(converted.into_parts().0)
+        // Extract request parts without cloning the body
+        let mut builder = http::Request::builder()
+            .method(self.req.method().as_str())
+            .uri(self.req.url().as_str())
+            .version(self.req.version());
+
+        // Add headers
+        for (name, value) in self.req.headers() {
+            builder = builder.header(name, value);
+        }
+
+        // Build with empty body just to get the Parts
+        let http_req = builder.body(()).map_err(Box::new)?;
+        Ok(http_req.into_parts().0)
     }
     fn url(&self) -> Result<Url> {
         Ok(self.req.url().clone())
@@ -503,6 +523,26 @@ fn convert_reqwest_response_to_http_parts(
 }
 
 #[cfg(feature = "streaming")]
+// Helper function to add cache status headers to a streaming response
+fn add_cache_status_headers_to_response<T>(
+    mut response: http::Response<T>,
+    hit_or_miss: &str,
+    cache_lookup: &str,
+) -> http::Response<T> {
+    use http::HeaderValue;
+    use http_cache::{XCACHE, XCACHELOOKUP};
+
+    let headers = response.headers_mut();
+    if let Ok(value1) = HeaderValue::from_str(hit_or_miss) {
+        headers.insert(XCACHE, value1);
+    }
+    if let Ok(value2) = HeaderValue::from_str(cache_lookup) {
+        headers.insert(XCACHELOOKUP, value2);
+    }
+    response
+}
+
+#[cfg(feature = "streaming")]
 // Converts a streaming response to reqwest Response using the StreamingCacheManager's method
 async fn convert_streaming_body_to_reqwest<T>(
     response: http::Response<T::Body>,
@@ -532,11 +572,11 @@ where
 }
 
 fn bad_header(e: reqwest::header::InvalidHeaderValue) -> Error {
-    Error::Middleware(anyhow!(e))
+    to_middleware_error(HttpCacheError::Cache(e.to_string()))
 }
 
 fn from_box_error(e: BoxError) -> Error {
-    Error::Middleware(anyhow!(e))
+    to_middleware_error(HttpCacheError::Cache(e.to_string()))
 }
 
 #[async_trait::async_trait]
@@ -548,14 +588,14 @@ impl<T: CacheManager> reqwest_middleware::Middleware for Cache<T> {
         next: Next<'_>,
     ) -> std::result::Result<Response, Error> {
         let mut middleware = ReqwestMiddleware { req, next, extensions };
-        if self
-            .0
-            .can_cache_request(&middleware)
-            .map_err(|e| Error::Middleware(anyhow!(e)))?
-        {
+        let can_cache =
+            self.0.can_cache_request(&middleware).map_err(from_box_error)?;
+
+        if can_cache {
             let res = self.0.run(middleware).await.map_err(from_box_error)?;
-            let converted = convert_response(res)
-                .map_err(|e| Error::Middleware(anyhow!("{}", e)))?;
+            let converted = convert_response(res).map_err(|e| {
+                to_middleware_error(HttpCacheError::Cache(e.to_string()))
+            })?;
             Ok(converted)
         } else {
             self.0
@@ -596,10 +636,22 @@ where
         use http_cache::HttpCacheStreamInterface;
 
         // Convert reqwest Request to http::Request for analysis
-        let copied_req = clone_req(&req)?;
+        // If the request can't be cloned (e.g., streaming body), bypass cache gracefully
+        let copied_req = match clone_req(&req) {
+            Ok(req) => req,
+            Err(_) => {
+                // Request has non-cloneable body (streaming/multipart), bypass cache
+                let response = next.run(req, extensions).await?;
+                return Ok(response);
+            }
+        };
         let http_req = match http::Request::try_from(copied_req) {
             Ok(r) => r,
-            Err(e) => return Err(Error::Middleware(anyhow!(e))),
+            Err(e) => {
+                return Err(to_middleware_error(HttpCacheError::Cache(
+                    e.to_string(),
+                )))
+            }
         };
         let (parts, _) = http_req.into_parts();
 
@@ -609,7 +661,11 @@ where
         // Analyze the request for caching behavior
         let analysis = match self.cache.analyze_request(&parts, mode_override) {
             Ok(a) => a,
-            Err(e) => return Err(Error::Middleware(anyhow!(e))),
+            Err(e) => {
+                return Err(to_middleware_error(HttpCacheError::Cache(
+                    e.to_string(),
+                )))
+            }
         };
 
         // Check if we should bypass cache entirely
@@ -623,7 +679,9 @@ where
             .cache
             .lookup_cached_response(&analysis.cache_key)
             .await
-            .map_err(|e| Error::Middleware(anyhow!(e)))?
+            .map_err(|e| {
+                to_middleware_error(HttpCacheError::Cache(e.to_string()))
+            })?
         {
             // Check if cached response is still fresh
             use http_cache_semantics::BeforeRequest;
@@ -632,13 +690,38 @@ where
                 BeforeRequest::Fresh(_fresh_parts) => {
                     // Convert cached streaming response back to reqwest Response
                     // Now using streaming instead of buffering!
+                    let mut cached_response = cached_response;
+
+                    // Add cache status headers if enabled
+                    if self.cache.options.cache_status_headers {
+                        cached_response = add_cache_status_headers_to_response(
+                            cached_response,
+                            "HIT",
+                            "HIT",
+                        );
+                    }
+
                     return convert_streaming_body_to_reqwest::<T>(
                         cached_response,
                     )
                     .await
-                    .map_err(|e| Error::Middleware(anyhow!(e)));
+                    .map_err(|e| {
+                        to_middleware_error(HttpCacheError::Cache(
+                            e.to_string(),
+                        ))
+                    });
                 }
                 BeforeRequest::Stale { request: conditional_parts, .. } => {
+                    // Apply rate limiting before revalidation request
+                    #[cfg(feature = "rate-limiting")]
+                    if let Some(rate_limiter) = &self.cache.options.rate_limiter
+                    {
+                        let url = req.url().clone();
+                        let rate_limit_key =
+                            url.host_str().unwrap_or("unknown");
+                        rate_limiter.until_key_ready(rate_limit_key).await;
+                    }
+
                     // Create conditional request
                     let mut conditional_req = req;
                     for (name, value) in conditional_parts.headers.iter() {
@@ -656,18 +739,42 @@ where
                             convert_reqwest_response_to_http_parts(
                                 conditional_response,
                             )
-                            .map_err(|e| Error::Middleware(anyhow!("{}", e)))?;
+                            .map_err(|e| {
+                                to_middleware_error(HttpCacheError::Cache(
+                                    e.to_string(),
+                                ))
+                            })?;
                         let updated_response = self
                             .cache
                             .handle_not_modified(cached_response, &fresh_parts)
                             .await
-                            .map_err(|e| Error::Middleware(anyhow!(e)))?;
+                            .map_err(|e| {
+                                to_middleware_error(HttpCacheError::Cache(
+                                    e.to_string(),
+                                ))
+                            })?;
+
+                        let mut final_response = updated_response;
+
+                        // Add cache status headers if enabled
+                        if self.cache.options.cache_status_headers {
+                            final_response =
+                                add_cache_status_headers_to_response(
+                                    final_response,
+                                    "HIT",
+                                    "HIT",
+                                );
+                        }
 
                         return convert_streaming_body_to_reqwest::<T>(
-                            updated_response,
+                            final_response,
                         )
                         .await
-                        .map_err(|e| Error::Middleware(anyhow!(e)));
+                        .map_err(|e| {
+                            to_middleware_error(HttpCacheError::Cache(
+                                e.to_string(),
+                            ))
+                        });
                     } else {
                         // Fresh response received, process it through the cache
                         let http_response =
@@ -675,21 +782,53 @@ where
                                 conditional_response,
                             )
                             .await
-                            .map_err(|e| Error::Middleware(anyhow!("{}", e)))?;
+                            .map_err(|e| {
+                                to_middleware_error(HttpCacheError::Cache(
+                                    e.to_string(),
+                                ))
+                            })?;
                         let cached_response = self
                             .cache
                             .process_response(analysis, http_response)
                             .await
-                            .map_err(|e| Error::Middleware(anyhow!(e)))?;
+                            .map_err(|e| {
+                                to_middleware_error(HttpCacheError::Cache(
+                                    e.to_string(),
+                                ))
+                            })?;
+
+                        let mut final_response = cached_response;
+
+                        // Add cache status headers if enabled
+                        if self.cache.options.cache_status_headers {
+                            final_response =
+                                add_cache_status_headers_to_response(
+                                    final_response,
+                                    "MISS",
+                                    "MISS",
+                                );
+                        }
 
                         return convert_streaming_body_to_reqwest::<T>(
-                            cached_response,
+                            final_response,
                         )
                         .await
-                        .map_err(|e| Error::Middleware(anyhow!(e)));
+                        .map_err(|e| {
+                            to_middleware_error(HttpCacheError::Cache(
+                                e.to_string(),
+                            ))
+                        });
                     }
                 }
             }
+        }
+
+        // Apply rate limiting before fresh request
+        #[cfg(feature = "rate-limiting")]
+        if let Some(rate_limiter) = &self.cache.options.rate_limiter {
+            let url = req.url().clone();
+            let rate_limit_key = url.host_str().unwrap_or("unknown");
+            rate_limiter.until_key_ready(rate_limit_key).await;
         }
 
         // Fetch fresh response from upstream
@@ -697,18 +836,33 @@ where
         let http_response =
             convert_reqwest_response_to_http_full_body(response)
                 .await
-                .map_err(|e| Error::Middleware(anyhow!("{}", e)))?;
+                .map_err(|e| {
+                    to_middleware_error(HttpCacheError::Cache(e.to_string()))
+                })?;
 
         // Process and potentially cache the response
         let cached_response = self
             .cache
             .process_response(analysis, http_response)
             .await
-            .map_err(|e| Error::Middleware(anyhow!(e)))?;
+            .map_err(|e| {
+                to_middleware_error(HttpCacheError::Cache(e.to_string()))
+            })?;
 
-        convert_streaming_body_to_reqwest::<T>(cached_response)
-            .await
-            .map_err(|e| Error::Middleware(anyhow!(e)))
+        let mut final_response = cached_response;
+
+        // Add cache status headers if enabled
+        if self.cache.options.cache_status_headers {
+            final_response = add_cache_status_headers_to_response(
+                final_response,
+                "MISS",
+                "MISS",
+            );
+        }
+
+        convert_streaming_body_to_reqwest::<T>(final_response).await.map_err(
+            |e| to_middleware_error(HttpCacheError::Cache(e.to_string())),
+        )
     }
 }
 

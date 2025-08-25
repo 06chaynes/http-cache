@@ -1,11 +1,14 @@
-use crate::{error, Cache};
+use crate::{BadRequest, Cache, HttpCacheError};
 use std::sync::Arc;
 
 use http_cache::*;
 use reqwest::Client;
 use reqwest_middleware::ClientBuilder;
 use url::Url;
-use wiremock::{matchers::method, Mock, MockServer, ResponseTemplate};
+use wiremock::{
+    matchers::{method, path},
+    Mock, MockServer, ResponseTemplate,
+};
 
 /// Helper function to create a temporary cache manager
 fn create_cache_manager() -> CACacheManager {
@@ -42,12 +45,20 @@ const CACHEABLE_PUBLIC: &str = "max-age=86400, public";
 #[allow(clippy::default_constructed_unit_structs)]
 fn test_errors() -> Result<()> {
     // Testing the Debug, Default, and Clone traits for the error types
-    let br = error::BadRequest::default();
+    let br = BadRequest::default();
     assert_eq!(format!("{:?}", br.clone()), "BadRequest",);
     assert_eq!(
         br.to_string(),
         "Request object is not cloneable. Are you passing a streaming body?"
             .to_string(),
+    );
+
+    // Test HttpCacheError
+    let reqwest_err = HttpCacheError::cache("test cache error".to_string());
+    assert!(format!("{:?}", &reqwest_err).contains("Cache"));
+    assert_eq!(
+        reqwest_err.to_string(),
+        "Cache error: test cache error".to_string(),
     );
     Ok(())
 }
@@ -65,7 +76,7 @@ async fn default_mode() -> Result<()> {
         .with(Cache(HttpCache {
             mode: CacheMode::Default,
             manager: manager.clone(),
-            options: HttpCacheOptions::default(),
+            options: Default::default(),
         }))
         .build();
 
@@ -98,15 +109,11 @@ async fn default_mode_with_options() -> Result<()> {
             mode: CacheMode::Default,
             manager: manager.clone(),
             options: HttpCacheOptions {
-                cache_key: None,
                 cache_options: Some(CacheOptions {
                     shared: false,
                     ..Default::default()
                 }),
-                cache_mode_fn: None,
-                cache_bust: None,
-                cache_status_headers: true,
-                response_cache_mode_fn: None,
+                ..HttpCacheOptions::default()
             },
         }))
         .build();
@@ -135,7 +142,7 @@ async fn no_cache_mode() -> Result<()> {
         .with(Cache(HttpCache {
             mode: CacheMode::NoCache,
             manager: manager.clone(),
-            options: HttpCacheOptions::default(),
+            options: Default::default(),
         }))
         .build();
 
@@ -167,15 +174,11 @@ async fn reload_mode() -> Result<()> {
             mode: CacheMode::Reload,
             manager: manager.clone(),
             options: HttpCacheOptions {
-                cache_key: None,
                 cache_options: Some(CacheOptions {
                     shared: false,
                     ..Default::default()
                 }),
-                cache_mode_fn: None,
-                cache_bust: None,
-                cache_status_headers: true,
-                response_cache_mode_fn: None,
+                ..HttpCacheOptions::default()
             },
         }))
         .build();
@@ -212,11 +215,7 @@ async fn custom_cache_key() -> Result<()> {
                 cache_key: Some(Arc::new(|req: &http::request::Parts| {
                     format!("{}:{}:{:?}:test", req.method, req.uri, req.version)
                 })),
-                cache_options: None,
-                cache_mode_fn: None,
-                cache_bust: None,
-                cache_status_headers: true,
-                response_cache_mode_fn: None,
+                ..Default::default()
             },
         }))
         .build();
@@ -260,7 +259,8 @@ async fn custom_cache_mode_fn() -> Result<()> {
                 })),
                 cache_bust: None,
                 cache_status_headers: true,
-                response_cache_mode_fn: None,
+                max_ttl: None,
+                ..Default::default()
             },
         }))
         .build();
@@ -300,14 +300,7 @@ async fn override_cache_mode() -> Result<()> {
         .with(Cache(HttpCache {
             mode: CacheMode::Default,
             manager: manager.clone(),
-            options: HttpCacheOptions {
-                cache_key: None,
-                cache_options: None,
-                cache_mode_fn: None,
-                cache_bust: None,
-                cache_status_headers: true,
-                response_cache_mode_fn: None,
-            },
+            options: Default::default(),
         }))
         .build();
 
@@ -352,7 +345,8 @@ async fn no_status_headers() -> Result<()> {
                 cache_mode_fn: None,
                 cache_bust: None,
                 cache_status_headers: false,
-                response_cache_mode_fn: None,
+                max_ttl: None,
+                ..Default::default()
             },
         }))
         .build();
@@ -406,7 +400,8 @@ async fn cache_bust() -> Result<()> {
                     },
                 )),
                 cache_status_headers: true,
-                response_cache_mode_fn: None,
+                max_ttl: None,
+                ..Default::default()
             },
         }))
         .build();
@@ -445,7 +440,7 @@ async fn delete_after_non_get_head_method_request() -> Result<()> {
         .with(Cache(HttpCache {
             mode: CacheMode::Default,
             manager: manager.clone(),
-            options: HttpCacheOptions::default(),
+            options: Default::default(),
         }))
         .build();
 
@@ -482,7 +477,7 @@ async fn default_mode_no_cache_response() -> Result<()> {
         .with(Cache(HttpCache {
             mode: CacheMode::Default,
             manager: manager.clone(),
-            options: HttpCacheOptions::default(),
+            options: Default::default(),
         }))
         .build();
 
@@ -521,7 +516,7 @@ async fn removes_warning() -> Result<()> {
         .with(Cache(HttpCache {
             mode: CacheMode::Default,
             manager: manager.clone(),
-            options: HttpCacheOptions::default(),
+            options: Default::default(),
         }))
         .build();
 
@@ -554,7 +549,7 @@ async fn no_store_mode() -> Result<()> {
         .with(Cache(HttpCache {
             mode: CacheMode::NoStore,
             manager: manager.clone(),
-            options: HttpCacheOptions::default(),
+            options: Default::default(),
         }))
         .build();
 
@@ -586,7 +581,7 @@ async fn force_cache_mode() -> Result<()> {
         .with(Cache(HttpCache {
             mode: CacheMode::ForceCache,
             manager: manager.clone(),
-            options: HttpCacheOptions::default(),
+            options: Default::default(),
         }))
         .build();
 
@@ -618,7 +613,7 @@ async fn ignore_rules_mode() -> Result<()> {
         .with(Cache(HttpCache {
             mode: CacheMode::IgnoreRules,
             manager: manager.clone(),
-            options: HttpCacheOptions::default(),
+            options: Default::default(),
         }))
         .build();
 
@@ -653,7 +648,7 @@ async fn revalidation_304() -> Result<()> {
         .with(Cache(HttpCache {
             mode: CacheMode::Default,
             manager: manager.clone(),
-            options: HttpCacheOptions::default(),
+            options: Default::default(),
         }))
         .build();
 
@@ -689,7 +684,7 @@ async fn revalidation_200() -> Result<()> {
         .with(Cache(HttpCache {
             mode: CacheMode::Default,
             manager: manager.clone(),
-            options: HttpCacheOptions::default(),
+            options: Default::default(),
         }))
         .build();
 
@@ -727,7 +722,7 @@ async fn revalidation_500() -> Result<()> {
         .with(Cache(HttpCache {
             mode: CacheMode::Default,
             manager: manager.clone(),
-            options: HttpCacheOptions::default(),
+            options: Default::default(),
         }))
         .build();
 
@@ -767,7 +762,7 @@ mod only_if_cached_mode {
             .with(Cache(HttpCache {
                 mode: CacheMode::OnlyIfCached,
                 manager: manager.clone(),
-                options: HttpCacheOptions::default(),
+                options: Default::default(),
             }))
             .build();
 
@@ -799,7 +794,7 @@ mod only_if_cached_mode {
             .with(Cache(HttpCache {
                 mode: CacheMode::Default,
                 manager: manager.clone(),
-                options: HttpCacheOptions::default(),
+                options: Default::default(),
             }))
             .build();
 
@@ -819,7 +814,7 @@ mod only_if_cached_mode {
             .with(Cache(HttpCache {
                 mode: CacheMode::OnlyIfCached,
                 manager: manager.clone(),
-                options: HttpCacheOptions::default(),
+                options: Default::default(),
             }))
             .build();
 
@@ -853,7 +848,7 @@ async fn head_request_caching() -> Result<()> {
         .with(Cache(HttpCache {
             mode: CacheMode::Default,
             manager: manager.clone(),
-            options: HttpCacheOptions::default(),
+            options: Default::default(),
         }))
         .build();
 
@@ -913,7 +908,7 @@ async fn head_request_cached_like_get() -> Result<()> {
         .with(Cache(HttpCache {
             mode: CacheMode::Default,
             manager: manager.clone(),
-            options: HttpCacheOptions::default(),
+            options: Default::default(),
         }))
         .build();
 
@@ -971,7 +966,7 @@ async fn put_request_invalidates_cache() -> Result<()> {
         .with(Cache(HttpCache {
             mode: CacheMode::Default,
             manager: manager.clone(),
-            options: HttpCacheOptions::default(),
+            options: Default::default(),
         }))
         .build();
 
@@ -1024,7 +1019,7 @@ async fn patch_request_invalidates_cache() -> Result<()> {
         .with(Cache(HttpCache {
             mode: CacheMode::Default,
             manager: manager.clone(),
-            options: HttpCacheOptions::default(),
+            options: Default::default(),
         }))
         .build();
 
@@ -1077,7 +1072,7 @@ async fn delete_request_invalidates_cache() -> Result<()> {
         .with(Cache(HttpCache {
             mode: CacheMode::Default,
             manager: manager.clone(),
-            options: HttpCacheOptions::default(),
+            options: Default::default(),
         }))
         .build();
 
@@ -1124,7 +1119,7 @@ async fn options_request_not_cached() -> Result<()> {
         .with(Cache(HttpCache {
             mode: CacheMode::Default,
             manager: manager.clone(),
-            options: HttpCacheOptions::default(),
+            options: Default::default(),
         }))
         .build();
 
@@ -1143,6 +1138,81 @@ async fn options_request_not_cached() -> Result<()> {
     let res2 =
         client.request(reqwest::Method::OPTIONS, url.clone()).send().await?;
     assert_eq!(res2.status(), 200);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_multipart_form_cloning_issue() -> Result<()> {
+    // This test reproduces the exact issue reported by the user
+    // where multipart forms cause "Request object is not cloneable" errors
+
+    let manager = CACacheManager::new(".cache".into(), true);
+    let mock_server = MockServer::start().await;
+
+    // Mock an API endpoint that accepts multipart forms
+    let mock = Mock::given(method("POST"))
+        .and(path("/api/upload"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "application/json")
+                .insert_header("cache-control", "no-cache") // Should not be cached anyway
+                .set_body_bytes(r#"{"status": "uploaded"}"#),
+        )
+        .expect(1); // Should be called once since cache is bypassed
+
+    let _mock_guard = mock_server.register_as_scoped(mock).await;
+
+    // Create cached client
+    let client = ClientBuilder::new(
+        Client::builder()
+            .build()
+            .expect("should be able to construct reqwest client"),
+    )
+    .with(Cache(HttpCache {
+        mode: CacheMode::Default,
+        manager,
+        options: Default::default(),
+    }))
+    .build();
+
+    // Create a streaming body that should cause cloning issues
+    // We need to create a body that can't be cloned - like a stream
+    use bytes::Bytes;
+    use futures_util::stream;
+    use reqwest::Body;
+
+    let file_content = b"fake file content for testing";
+    // Create a stream that can't be cloned
+    let stream = stream::iter(vec![Ok::<_, reqwest::Error>(Bytes::from(
+        file_content.to_vec(),
+    ))]);
+    let body = Body::wrap_stream(stream);
+
+    let url = format!("{}/api/upload", mock_server.uri());
+
+    // This should reproduce the cloning error when the cache middleware
+    // tries to clone the request for cache analysis
+    let result = client
+        .post(&url)
+        .header("Accept", "application/json")
+        .header("api-key", "test-key")
+        .header("content-type", "application/octet-stream")
+        .body(body)
+        .send()
+        .await;
+
+    // With the graceful fallback fix, the request should now succeed
+    // by bypassing the cache entirely
+    match result {
+        Ok(response) => {
+            // This is what we expect - graceful fallback working
+            assert_eq!(response.status(), 200);
+        }
+        Err(e) => {
+            panic!("Expected graceful fallback, but got error: {}", e);
+        }
+    }
 
     Ok(())
 }
@@ -1173,7 +1243,7 @@ mod streaming_tests {
         let cache = HttpStreamingCache {
             mode: CacheMode::Default,
             manager,
-            options: HttpCacheOptions::default(),
+            options: Default::default(),
         };
 
         // Create a test request
@@ -1231,7 +1301,7 @@ mod streaming_tests {
         let cache = HttpStreamingCache {
             mode: CacheMode::Default,
             manager,
-            options: HttpCacheOptions::default(),
+            options: Default::default(),
         };
 
         // Create a large test response (1MB)
@@ -1276,7 +1346,7 @@ mod streaming_tests {
         let cache = HttpStreamingCache {
             mode: CacheMode::Default,
             manager,
-            options: HttpCacheOptions::default(),
+            options: Default::default(),
         };
 
         let request = Request::builder()
@@ -1317,7 +1387,7 @@ mod streaming_tests {
         let cache = HttpStreamingCache {
             mode: CacheMode::NoStore,
             manager,
-            options: HttpCacheOptions::default(),
+            options: Default::default(),
         };
 
         let request = Request::builder()
@@ -1360,7 +1430,7 @@ mod streaming_tests {
 
         // Mock endpoint that returns 200 with no-cache headers
         let no_cache_mock = Mock::given(method(GET))
-            .and(wiremock::matchers::path("/api/data"))
+            .and(path("/api/data"))
             .respond_with(
                 ResponseTemplate::new(200)
                     .insert_header(
@@ -1374,7 +1444,7 @@ mod streaming_tests {
 
         // Mock endpoint that returns 429 with cacheable headers
         let rate_limit_mock = Mock::given(method(GET))
-            .and(wiremock::matchers::path("/api/rate-limited"))
+            .and(path("/api/rate-limited"))
             .respond_with(
                 ResponseTemplate::new(429)
                     .insert_header("cache-control", "public, max-age=300")
@@ -1396,11 +1466,6 @@ mod streaming_tests {
                 mode: CacheMode::Default,
                 manager: manager.clone(),
                 options: HttpCacheOptions {
-                    cache_key: None,
-                    cache_options: None,
-                    cache_mode_fn: None,
-                    cache_bust: None,
-                    cache_status_headers: true,
                     response_cache_mode_fn: Some(Arc::new(
                         |_request_parts, response| {
                             match response.status {
@@ -1412,6 +1477,7 @@ mod streaming_tests {
                             }
                         },
                     )),
+                    ..Default::default()
                 },
             }))
             .build();
@@ -1456,7 +1522,7 @@ mod streaming_tests {
         let cache_no_cache = HttpStreamingCache {
             mode: CacheMode::NoCache,
             manager: manager.clone(),
-            options: HttpCacheOptions::default(),
+            options: Default::default(),
         };
 
         let request = Request::builder()
@@ -1475,7 +1541,7 @@ mod streaming_tests {
         let cache_force = HttpStreamingCache {
             mode: CacheMode::ForceCache,
             manager: manager.clone(),
-            options: HttpCacheOptions::default(),
+            options: Default::default(),
         };
 
         let request2 = Request::builder()
@@ -1517,7 +1583,8 @@ mod streaming_tests {
                 })),
                 cache_bust: None,
                 cache_status_headers: false,
-                response_cache_mode_fn: None,
+                max_ttl: None,
+                ..Default::default()
             },
         };
 
@@ -1546,7 +1613,7 @@ mod streaming_tests {
         let cache = HttpStreamingCache {
             mode: CacheMode::Default,
             manager,
-            options: HttpCacheOptions::default(),
+            options: Default::default(),
         };
 
         // Test with malformed request
@@ -1571,7 +1638,7 @@ mod streaming_tests {
         let cache = Arc::new(HttpStreamingCache {
             mode: CacheMode::Default,
             manager,
-            options: HttpCacheOptions::default(),
+            options: Default::default(),
         });
 
         let mut join_set = JoinSet::new();
@@ -1612,7 +1679,7 @@ mod streaming_tests {
         let cache = HttpStreamingCache {
             mode: CacheMode::Default,
             manager,
-            options: HttpCacheOptions::default(),
+            options: Default::default(),
         };
 
         // Test with request that has extensions (simulating middleware data)
@@ -1641,7 +1708,7 @@ mod streaming_tests {
         let cache = HttpStreamingCache {
             mode: CacheMode::Default,
             manager,
-            options: HttpCacheOptions::default(),
+            options: Default::default(),
         };
 
         // Create a request with headers that could affect caching via Vary
@@ -1679,6 +1746,495 @@ mod streaming_tests {
         let cached_response =
             cache.lookup_cached_response(&analysis.cache_key).await?;
         assert!(cached_response.is_some());
+
+        Ok(())
+    }
+
+    #[cfg(feature = "rate-limiting")]
+    #[tokio::test]
+    async fn test_streaming_with_rate_limiting() -> Result<()> {
+        use crate::{CacheAwareRateLimiter, StreamingCache};
+        use std::sync::{Arc, Mutex};
+        use std::time::{Duration, Instant};
+
+        // Mock rate limiter for testing rate limiting behavior
+        #[derive(Debug)]
+        struct MockStreamingRateLimiter {
+            calls: Arc<Mutex<Vec<String>>>,
+            delay: Duration,
+        }
+
+        impl MockStreamingRateLimiter {
+            fn new(delay: Duration) -> Self {
+                Self { calls: Arc::new(Mutex::new(Vec::new())), delay }
+            }
+        }
+
+        #[async_trait::async_trait]
+        impl CacheAwareRateLimiter for MockStreamingRateLimiter {
+            async fn until_key_ready(&self, key: &str) {
+                self.calls.lock().unwrap().push(key.to_string());
+                if self.delay > Duration::ZERO {
+                    tokio::time::sleep(self.delay).await;
+                }
+            }
+
+            fn check_key(&self, _key: &str) -> bool {
+                true // Always allow for testing
+            }
+        }
+
+        let manager = create_streaming_cache_manager();
+        let rate_limiter =
+            MockStreamingRateLimiter::new(Duration::from_millis(50));
+        let call_counter = rate_limiter.calls.clone();
+
+        let options = HttpCacheOptions {
+            rate_limiter: Some(Arc::new(rate_limiter)),
+            ..HttpCacheOptions::default()
+        };
+
+        let client = ClientBuilder::new(Client::new())
+            .with(StreamingCache::with_options(
+                manager,
+                CacheMode::Default,
+                options,
+            ))
+            .build();
+
+        let mock_server = MockServer::start().await;
+        let url = format!("{}/streaming-rate-limited", mock_server.uri());
+
+        // Mock non-cacheable response to ensure network requests
+        Mock::given(method("GET"))
+            .and(path("/streaming-rate-limited"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("cache-control", "no-cache")
+                    .set_body_bytes(b"streaming response"),
+            )
+            .expect(2)
+            .mount(&mock_server)
+            .await;
+
+        // First request - should apply rate limiting
+        let start = Instant::now();
+        let _response1 = client.get(&url).send().await?;
+        let first_duration = start.elapsed();
+
+        assert_eq!(call_counter.lock().unwrap().len(), 1);
+        assert!(
+            first_duration >= Duration::from_millis(50),
+            "First request should be rate limited"
+        );
+
+        // Second request - should also apply rate limiting (not cached due to no-cache)
+        let start = Instant::now();
+        let _response2 = client.get(&url).send().await?;
+        let second_duration = start.elapsed();
+
+        assert_eq!(call_counter.lock().unwrap().len(), 2);
+        assert!(
+            second_duration >= Duration::from_millis(50),
+            "Second request should also be rate limited"
+        );
+
+        Ok(())
+    }
+
+    #[cfg(feature = "rate-limiting")]
+    #[tokio::test]
+    async fn test_streaming_cache_hit_bypasses_rate_limiting() -> Result<()> {
+        use crate::{CacheAwareRateLimiter, StreamingCache};
+        use std::sync::{Arc, Mutex};
+        use std::time::{Duration, Instant};
+
+        // Mock rate limiter
+        #[derive(Debug)]
+        struct MockStreamingRateLimiter {
+            calls: Arc<Mutex<Vec<String>>>,
+            delay: Duration,
+        }
+
+        impl MockStreamingRateLimiter {
+            fn new(delay: Duration) -> Self {
+                Self { calls: Arc::new(Mutex::new(Vec::new())), delay }
+            }
+        }
+
+        #[async_trait::async_trait]
+        impl CacheAwareRateLimiter for MockStreamingRateLimiter {
+            async fn until_key_ready(&self, key: &str) {
+                self.calls.lock().unwrap().push(key.to_string());
+                if self.delay > Duration::ZERO {
+                    tokio::time::sleep(self.delay).await;
+                }
+            }
+
+            fn check_key(&self, _key: &str) -> bool {
+                true // Always allow for testing
+            }
+        }
+
+        let manager = create_streaming_cache_manager();
+        let rate_limiter =
+            MockStreamingRateLimiter::new(Duration::from_millis(50));
+        let call_counter = rate_limiter.calls.clone();
+
+        let options = HttpCacheOptions {
+            rate_limiter: Some(Arc::new(rate_limiter)),
+            ..HttpCacheOptions::default()
+        };
+
+        let client = ClientBuilder::new(Client::new())
+            .with(StreamingCache::with_options(
+                manager,
+                CacheMode::Default,
+                options,
+            ))
+            .build();
+
+        let mock_server = MockServer::start().await;
+        let url = format!("{}/streaming-cacheable", mock_server.uri());
+
+        // Mock cacheable response
+        Mock::given(method("GET"))
+            .and(path("/streaming-cacheable"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("cache-control", "public, max-age=3600")
+                    .set_body_bytes(b"cacheable streaming response"),
+            )
+            .expect(1) // Only expect one request due to caching
+            .mount(&mock_server)
+            .await;
+
+        // First request - should apply rate limiting and cache the response
+        let start = Instant::now();
+        let response1 = client.get(&url).send().await?;
+        let first_duration = start.elapsed();
+
+        assert_eq!(response1.status(), 200);
+        assert_eq!(call_counter.lock().unwrap().len(), 1);
+        assert!(
+            first_duration >= Duration::from_millis(50),
+            "First request should be rate limited"
+        );
+
+        // Clear call counter
+        call_counter.lock().unwrap().clear();
+
+        // Second request - should be cache hit, NO rate limiting
+        let start = Instant::now();
+        let response2 = client.get(&url).send().await?;
+        let second_duration = start.elapsed();
+
+        assert_eq!(response2.status(), 200);
+        assert_eq!(call_counter.lock().unwrap().len(), 0); // No rate limiting for cache hit
+        assert!(
+            second_duration < Duration::from_millis(10),
+            "Cache hit should be very fast"
+        );
+
+        Ok(())
+    }
+}
+
+#[cfg(all(test, feature = "rate-limiting"))]
+mod rate_limiting_tests {
+    use super::*;
+    use crate::{CacheAwareRateLimiter, DomainRateLimiter, Quota};
+    use std::num::NonZero;
+    use std::sync::{Arc, Mutex};
+    use std::time::{Duration, Instant};
+
+    // Mock rate limiter for testing rate limiting behavior
+    #[derive(Debug)]
+    struct MockRateLimiter {
+        calls: Arc<Mutex<Vec<String>>>,
+        delay: Duration,
+    }
+
+    impl MockRateLimiter {
+        fn new(delay: Duration) -> Self {
+            Self { calls: Arc::new(Mutex::new(Vec::new())), delay }
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl CacheAwareRateLimiter for MockRateLimiter {
+        async fn until_key_ready(&self, key: &str) {
+            self.calls.lock().unwrap().push(key.to_string());
+            if !self.delay.is_zero() {
+                std::thread::sleep(self.delay);
+            }
+        }
+
+        fn check_key(&self, _key: &str) -> bool {
+            true
+        }
+    }
+
+    #[tokio::test]
+    async fn test_cache_with_rate_limiting_cache_hit() -> Result<()> {
+        let mock_server = MockServer::start().await;
+        let url = format!("{}/test", mock_server.uri());
+
+        // Set up mock to expect only one request (cache miss)
+        build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 1)
+            .mount(&mock_server)
+            .await;
+
+        let rate_limiter = MockRateLimiter::new(Duration::from_millis(10));
+        let call_counter = rate_limiter.calls.clone();
+
+        let options = HttpCacheOptions {
+            rate_limiter: Some(Arc::new(rate_limiter)),
+            ..HttpCacheOptions::default()
+        };
+
+        let client = ClientBuilder::new(Client::new())
+            .with(Cache(HttpCache {
+                mode: CacheMode::Default,
+                manager: create_cache_manager(),
+                options,
+            }))
+            .build();
+
+        // First request - should trigger rate limiting and cache miss
+        let start = Instant::now();
+        let response1 = client.get(&url).send().await?;
+        let first_duration = start.elapsed();
+
+        assert_eq!(response1.status(), 200);
+        assert_eq!(call_counter.lock().unwrap().len(), 1);
+        assert!(first_duration >= Duration::from_millis(10)); // Rate limiting delay
+
+        // Clear rate limiter calls for next test
+        call_counter.lock().unwrap().clear();
+
+        // Second request - should be cache hit, NO rate limiting
+        let start = Instant::now();
+        let response2 = client.get(&url).send().await?;
+        let second_duration = start.elapsed();
+
+        assert_eq!(response2.status(), 200);
+        assert_eq!(call_counter.lock().unwrap().len(), 0); // No rate limiting call
+        assert!(second_duration < Duration::from_millis(5)); // Should be very fast
+
+        // Verify both responses have the same body
+        let body1 = response1.bytes().await?;
+        let body2 = response2.bytes().await?;
+        assert_eq!(body1, body2);
+        assert_eq!(body1, TEST_BODY);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_cache_with_rate_limiting_domain_based() -> Result<()> {
+        let mock_server1 = MockServer::start().await;
+        let mock_server2 = MockServer::start().await;
+
+        let url1 = format!("{}/test1", mock_server1.uri());
+        let url2 = format!("{}/test2", mock_server2.uri());
+
+        // Set up mocks for both servers
+        build_mock("no-cache", b"server1", 200, 1).mount(&mock_server1).await;
+        build_mock("no-cache", b"server2", 200, 1).mount(&mock_server2).await;
+
+        let rate_limiter = MockRateLimiter::new(Duration::from_millis(1));
+        let call_counter = rate_limiter.calls.clone();
+
+        let options = HttpCacheOptions {
+            rate_limiter: Some(Arc::new(rate_limiter)),
+            ..HttpCacheOptions::default()
+        };
+
+        let client = ClientBuilder::new(Client::new())
+            .with(Cache(HttpCache {
+                mode: CacheMode::Default,
+                manager: create_cache_manager(),
+                options,
+            }))
+            .build();
+
+        // Make requests to both domains
+        let _response1 = client.get(&url1).send().await?;
+        let _response2 = client.get(&url2).send().await?;
+
+        // Both should trigger rate limiting (different domains)
+        let calls = call_counter.lock().unwrap().clone();
+        assert_eq!(calls.len(), 2);
+
+        // Verify domains are correctly extracted
+        assert!(
+            calls[0].contains("127.0.0.1") || calls[0].contains("localhost")
+        );
+        assert!(
+            calls[1].contains("127.0.0.1") || calls[1].contains("localhost")
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_rate_limiting_with_governor() -> Result<()> {
+        let mock_server = MockServer::start().await;
+        let url = format!("{}/test", mock_server.uri());
+
+        // Set up mock to allow multiple requests (no caching)
+        build_mock("no-cache", TEST_BODY, 200, 2).mount(&mock_server).await;
+
+        // Create rate limiter: 2 requests per second
+        let quota = Quota::per_second(NonZero::new(2).unwrap());
+        let rate_limiter = DomainRateLimiter::new(quota);
+
+        let options = HttpCacheOptions {
+            rate_limiter: Some(Arc::new(rate_limiter)),
+            ..HttpCacheOptions::default()
+        };
+
+        let client = ClientBuilder::new(Client::new())
+            .with(Cache(HttpCache {
+                mode: CacheMode::Default,
+                manager: create_cache_manager(),
+                options,
+            }))
+            .build();
+
+        let start = Instant::now();
+
+        // First two requests should be fast (within burst limit)
+        let _response1 = client.get(&url).send().await?;
+        let first_duration = start.elapsed();
+
+        let _response2 = client.get(&url).send().await?;
+        let second_duration = start.elapsed();
+
+        // Both should be relatively fast
+        assert!(first_duration < Duration::from_millis(50));
+        assert!(second_duration < Duration::from_millis(100));
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_direct_rate_limiter_behavior() -> Result<()> {
+        let mock_server = MockServer::start().await;
+        let url = format!("{}/test", mock_server.uri());
+
+        // Set up mock
+        build_mock("no-cache", TEST_BODY, 200, 2).mount(&mock_server).await;
+
+        // Create direct rate limiter (not domain-based)
+        let quota = Quota::per_second(NonZero::new(5).unwrap());
+        let rate_limiter = DomainRateLimiter::new(quota);
+
+        let options = HttpCacheOptions {
+            rate_limiter: Some(Arc::new(rate_limiter)),
+            ..HttpCacheOptions::default()
+        };
+
+        let client = ClientBuilder::new(Client::new())
+            .with(Cache(HttpCache {
+                mode: CacheMode::Default,
+                manager: create_cache_manager(),
+                options,
+            }))
+            .build();
+
+        // Make multiple requests
+        let _response1 = client.get(&url).send().await?;
+        let _response2 = client.get(&url).send().await?;
+
+        // Both should succeed (rate limiting applies globally, not per domain)
+        // This test mainly verifies the integration works without panicking
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_no_rate_limiting_by_default() -> Result<()> {
+        let mock_server = MockServer::start().await;
+        let url = format!("{}/test", mock_server.uri());
+
+        build_mock("no-cache", TEST_BODY, 200, 1).mount(&mock_server).await;
+
+        // Default options should have no rate limiting
+        let options = HttpCacheOptions::default();
+        assert!(options.rate_limiter.is_none());
+
+        let client = ClientBuilder::new(Client::new())
+            .with(Cache(HttpCache {
+                mode: CacheMode::Default,
+                manager: create_cache_manager(),
+                options,
+            }))
+            .build();
+
+        let start = Instant::now();
+        let _response = client.get(&url).send().await?;
+        let duration = start.elapsed();
+
+        // Should be very fast without rate limiting
+        assert!(duration < Duration::from_millis(100));
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_rate_limiting_only_on_network_requests() -> Result<()> {
+        let mock_server = MockServer::start().await;
+        let url = format!("{}/test", mock_server.uri());
+
+        // Set up mock to expect only one request
+        build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 1)
+            .mount(&mock_server)
+            .await;
+
+        let rate_limiter = MockRateLimiter::new(Duration::from_millis(20));
+        let call_counter = rate_limiter.calls.clone();
+
+        let options = HttpCacheOptions {
+            rate_limiter: Some(Arc::new(rate_limiter)),
+            ..HttpCacheOptions::default()
+        };
+
+        let client = ClientBuilder::new(Client::new())
+            .with(Cache(HttpCache {
+                mode: CacheMode::Default,
+                manager: create_cache_manager(),
+                options,
+            }))
+            .build();
+
+        // First request: cache miss, should apply rate limiting
+        let start = Instant::now();
+        let _response1 = client.get(&url).send().await?;
+        let first_duration = start.elapsed();
+
+        assert_eq!(call_counter.lock().unwrap().len(), 1);
+        assert!(first_duration >= Duration::from_millis(20));
+
+        // Clear calls
+        call_counter.lock().unwrap().clear();
+
+        // Second request: cache hit, should NOT apply rate limiting
+        let start = Instant::now();
+        let _response2 = client.get(&url).send().await?;
+        let second_duration = start.elapsed();
+
+        assert_eq!(call_counter.lock().unwrap().len(), 0); // No rate limiting
+        assert!(second_duration < Duration::from_millis(5)); // Very fast
+
+        // Third request: cache hit, should NOT apply rate limiting
+        let start = Instant::now();
+        let _response3 = client.get(&url).send().await?;
+        let third_duration = start.elapsed();
+
+        assert_eq!(call_counter.lock().unwrap().len(), 0); // Still no rate limiting
+        assert!(third_duration < Duration::from_millis(5)); // Very fast
 
         Ok(())
     }

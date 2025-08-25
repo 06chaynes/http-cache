@@ -14,6 +14,7 @@ cfg_if::cfg_if! {
         pub use tokio::fs::File;
         pub use tokio::io::ReadBuf;
 
+
         use std::io;
         use std::path::Path;
 
@@ -32,11 +33,25 @@ cfg_if::cfg_if! {
         pub async fn remove_file<P: AsRef<Path>>(path: P) -> io::Result<()> {
             tokio::fs::remove_file(path).await
         }
+
+
+        pub async fn read_dir<P: AsRef<Path>>(path: P) -> io::Result<tokio::fs::ReadDir> {
+            tokio::fs::read_dir(path).await
+        }
+
+        pub async fn metadata<P: AsRef<Path>>(path: P) -> io::Result<std::fs::Metadata> {
+            tokio::fs::metadata(path).await
+        }
+
+        pub async fn rename<P: AsRef<Path>, Q: AsRef<Path>>(from: P, to: Q) -> io::Result<()> {
+            tokio::fs::rename(from, to).await
+        }
     } else if #[cfg(all(feature = "streaming-smol", not(feature = "streaming-tokio")))] {
         pub use smol::fs::File;
 
         use std::io;
         use std::path::Path;
+
 
         pub async fn read<P: AsRef<Path>>(path: P) -> io::Result<Vec<u8>> {
             smol::fs::read(path).await
@@ -54,30 +69,18 @@ cfg_if::cfg_if! {
             smol::fs::remove_file(path).await
         }
 
-        // For smol, we need to create a ReadBuf-like abstraction
-        #[allow(dead_code)]
-        pub struct ReadBuf<'a> {
-            buf: &'a mut [u8],
-            filled: usize,
+
+        pub async fn read_dir<P: AsRef<Path>>(path: P) -> io::Result<smol::fs::ReadDir> {
+            smol::fs::read_dir(path).await
         }
 
-        #[allow(dead_code)]
-        impl<'a> ReadBuf<'a> {
-            pub fn new(buf: &'a mut [u8]) -> Self {
-                Self { buf, filled: 0 }
-            }
-
-            pub fn filled(&self) -> &[u8] {
-                &self.buf[..self.filled]
-            }
-
-            pub fn initialize_unfilled(&mut self) -> &mut [u8] {
-                &mut self.buf[self.filled..]
-            }
-
-            pub fn advance(&mut self, n: usize) {
-                self.filled = (self.filled + n).min(self.buf.len());
-            }
+        pub async fn metadata<P: AsRef<Path>>(path: P) -> io::Result<std::fs::Metadata> {
+            smol::fs::metadata(path).await
         }
+
+        pub async fn rename<P: AsRef<Path>, Q: AsRef<Path>>(from: P, to: Q) -> io::Result<()> {
+            smol::fs::rename(from, to).await
+        }
+
     }
 }

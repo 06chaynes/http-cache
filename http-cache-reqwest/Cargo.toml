@@ -1,6 +1,6 @@
 [package]
 name = "http-cache-reqwest"
-version = "1.0.0-alpha.1"
+version = "1.0.0-alpha.2"
 description = "http-cache middleware implementation for reqwest"
 authors = ["Christian Haynes <06chaynes@gmail.com>", "Kat Marchán <kzm@zkat.tech>"]
 repository = "https://github.com/06chaynes/http-cache"
@@ -25,7 +25,6 @@ http-body-util = "0.1.2"
 http-cache-semantics = "2.1.0"
 reqwest = { version = "0.12.12", default-features = false }
 reqwest-middleware = "0.4.0"
-serde = { version = "1.0.217", features = ["derive"] }
 url = { version = "2.5.4", features = ["serde"] }
 
 # Optional dependencies for streaming feature
@@ -33,7 +32,7 @@ futures-util = { version = "0.3.31", optional = true }
 
 [dependencies.http-cache]
 path = "../http-cache"
-version = "1.0.0-alpha.1"
+version = "1.0.0-alpha.2"
 default-features = false
 
 [dev-dependencies]
@@ -44,7 +43,7 @@ bytes = "1.8.0"
 http-body = "1.0.1"
 http-body-util = "0.1.2"
 futures = "0.3.31"
-anyhow = "1.0.95"
+futures-util = "0.3.31"
 
 [[example]]
 name = "streaming_memory_profile"
@@ -63,6 +62,7 @@ default = ["manager-cacache"]
 manager-cacache = ["http-cache/manager-cacache", "http-cache/cacache-tokio"]
 manager-moka = ["http-cache/manager-moka"]
 streaming = ["http-cache/streaming-tokio", "reqwest/stream", "futures-util"]
+rate-limiting = ["http-cache/rate-limiting"]
 
 [package.metadata.docs.rs]
 all-features = true

@@ -1,5 +1,50 @@
 # Changelog
 
+## [1.0.0-alpha.2] - 2025-08-24
+
+### Added
+
+- `max_ttl` field to `HttpCacheOptions` for controlling maximum cache duration
+- Support for `Duration` type in `max_ttl` field for better ergonomics and type safety
+- Cache duration limiting functionality that overrides longer server-specified durations while respecting shorter ones
+- Enhanced cache expiration control for `CacheMode::IgnoreRules` mode
+- `rate_limiter` field to `HttpCacheOptions` for cache-aware rate limiting that only applies on cache misses
+- `CacheAwareRateLimiter` trait for implementing rate limiting strategies
+- `DomainRateLimiter` for per-domain rate limiting using governor
+- `DirectRateLimiter` for global rate limiting using governor
+- New `rate-limiting` feature flag for optional rate limiting functionality
+- Rate limiting support for streaming cache operations with seamless integration
+- Simple LRU eviction policy for the `StreamingManager` with configurable size and entry limits
+- Multi-runtime async support (tokio/smol) with `RwLock` for better async performance
+- Content deduplication using Blake3 hashing for efficient storage
+- Atomic file operations using temporary files and rename for safe concurrent access
+- Configurable streaming buffer size for optimal streaming performance
+- Lock-free reference counting using DashMap for concurrent access
+- LRU cache implementation using the `lru` crate
+
+### Changed
+
+- `max_ttl` implementation automatically enforces cache duration limits by modifying response cache-control headers
+- Documentation updated with comprehensive examples for `max_ttl` usage across all cache modes
+- `StreamingCacheConfig` simplified to essential configuration options:
+  - `max_cache_size`: Optional cache size limit for LRU eviction
+  - `max_entries`: Optional entry count limit for LRU eviction  
+  - `streaming_buffer_size`: Buffer size for streaming operations (default: 8192)
+- Enhanced error types and handling for streaming cache operations
+- Simplified `StreamingManager` implementation focused on core functionality and maintainability
+- Removed unused background cleanup and persistent reference counting infrastructure for cleaner codebase
+- Improved async compatibility across tokio and smol runtimes
+- Upgraded concurrent data structures to use DashMap and LRU cache
+- Replaced custom implementations with established library solutions
+
+### Fixed
+
+- Race conditions in reference counting during concurrent access
+- Resource leaks in streaming cache operations when metadata write fails
+- Unsafe unwrap operations in cache entry manipulation
+- Inefficient URL construction replaced with safer url crate methods
+- Improved error handling and recovery in streaming operations
+
 ## [1.0.0-alpha.1] - 2025-07-27
 
 ### Added

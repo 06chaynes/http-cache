@@ -101,6 +101,29 @@
 //! };
 //! ```
 //!
+//! ## Maximum TTL Control
+//!
+//! Set a maximum time-to-live for cached responses, particularly useful with `CacheMode::IgnoreRules`:
+//!
+//! ```rust
+//! use http_cache::{HttpCacheOptions, CACacheManager, HttpCache, CacheMode};
+//! use std::time::Duration;
+//!
+//! let manager = CACacheManager::new("./cache".into(), true);
+//!
+//! // Limit cache duration to 5 minutes regardless of server headers
+//! let options = HttpCacheOptions {
+//!     max_ttl: Some(Duration::from_secs(300)), // 5 minutes
+//!     ..Default::default()
+//! };
+//!
+//! let cache = HttpCache {
+//!     mode: CacheMode::IgnoreRules, // Ignore server cache-control headers
+//!     manager,
+//!     options,
+//! };
+//! ```
+//!
 //! ## Response-Based Cache Mode Override
 //!
 //! Override cache behavior based on the response you receive. This is useful for scenarios like
@@ -129,6 +152,49 @@
 //!
 //! let cache = HttpCache {
 //!     mode: CacheMode::Default,
+//!     manager,
+//!     options,
+//! };
+//! ```
+//!
+//! ## Content-Type Based Caching
+//!
+//! You can implement selective caching based on response content types using `response_cache_mode_fn`.
+//! This is useful when you only want to cache certain types of content:
+//!
+//! ```rust
+//! use http_cache::{HttpCacheOptions, CACacheManager, HttpCache, CacheMode};
+//! use std::sync::Arc;
+//!
+//! let manager = CACacheManager::new("./cache".into(), true);
+//!
+//! let options = HttpCacheOptions {
+//!     response_cache_mode_fn: Some(Arc::new(|_request_parts, response| {
+//!         // Check the Content-Type header to decide caching behavior
+//!         if let Some(content_type) = response.headers.get("content-type") {
+//!             match content_type.as_str() {
+//!                 // Cache JSON APIs aggressively
+//!                 ct if ct.starts_with("application/json") => Some(CacheMode::ForceCache),
+//!                 // Cache images with default rules
+//!                 ct if ct.starts_with("image/") => Some(CacheMode::Default),
+//!                 // Cache static assets
+//!                 ct if ct.starts_with("text/css") => Some(CacheMode::ForceCache),
+//!                 ct if ct.starts_with("application/javascript") => Some(CacheMode::ForceCache),
+//!                 // Don't cache HTML pages (dynamic content)
+//!                 ct if ct.starts_with("text/html") => Some(CacheMode::NoStore),
+//!                 // Don't cache unknown content types
+//!                 _ => Some(CacheMode::NoStore),
+//!             }
+//!         } else {
+//!             // No Content-Type header - don't cache
+//!             Some(CacheMode::NoStore)
+//!         }
+//!     })),
+//!     ..Default::default()
+//! };
+//!
+//! let cache = HttpCache {
+//!     mode: CacheMode::Default, // This gets overridden by response_cache_mode_fn
 //!     manager,
 //!     options,
 //! };
@@ -194,22 +260,30 @@ mod managers;
 #[cfg(feature = "streaming")]
 mod runtime;
 
+#[cfg(feature = "rate-limiting")]
+pub mod rate_limiting;
+
 use std::{
     collections::HashMap,
     convert::TryFrom,
     fmt::{self, Debug},
     str::FromStr,
     sync::Arc,
-    time::SystemTime,
+    time::{Duration, SystemTime},
 };
 
-use http::{header::CACHE_CONTROL, request, response, Response, StatusCode};
+use http::{
+    header::CACHE_CONTROL, request, response, HeaderValue, Response, StatusCode,
+};
 use http_cache_semantics::{AfterResponse, BeforeRequest, CachePolicy};
 use serde::{Deserialize, Serialize};
 use url::Url;
 
 pub use body::StreamingBody;
-pub use error::{BadHeader, BadVersion, BoxError, Result, StreamingError};
+pub use error::{
+    BadHeader, BadRequest, BadVersion, BoxError, ClientStreamingError,
+    HttpCacheError, HttpCacheResult, Result, StreamingError,
+};
 
 #[cfg(feature = "manager-cacache")]
 pub use managers::cacache::CACacheManager;
@@ -219,6 +293,14 @@ pub use managers::streaming_cache::StreamingManager;
 
 #[cfg(feature = "manager-moka")]
 pub use managers::moka::MokaManager;
+
+#[cfg(feature = "rate-limiting")]
+pub use rate_limiting::{
+    CacheAwareRateLimiter, DirectRateLimiter, DomainRateLimiter,
+};
+
+#[cfg(feature = "rate-limiting")]
+pub use rate_limiting::Quota;
 
 // Exposing the moka cache for convenience, renaming to avoid naming conflicts
 #[cfg(feature = "manager-moka")]
@@ -294,29 +376,10 @@ fn extract_url_from_request_parts(parts: &request::Parts) -> Result<Url> {
     if let Some(_scheme) = parts.uri.scheme() {
         // URI is absolute, use it directly
         return Url::parse(&parts.uri.to_string())
-            .map_err(|_| BadHeader.into());
+            .map_err(|_| -> BoxError { BadHeader.into() });
     }
 
-    // Get the scheme - default to https for security, but check for explicit http
-    let scheme = if let Some(host) = parts.headers.get("host") {
-        let host_str = host.to_str().map_err(|_| BadHeader)?;
-        // Check if this looks like a local development host
-        if host_str.starts_with("localhost")
-            || host_str.starts_with("127.0.0.1")
-        {
-            "http"
-        } else if let Some(forwarded_proto) =
-            parts.headers.get("x-forwarded-proto")
-        {
-            forwarded_proto.to_str().map_err(|_| BadHeader)?
-        } else {
-            "https" // Default to secure
-        }
-    } else {
-        "https" // Default to secure if no host header
-    };
-
-    // Get the host
+    // Get the host header
     let host = parts
         .headers
         .get("host")
@@ -324,15 +387,41 @@ fn extract_url_from_request_parts(parts: &request::Parts) -> Result<Url> {
         .to_str()
         .map_err(|_| BadHeader)?;
 
-    // Construct the full URL
-    let url_string = format!(
-        "{}://{}{}",
-        scheme,
-        host,
-        parts.uri.path_and_query().map(|pq| pq.as_str()).unwrap_or("/")
-    );
+    // Determine scheme based on host and headers
+    let scheme = determine_scheme(host, &parts.headers)?;
 
-    Url::parse(&url_string).map_err(|_| BadHeader.into())
+    // Create base URL using url crate's builder pattern for safety
+    let mut base_url = Url::parse(&format!("{}://{}/", &scheme, host))
+        .map_err(|_| -> BoxError { BadHeader.into() })?;
+
+    // Set the path and query from the URI
+    if let Some(path_and_query) = parts.uri.path_and_query() {
+        base_url.set_path(path_and_query.path());
+        if let Some(query) = path_and_query.query() {
+            base_url.set_query(Some(query));
+        }
+    }
+
+    Ok(base_url)
+}
+
+/// Determine the appropriate scheme for URL construction
+fn determine_scheme(host: &str, headers: &http::HeaderMap) -> Result<String> {
+    // Check for explicit protocol forwarding header first
+    if let Some(forwarded_proto) = headers.get("x-forwarded-proto") {
+        let proto = forwarded_proto.to_str().map_err(|_| BadHeader)?;
+        return match proto {
+            "http" | "https" => Ok(proto.to_string()),
+            _ => Ok("https".to_string()), // Default to secure for unknown protocols
+        };
+    }
+
+    // Check if this looks like a local development host
+    if host.starts_with("localhost") || host.starts_with("127.0.0.1") {
+        Ok("http".to_string())
+    } else {
+        Ok("https".to_string()) // Default to secure for all other hosts
+    }
 }
 
 /// A basic generic type that represents an HTTP response
@@ -360,7 +449,7 @@ impl HttpResponse {
             for header in &self.headers {
                 headers.insert(
                     http::header::HeaderName::from_str(header.0.as_str())?,
-                    http::HeaderValue::from_str(header.1.as_str())?,
+                    HeaderValue::from_str(header.1.as_str())?,
                 );
             }
         }
@@ -386,13 +475,20 @@ impl HttpResponse {
         // warn-text  = quoted-string
         // warn-date  = <"> HTTP-date <">
         // (https://tools.ietf.org/html/rfc2616#section-14.46)
+        let host = url
+            .host()
+            .map(|h| h.to_string())
+            .unwrap_or_else(|| "unknown".to_string());
+        // Escape message to prevent header injection and ensure valid HTTP format
+        let escaped_message =
+            message.replace('"', "'").replace(['\n', '\r'], " ");
         self.headers.insert(
             WARNING.to_string(),
             format!(
-                "{} {} {:?} \"{}\"",
+                "{} {} \"{}\" \"{}\"",
                 code,
-                url.host().expect("Invalid URL"),
-                message,
+                host,
+                escaped_message,
                 httpdate::fmt_http_date(SystemTime::now())
             ),
         );
@@ -924,6 +1020,31 @@ pub type CacheBust = Arc<
 /// };
 /// ```
 ///
+/// ## Content-Type Based Cache Mode Override
+/// ```rust
+/// use http_cache::{HttpCacheOptions, ResponseCacheModeFn, CacheMode};
+/// use http::request::Parts;
+/// use http_cache::HttpResponse;
+/// use std::sync::Arc;
+///
+/// let options = HttpCacheOptions {
+///     response_cache_mode_fn: Some(Arc::new(|_parts: &Parts, response: &HttpResponse| {
+///         // Cache different content types with different strategies
+///         if let Some(content_type) = response.headers.get("content-type") {
+///             match content_type.as_str() {
+///                 ct if ct.starts_with("application/json") => Some(CacheMode::ForceCache),
+///                 ct if ct.starts_with("image/") => Some(CacheMode::Default),
+///                 ct if ct.starts_with("text/html") => Some(CacheMode::NoStore),
+///                 _ => None, // Use default behavior for other types
+///             }
+///         } else {
+///             Some(CacheMode::NoStore) // No content-type = don't cache
+///         }
+///     })),
+///     ..Default::default()
+/// };
+/// ```
+///
 /// ## Cache Busting for Related Resources
 /// ```rust
 /// use http_cache::{HttpCacheOptions, CacheBust, CacheKey};
@@ -962,6 +1083,16 @@ pub struct HttpCacheOptions {
     pub cache_bust: Option<CacheBust>,
     /// Determines if the cache status headers should be added to the response.
     pub cache_status_headers: bool,
+    /// Maximum time-to-live for cached responses.
+    /// When set, this overrides any longer cache durations specified by the server.
+    /// Particularly useful with `CacheMode::IgnoreRules` to provide expiration control.
+    pub max_ttl: Option<Duration>,
+    /// Rate limiter that applies only on cache misses.
+    /// When enabled, requests that result in cache hits are returned immediately,
+    /// while cache misses are rate limited before making network requests.
+    /// This provides the optimal behavior for web scrapers and similar applications.
+    #[cfg(feature = "rate-limiting")]
+    pub rate_limiter: Option<Arc<dyn CacheAwareRateLimiter>>,
 }
 
 impl Default for HttpCacheOptions {
@@ -973,23 +1104,47 @@ impl Default for HttpCacheOptions {
             response_cache_mode_fn: None,
             cache_bust: None,
             cache_status_headers: true,
+            max_ttl: None,
+            #[cfg(feature = "rate-limiting")]
+            rate_limiter: None,
         }
     }
 }
 
 impl Debug for HttpCacheOptions {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("HttpCacheOptions")
-            .field("cache_options", &self.cache_options)
-            .field("cache_key", &"Fn(&request::Parts) -> String")
-            .field("cache_mode_fn", &"Fn(&request::Parts) -> CacheMode")
-            .field(
-                "response_cache_mode_fn",
-                &"Fn(&request::Parts, &HttpResponse) -> Option<CacheMode>",
-            )
-            .field("cache_bust", &"Fn(&request::Parts) -> Vec<String>")
-            .field("cache_status_headers", &self.cache_status_headers)
-            .finish()
+        #[cfg(feature = "rate-limiting")]
+        {
+            f.debug_struct("HttpCacheOptions")
+                .field("cache_options", &self.cache_options)
+                .field("cache_key", &"Fn(&request::Parts) -> String")
+                .field("cache_mode_fn", &"Fn(&request::Parts) -> CacheMode")
+                .field(
+                    "response_cache_mode_fn",
+                    &"Fn(&request::Parts, &HttpResponse) -> Option<CacheMode>",
+                )
+                .field("cache_bust", &"Fn(&request::Parts) -> Vec<String>")
+                .field("cache_status_headers", &self.cache_status_headers)
+                .field("max_ttl", &self.max_ttl)
+                .field("rate_limiter", &"Option<CacheAwareRateLimiter>")
+                .finish()
+        }
+
+        #[cfg(not(feature = "rate-limiting"))]
+        {
+            f.debug_struct("HttpCacheOptions")
+                .field("cache_options", &self.cache_options)
+                .field("cache_key", &"Fn(&request::Parts) -> String")
+                .field("cache_mode_fn", &"Fn(&request::Parts) -> CacheMode")
+                .field(
+                    "response_cache_mode_fn",
+                    &"Fn(&request::Parts, &HttpResponse) -> Option<CacheMode>",
+                )
+                .field("cache_bust", &"Fn(&request::Parts) -> Vec<String>")
+                .field("cache_status_headers", &self.cache_status_headers)
+                .field("max_ttl", &self.max_ttl)
+                .finish()
+        }
     }
 }
 
@@ -1040,10 +1195,9 @@ impl HttpCacheOptions {
             .version(http_response.version.into());
 
         for (name, value) in &http_response.headers {
-            if let (Ok(header_name), Ok(header_value)) = (
-                name.parse::<http::HeaderName>(),
-                value.parse::<http::HeaderValue>(),
-            ) {
+            if let (Ok(header_name), Ok(header_value)) =
+                (name.parse::<http::HeaderName>(), value.parse::<HeaderValue>())
+            {
                 response_builder =
                     response_builder.header(header_name, header_value);
             }
@@ -1090,14 +1244,73 @@ impl HttpCacheOptions {
         request_parts: &request::Parts,
         response_parts: &response::Parts,
     ) -> CachePolicy {
-        match self.cache_options {
-            Some(options) => CachePolicy::new_options(
+        let cache_options = self.cache_options.unwrap_or_default();
+
+        // If max_ttl is specified, we need to modify the response headers to enforce it
+        if let Some(max_ttl) = self.max_ttl {
+            // Parse existing cache-control header
+            let cache_control = response_parts
+                .headers
+                .get("cache-control")
+                .and_then(|v| v.to_str().ok())
+                .unwrap_or("");
+
+            // Extract existing max-age if present
+            let existing_max_age =
+                cache_control.split(',').find_map(|directive| {
+                    let directive = directive.trim();
+                    if directive.starts_with("max-age=") {
+                        directive.strip_prefix("max-age=")?.parse::<u64>().ok()
+                    } else {
+                        None
+                    }
+                });
+
+            // Convert max_ttl to seconds
+            let max_ttl_seconds = max_ttl.as_secs();
+
+            // Apply max_ttl by setting max-age to the minimum of existing max-age and max_ttl
+            let effective_max_age = match existing_max_age {
+                Some(existing) => std::cmp::min(existing, max_ttl_seconds),
+                None => max_ttl_seconds,
+            };
+
+            // Build new cache-control header
+            let mut new_directives = Vec::new();
+
+            // Add non-max-age directives from existing cache-control
+            for directive in cache_control.split(',').map(|d| d.trim()) {
+                if !directive.starts_with("max-age=") && !directive.is_empty() {
+                    new_directives.push(directive.to_string());
+                }
+            }
+
+            // Add our effective max-age
+            new_directives.push(format!("max-age={}", effective_max_age));
+
+            let new_cache_control = new_directives.join(", ");
+
+            // Create modified response parts - we have to clone since response::Parts has private fields
+            let mut modified_response_parts = response_parts.clone();
+            modified_response_parts.headers.insert(
+                "cache-control",
+                HeaderValue::from_str(&new_cache_control)
+                    .unwrap_or_else(|_| HeaderValue::from_static("max-age=0")),
+            );
+
+            CachePolicy::new_options(
+                request_parts,
+                &modified_response_parts,
+                SystemTime::now(),
+                cache_options,
+            )
+        } else {
+            CachePolicy::new_options(
                 request_parts,
                 response_parts,
                 SystemTime::now(),
-                options,
-            ),
-            None => CachePolicy::new(request_parts, response_parts),
+                cache_options,
+            )
         }
     }
 
@@ -1198,6 +1411,21 @@ impl<T: CacheManager> HttpCache<T> {
             middleware.overridden_cache_mode(),
         )?;
         Ok(analysis.should_cache)
+    }
+
+    /// Apply rate limiting if enabled in options
+    #[cfg(feature = "rate-limiting")]
+    async fn apply_rate_limiting(&self, url: &Url) {
+        if let Some(rate_limiter) = &self.options.rate_limiter {
+            let rate_limit_key = url.host_str().unwrap_or("unknown");
+            rate_limiter.until_key_ready(rate_limit_key).await;
+        }
+    }
+
+    /// Apply rate limiting if enabled in options (no-op without rate-limiting feature)
+    #[cfg(not(feature = "rate-limiting"))]
+    async fn apply_rate_limiting(&self, _url: &Url) {
+        // No-op when rate limiting feature is not enabled
     }
 
     /// Runs the actions to preform when the client middleware is running without the cache
@@ -1338,6 +1566,10 @@ impl<T: CacheManager> HttpCache<T> {
         &self,
         middleware: &mut impl Middleware,
     ) -> Result<HttpResponse> {
+        // Apply rate limiting before making the network request
+        let url = middleware.url()?;
+        self.apply_rate_limiting(&url).await;
+
         let mut res = middleware.remote_fetch().await?;
         if self.options.cache_status_headers {
             res.cache_status(HitOrMiss::MISS);
@@ -1407,6 +1639,8 @@ impl<T: CacheManager> HttpCache<T> {
             }
         }
         let req_url = middleware.url()?;
+        // Apply rate limiting before revalidation request
+        self.apply_rate_limiting(&req_url).await;
         match middleware.remote_fetch().await {
             Ok(mut cond_res) => {
                 let status = StatusCode::from_u16(cond_res.status)?;
@@ -1522,7 +1756,22 @@ where
         &self,
         key: &str,
     ) -> Result<Option<(Response<Self::Body>, CachePolicy)>> {
-        self.manager.get(key).await
+        if let Some((mut response, policy)) = self.manager.get(key).await? {
+            // Add cache status headers if enabled
+            if self.options.cache_status_headers {
+                response.headers_mut().insert(
+                    XCACHE,
+                    "HIT".parse().map_err(StreamingError::new)?,
+                );
+                response.headers_mut().insert(
+                    XCACHELOOKUP,
+                    "HIT".parse().map_err(StreamingError::new)?,
+                );
+            }
+            Ok(Some((response, policy)))
+        } else {
+            Ok(None)
+        }
     }
 
     async fn process_response<B>(
@@ -1540,7 +1789,20 @@ where
     {
         // For non-cacheable requests based on initial analysis, convert them to manager's body type
         if !analysis.should_cache {
-            return self.manager.convert_body(response).await;
+            let mut converted_response =
+                self.manager.convert_body(response).await?;
+            // Add cache miss headers
+            if self.options.cache_status_headers {
+                converted_response.headers_mut().insert(
+                    XCACHE,
+                    "MISS".parse().map_err(StreamingError::new)?,
+                );
+                converted_response.headers_mut().insert(
+                    XCACHELOOKUP,
+                    "MISS".parse().map_err(StreamingError::new)?,
+                );
+            }
+            return Ok(converted_response);
         }
 
         // Bust cache keys if needed
@@ -1566,7 +1828,20 @@ where
 
         // If response-based override says NoStore, don't cache
         if effective_cache_mode == CacheMode::NoStore {
-            return self.manager.convert_body(response).await;
+            let mut converted_response =
+                self.manager.convert_body(response).await?;
+            // Add cache miss headers
+            if self.options.cache_status_headers {
+                converted_response.headers_mut().insert(
+                    XCACHE,
+                    "MISS".parse().map_err(StreamingError::new)?,
+                );
+                converted_response.headers_mut().insert(
+                    XCACHELOOKUP,
+                    "MISS".parse().map_err(StreamingError::new)?,
+                );
+            }
+            return Ok(converted_response);
         }
 
         // Create policy for the response
@@ -1590,12 +1865,39 @@ where
                 extract_url_from_request_parts(&analysis.request_parts)?;
 
             // Cache the response using the streaming manager
-            self.manager
+            let mut cached_response = self
+                .manager
                 .put(analysis.cache_key, response, policy, request_url)
-                .await
+                .await?;
+
+            // Add cache miss headers (response is being stored for first time)
+            if self.options.cache_status_headers {
+                cached_response.headers_mut().insert(
+                    XCACHE,
+                    "MISS".parse().map_err(StreamingError::new)?,
+                );
+                cached_response.headers_mut().insert(
+                    XCACHELOOKUP,
+                    "MISS".parse().map_err(StreamingError::new)?,
+                );
+            }
+            Ok(cached_response)
         } else {
             // Don't cache, just convert to manager's body type
-            self.manager.convert_body(response).await
+            let mut converted_response =
+                self.manager.convert_body(response).await?;
+            // Add cache miss headers
+            if self.options.cache_status_headers {
+                converted_response.headers_mut().insert(
+                    XCACHE,
+                    "MISS".parse().map_err(StreamingError::new)?,
+                );
+                converted_response.headers_mut().insert(
+                    XCACHELOOKUP,
+                    "MISS".parse().map_err(StreamingError::new)?,
+                );
+            }
+            Ok(converted_response)
         }
     }
 

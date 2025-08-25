@@ -147,7 +147,6 @@ use std::convert::TryInto;
 use std::time::SystemTime;
 use std::{collections::HashMap, str::FromStr};
 
-use anyhow::anyhow;
 use http::{
     header::CACHE_CONTROL,
     request::{self, Parts},
@@ -177,13 +176,18 @@ pub use http_cache::ResponseCacheModeFn;
 #[cfg_attr(docsrs, doc(cfg(feature = "manager-moka")))]
 pub use http_cache::{MokaCache, MokaCacheBuilder, MokaManager};
 
+#[cfg(feature = "rate-limiting")]
+#[cfg_attr(docsrs, doc(cfg(feature = "rate-limiting")))]
+pub use http_cache::rate_limiting::{
+    CacheAwareRateLimiter, DirectRateLimiter, DomainRateLimiter, Quota,
+};
+
 /// A wrapper around [`HttpCache`] that implements [`surf::middleware::Middleware`]
 #[derive(Debug, Clone)]
 pub struct Cache<T: CacheManager>(pub HttpCache<T>);
 
-mod error;
-
-pub use error::BadRequest;
+// Re-export unified error types from http-cache core
+pub use http_cache::{BadRequest, HttpCacheError};
 
 /// Implements ['Middleware'] for surf
 pub(crate) struct SurfMiddleware<'a> {
@@ -275,7 +279,7 @@ impl Middleware for SurfMiddleware<'_> {
 }
 
 fn to_http_types_error(e: BoxError) -> http_types::Error {
-    http_types::Error::from(anyhow!(e))
+    http_types::Error::from_str(500, format!("HTTP cache error: {e}"))
 }
 
 #[surf::utils::async_trait]

@@ -23,6 +23,7 @@ jobs:
           - http-cache
           - http-cache-reqwest
           - http-cache-surf
+          - http-cache-ureq
           - http-cache-tower
           - http-cache-quickcache
     steps:

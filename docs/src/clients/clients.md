@@ -10,6 +10,10 @@ The [`http-cache-reqwest`](https://github.com/06chaynes/http-cache/tree/main/htt
 
 The [`http-cache-surf`](https://github.com/06chaynes/http-cache/tree/main/http-cache-surf) crate provides a [`Middleware`](https://docs.rs/http-cache/latest/http_cache/trait.Middleware.html) implementation for the [`surf`](https://github.com/http-rs/surf) HTTP client.
 
+## [ureq](./ureq.md)
+
+The [`http-cache-ureq`](https://github.com/06chaynes/http-cache/tree/main/http-cache-ureq) crate provides a caching wrapper for the [`ureq`](https://github.com/algesten/ureq) HTTP client. Since ureq is a synchronous HTTP client, this wrapper uses the smol async runtime to integrate with the async http-cache system.
+
 ## [tower](./tower.md)
 
 The [`http-cache-tower`](https://github.com/06chaynes/http-cache/tree/main/http-cache-tower) crate provides Tower Layer and Service implementations for caching HTTP requests and responses. It supports both regular and streaming cache operations for memory-efficient handling of large responses.

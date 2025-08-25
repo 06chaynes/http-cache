@@ -1,6 +1,6 @@
 [package]
 name = "http-cache"
-version = "1.0.0-alpha.1"
+version = "1.0.0-alpha.2"
 description = "An HTTP caching middleware"
 authors = ["Christian Haynes <06chaynes@gmail.com>", "Kat Marchán <kzm@zkat.tech>"]
 repository = "https://github.com/06chaynes/http-cache"
@@ -23,6 +23,7 @@ cacache = { version = "13.1.0", default-features = false, features = ["mmap"], o
 futures = "0.3.31"
 futures-util = { version = "0.3.31", optional = true }
 hex = "0.4.3"
+log = "0.4.22"
 http = "1.2.0"
 http-body = "1.0.1"
 http-body-util = "0.1.2"
@@ -33,12 +34,16 @@ moka = { version = "0.12.10", features = ["future"], optional = true }
 pin-project-lite = "0.2"
 serde = { version = "1.0.217", features = ["derive"] }
 serde_json = { version = "1.0", optional = true }
-sha2 = "0.10.8"
+blake3 = { version = "1.5.0", optional = true }
+lru = { version = "0.16.0", optional = true }
+dashmap = { version = "6.1.0", optional = true }
 smol = { version = "2.0.2", optional = true }
-tokio = { version = "1.44.0", features = ["fs", "io-util"], optional = true }
+tokio = { version = "1.44.0", features = ["fs", "io-util", "sync"], optional = true }
 url = { version = "2.5.4", features = ["serde"] }
-uuid = { version = "1.11.0", features = ["v4"], optional = true }
 cfg-if = { version = "1.0", optional = true }
+governor = { version = "0.10.1", optional = true }
+tempfile = { version = "3.13.0", optional = true }
+async-lock = { version = "3.4.0", optional = true }
 
 [dev-dependencies]
 smol = "2.0.2"
@@ -54,10 +59,11 @@ manager-cacache = ["cacache", "bincode"]
 cacache-tokio = ["cacache/tokio-runtime", "tokio", "bincode"]  
 cacache-smol = ["cacache/async-std", "smol"]
 manager-moka = ["moka", "bincode"]
-streaming = ["uuid", "bincode", "cfg-if", "serde_json", "futures-util"]
+streaming = ["bincode", "cfg-if", "serde_json", "futures-util", "tempfile", "blake3", "lru", "dashmap"]
 streaming-tokio = ["tokio", "streaming"]
-streaming-smol = ["smol", "streaming"]
+streaming-smol = ["smol", "streaming", "async-lock"]
 with-http-types = ["http-types"]
+rate-limiting = ["governor"]
 
 [package.metadata.docs.rs]
 rustdoc-args = ["--cfg", "docsrs"]

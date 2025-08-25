@@ -1,6 +1,6 @@
 [package]
 name = "http-cache-quickcache"
-version = "1.0.0-alpha.1"
+version = "1.0.0-alpha.2"
 description = "http-cache manager implementation for quick-cache"
 authors = ["Christian Haynes <06chaynes@gmail.com>", "Kat Marchán <kzm@zkat.tech>"]
 repository = "https://github.com/06chaynes/http-cache"
@@ -22,14 +22,11 @@ http-cache-semantics = "2.1.0"
 serde = { version = "1.0.217", features = ["derive"] }
 url = { version = "2.5.4", features = ["serde"] }
 quick_cache = "0.6.9"
-bytes = "1.8.0"
 http = "1.2.0"
-http-body = "1.0.1"
-http-body-util = "0.1.2"
 
 [dependencies.http-cache]
 path = "../http-cache"
-version = "1.0.0-alpha.1"
+version = "1.0.0-alpha.2"
 default-features = false
 features = ["bincode"]
 
