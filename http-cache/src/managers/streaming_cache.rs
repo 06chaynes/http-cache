@@ -2234,31 +2234,39 @@ mod tests {
             &response.clone().map(|_| ()),
         );
 
-        // Create the metadata directory but make it read-only to simulate write failure
-        let metadata_dir = temp_dir.path().join(CACHE_VERSION).join("metadata");
-        std::fs::create_dir_all(&metadata_dir).unwrap();
+        // Use a cache key that will result in an invalid metadata path
+        // Create a key that when hex-encoded will exceed path length limits on most systems
+        // Most filesystems have a 255-byte filename limit, so create something longer
+        let very_long_key = "a".repeat(300); // This will create a 600-character hex string
 
-        // Make metadata directory read-only to force write failure
-        let mut perms = std::fs::metadata(&metadata_dir).unwrap().permissions();
-        perms.set_readonly(true);
-        std::fs::set_permissions(&metadata_dir, perms).unwrap();
-
-        // This put operation should fail due to metadata write failure
+        // This put operation should fail due to metadata filename being too long
         let result = cache
-            .put("rollback-key".to_string(), response, policy, request_url)
+            .put(very_long_key.clone(), response, policy, request_url)
             .await;
-
-        // Restore write permissions for cleanup
-        #[allow(clippy::permissions_set_readonly_false)]
-        {
-            let mut perms =
-                std::fs::metadata(&metadata_dir).unwrap().permissions();
-            perms.set_readonly(false);
-            std::fs::set_permissions(&metadata_dir, perms).unwrap();
-        }
 
         // The operation should fail
         assert!(result.is_err(), "Put should fail when metadata write fails");
+
+        // Verify that no entry exists for the long key after rollback
+        let retrieved = cache.get(&very_long_key).await.unwrap();
+        assert!(retrieved.is_none(), "Entry should not exist after rollback");
+
+        // Verify that content files are properly cleaned up
+        // Since content write should succeed but metadata write fails,
+        // the content should be cleaned up during rollback
+        let content_digest = StreamingManager::calculate_digest(&content);
+        let content_path = cache.content_path(&content_digest);
+
+        // Content file should either not exist or have been cleaned up
+        // (it might not exist at all if the reference counting rollback worked perfectly)
+        let content_exists = runtime::metadata(&content_path).await.is_ok();
+        if content_exists {
+            // If content exists, ensure reference count is 0 or the file is orphaned
+            // This is acceptable as long as the cache entry doesn't exist
+            println!(
+                "Content file exists but cache entry was properly rolled back"
+            );
+        }
 
         // Content file should be cleaned up (not orphaned)
         let content_digest = StreamingManager::calculate_digest(&content);
