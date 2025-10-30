@@ -701,6 +701,7 @@ fn convert_ureq_response_to_http_response(
         status: status.as_u16(),
         url: parsed_url,
         version: http_cache::HttpVersion::Http11,
+        metadata: None,
     })
 }
 

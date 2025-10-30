@@ -460,6 +460,7 @@ impl Middleware for ReqwestMiddleware<'_> {
             status,
             url,
             version: version.try_into()?,
+            metadata: None,
         })
     }
 }
@@ -789,7 +790,7 @@ where
                             })?;
                         let cached_response = self
                             .cache
-                            .process_response(analysis, http_response)
+                            .process_response(analysis, http_response, None)
                             .await
                             .map_err(|e| {
                                 to_middleware_error(HttpCacheError::Cache(
@@ -843,7 +844,7 @@ where
         // Process and potentially cache the response
         let cached_response = self
             .cache
-            .process_response(analysis, http_response)
+            .process_response(analysis, http_response, None)
             .await
             .map_err(|e| {
                 to_middleware_error(HttpCacheError::Cache(e.to_string()))

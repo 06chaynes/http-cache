@@ -437,6 +437,8 @@ pub struct HttpResponse {
     pub url: Url,
     /// HTTP response version
     pub version: HttpVersion,
+    /// Metadata
+    pub metadata: Option<Vec<u8>>,
 }
 
 impl HttpResponse {
@@ -672,6 +674,7 @@ pub trait HttpCacheInterface<B = Vec<u8>>: Send + Sync {
         &self,
         analysis: CacheAnalysis,
         response: Response<B>,
+        metadata: Option<Vec<u8>>,
     ) -> Result<Response<B>>;
 
     /// Update request headers for conditional requests (e.g., If-None-Match)
@@ -722,6 +725,7 @@ pub trait HttpCacheStreamInterface: Send + Sync {
         &self,
         analysis: CacheAnalysis,
         response: Response<B>,
+        metadata: Option<Vec<u8>>,
     ) -> Result<Response<Self::Body>>
     where
         B: http_body::Body + Send + 'static,
@@ -1211,6 +1215,7 @@ impl HttpCacheOptions {
         &self,
         parts: &response::Parts,
         request_parts: &request::Parts,
+        metadata: Option<Vec<u8>>,
     ) -> Result<HttpResponse> {
         Ok(HttpResponse {
             body: vec![], // We don't need the full body for cache mode decision
@@ -1218,6 +1223,7 @@ impl HttpCacheOptions {
             status: parts.status.as_u16(),
             url: extract_url_from_request_parts(request_parts)?,
             version: parts.version.try_into()?,
+            metadata,
         })
     }
 
@@ -1540,6 +1546,7 @@ impl<T: CacheManager> HttpCache<T> {
                         status: 504,
                         url: middleware.url()?,
                         version: HttpVersion::Http11,
+                        metadata: None,
                     };
                     if self.options.cache_status_headers {
                         res.cache_status(HitOrMiss::MISS);
@@ -1778,6 +1785,7 @@ where
         &self,
         analysis: CacheAnalysis,
         response: Response<B>,
+        metadata: Option<Vec<u8>>,
     ) -> Result<Response<Self::Body>>
     where
         B: http_body::Body + Send + 'static,
@@ -1812,9 +1820,11 @@ where
 
         // Convert response to HttpResponse format for response-based cache mode evaluation
         let (parts, body) = response.into_parts();
-        let http_response = self
-            .options
-            .parts_to_http_response(&parts, &analysis.request_parts)?;
+        let http_response = self.options.parts_to_http_response(
+            &parts,
+            &analysis.request_parts,
+            metadata,
+        )?;
 
         // Check for response-based cache mode override
         let effective_cache_mode = self.options.evaluate_response_cache_mode(
@@ -1948,6 +1958,7 @@ impl<T: CacheManager> HttpCacheInterface for HttpCache<T> {
         &self,
         analysis: CacheAnalysis,
         response: Response<Vec<u8>>,
+        metadata: Option<Vec<u8>>,
     ) -> Result<Response<Vec<u8>>> {
         if !analysis.should_cache {
             return Ok(response);
@@ -1960,9 +1971,11 @@ impl<T: CacheManager> HttpCacheInterface for HttpCache<T> {
 
         // Convert response to HttpResponse format
         let (parts, body) = response.into_parts();
-        let mut http_response = self
-            .options
-            .parts_to_http_response(&parts, &analysis.request_parts)?;
+        let mut http_response = self.options.parts_to_http_response(
+            &parts,
+            &analysis.request_parts,
+            metadata,
+        )?;
         http_response.body = body.clone(); // Include the body for buffered cache managers
 
         // Check for response-based cache mode override

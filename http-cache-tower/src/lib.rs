@@ -693,6 +693,7 @@ where
                     .process_response(
                         analysis,
                         Response::from_parts(res_parts, body_bytes.clone()),
+                        None,
                     )
                     .await
                     .cache_err()?;
@@ -787,6 +788,7 @@ where
                                         parts,
                                         body_bytes.clone(),
                                     ),
+                                    None,
                                 )
                                 .await
                                 .cache_err()?;
@@ -827,6 +829,7 @@ where
                 .process_response(
                     analysis,
                     Response::from_parts(res_parts, body_bytes.clone()),
+                    None,
                 )
                 .await
                 .cache_err()?;
@@ -993,7 +996,7 @@ where
                     })?;
 
                 let cached_response = cache
-                    .process_response(analysis, response)
+                    .process_response(analysis, response, None)
                     .await
                     .cache_err()?;
 
@@ -1091,6 +1094,7 @@ where
                                 .process_response(
                                     analysis,
                                     conditional_response,
+                                    None,
                                 )
                                 .await
                                 .cache_err()?;
@@ -1128,8 +1132,10 @@ where
             })?;
 
             // Process using streaming interface
-            let cached_response =
-                cache.process_response(analysis, response).await.cache_err()?;
+            let cached_response = cache
+                .process_response(analysis, response, None)
+                .await
+                .cache_err()?;
 
             let mut final_response = cached_response;
 

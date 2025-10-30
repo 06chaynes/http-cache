@@ -55,8 +55,9 @@ fn response_methods_work() -> Result<()> {
         status: 200,
         url: url.clone(),
         version: HttpVersion::Http11,
+        metadata: Some(b"Metadata".to_vec()),
     };
-    assert_eq!(format!("{:?}", res.clone()), "HttpResponse { body: [116, 101, 115, 116], headers: {}, status: 200, url: Url { scheme: \"http\", cannot_be_a_base: false, username: \"\", password: None, host: Some(Domain(\"example.com\")), port: None, path: \"/\", query: None, fragment: None }, version: Http11 }");
+    assert_eq!(format!("{:?}", res.clone()), "HttpResponse { body: [116, 101, 115, 116], headers: {}, status: 200, url: Url { scheme: \"http\", cannot_be_a_base: false, username: \"\", password: None, host: Some(Domain(\"example.com\")), port: None, path: \"/\", query: None, fragment: None }, version: Http11, metadata: Some([77, 101, 116, 97, 100, 97, 116, 97]) }");
     res.add_warning(&url, 112, "Test Warning");
     let code = res.warning_code();
     assert!(code.is_some());
@@ -179,6 +180,7 @@ mod with_cacache {
             status: 200,
             url: url.clone(),
             version: HttpVersion::Http11,
+            metadata: Some(b"Metadata".to_vec()),
         };
         let req = http::Request::get("http://example.com").body(())?;
         let res =
@@ -188,6 +190,7 @@ mod with_cacache {
         let (cached_res, _policy) =
             manager.get("test").await?.ok_or("Missing cache record")?;
         assert_eq!(cached_res.body, TEST_BODY);
+        assert_eq!(cached_res.metadata, Some(b"Metadata".to_vec()));
         Ok(())
     }
 
@@ -203,6 +206,7 @@ mod with_cacache {
             status: 200,
             url: url.clone(),
             version: HttpVersion::Http11,
+            metadata: Some(b"Metadata".to_vec()),
         };
         let req = http::Request::get("http://example.com").body(())?;
         let res =
@@ -213,7 +217,9 @@ mod with_cacache {
             .await?;
         let data = manager.get(&format!("{}:{}", GET, &url)).await?;
         assert!(data.is_some());
-        assert_eq!(data.unwrap().0.body, TEST_BODY);
+        let test_data = data.unwrap();
+        assert_eq!(test_data.0.body, TEST_BODY);
+        assert_eq!(test_data.0.metadata, Some(b"Metadata".to_vec()));
         let clone = manager.clone();
         let clonedata = clone.get(&format!("{}:{}", GET, &url)).await?;
         assert!(clonedata.is_some());
@@ -254,6 +260,7 @@ mod with_moka {
             status: 200,
             url: url.clone(),
             version: HttpVersion::Http11,
+            metadata: Some(b"Metadata".to_vec()),
         };
         let req = http::Request::get("http://example.com").body(())?;
         let res =
@@ -264,11 +271,15 @@ mod with_moka {
             .await?;
         let data = manager.get(&format!("{}:{}", GET, &url)).await?;
         assert!(data.is_some());
-        assert_eq!(data.unwrap().0.body, TEST_BODY);
+        let response = data.unwrap();
+        assert_eq!(response.0.body, TEST_BODY);
+        assert_eq!(response.0.metadata, Some(b"Metadata".to_vec()));
         let clone = manager.clone();
         let clonedata = clone.get(&format!("{}:{}", GET, &url)).await?;
         assert!(clonedata.is_some());
-        assert_eq!(clonedata.unwrap().0.body, TEST_BODY);
+        let response = clonedata.unwrap();
+        assert_eq!(response.0.body, TEST_BODY);
+        assert_eq!(response.0.metadata, Some(b"Metadata".to_vec()));
         manager.delete(&format!("{}:{}", GET, &url)).await?;
         let data = manager.get(&format!("{}:{}", GET, &url)).await?;
         assert!(data.is_none());
@@ -409,8 +420,14 @@ mod interface_tests {
         let analysis = cache.analyze_request(&parts, None).unwrap();
 
         // Process the response (should cache it)
-        let processed =
-            cache.process_response(analysis.clone(), response).await.unwrap();
+        let processed = cache
+            .process_response(
+                analysis.clone(),
+                response,
+                Some(b"Metadata".to_vec()),
+            )
+            .await
+            .unwrap();
         assert_eq!(processed.status(), StatusCode::OK);
 
         // Try to look up the cached response
@@ -421,6 +438,7 @@ mod interface_tests {
         let (cached_response, _policy) = cached.unwrap();
         assert_eq!(cached_response.status, StatusCode::OK);
         assert_eq!(cached_response.body, b"Hello, world!");
+        assert_eq!(cached_response.metadata, Some(b"Metadata".to_vec()));
 
         // Temporary directory will be automatically cleaned up when dropped
     }
@@ -459,8 +477,14 @@ mod interface_tests {
         let analysis = cache.analyze_request(&parts, None).unwrap();
 
         // Process the response (should cache it)
-        let processed =
-            cache.process_response(analysis.clone(), response).await.unwrap();
+        let processed = cache
+            .process_response(
+                analysis.clone(),
+                response,
+                Some(b"Metadata".to_vec()),
+            )
+            .await
+            .unwrap();
         assert_eq!(processed.status(), StatusCode::OK);
 
         // Try to look up the cached response
@@ -471,6 +495,7 @@ mod interface_tests {
         let (cached_response, _policy) = cached.unwrap();
         assert_eq!(cached_response.status, StatusCode::OK);
         assert_eq!(cached_response.body, b"Hello, world!");
+        assert_eq!(cached_response.metadata, Some(b"Metadata".to_vec()));
 
         // Temporary directory will be automatically cleaned up when dropped
     }
@@ -503,8 +528,14 @@ mod interface_tests {
         let analysis = cache.analyze_request(&parts, None).unwrap();
 
         // Cache the response
-        let _processed =
-            cache.process_response(analysis.clone(), response).await.unwrap();
+        let _processed = cache
+            .process_response(
+                analysis.clone(),
+                response,
+                Some(b"Metadata".to_vec()),
+            )
+            .await
+            .unwrap();
 
         // Look up the cached response
         let cached =
@@ -556,8 +587,14 @@ mod interface_tests {
         let analysis = cache.analyze_request(&parts, None).unwrap();
 
         // Cache the response
-        let _processed =
-            cache.process_response(analysis.clone(), response).await.unwrap();
+        let _processed = cache
+            .process_response(
+                analysis.clone(),
+                response,
+                Some(b"Metadata".to_vec()),
+            )
+            .await
+            .unwrap();
 
         // Look up the cached response
         let cached =
@@ -599,6 +636,7 @@ mod interface_tests {
             status: 200,
             url: Url::parse("https://example.com/test").unwrap(),
             version: crate::HttpVersion::Http11,
+            metadata: Some(b"Metadata".to_vec()),
         };
 
         // Create fresh response parts (simulating 304 Not Modified)
@@ -618,6 +656,7 @@ mod interface_tests {
         let updated_response = result.unwrap();
         assert_eq!(updated_response.body, b"Cached content");
         assert_eq!(updated_response.status, 200);
+        assert_eq!(updated_response.metadata, Some(b"Metadata".to_vec()));
 
         // Temporary directory will be automatically cleaned up when dropped
     }
@@ -640,6 +679,7 @@ mod interface_tests {
             status: 200,
             url: Url::parse("https://example.com/test").unwrap(),
             version: crate::HttpVersion::Http11,
+            metadata: Some(b"Metadata".to_vec()),
         };
 
         // Create fresh response parts (simulating 304 Not Modified)
@@ -659,6 +699,7 @@ mod interface_tests {
         let updated_response = result.unwrap();
         assert_eq!(updated_response.body, b"Cached content");
         assert_eq!(updated_response.status, 200);
+        assert_eq!(updated_response.metadata, Some(b"Metadata".to_vec()));
 
         // Temporary directory will be automatically cleaned up when dropped
     }
@@ -883,6 +924,7 @@ mod interface_tests {
             status: 200,
             url: Url::parse("https://example.com/test").unwrap(),
             version: crate::HttpVersion::Http11,
+            metadata: Some(b"Metadata".to_vec()),
         };
 
         // Create fresh response parts
@@ -924,6 +966,7 @@ mod interface_tests {
             status: 200,
             url: Url::parse("https://example.com/test").unwrap(),
             version: crate::HttpVersion::Http11,
+            metadata: Some(b"Metadata".to_vec()),
         };
 
         // Create fresh response parts
@@ -974,8 +1017,14 @@ mod interface_tests {
             .unwrap();
 
         // Process the response (should NOT cache it)
-        let processed =
-            cache.process_response(analysis.clone(), response).await.unwrap();
+        let processed = cache
+            .process_response(
+                analysis.clone(),
+                response,
+                Some(b"Metadata".to_vec()),
+            )
+            .await
+            .unwrap();
         assert_eq!(processed.status(), StatusCode::OK);
         assert_eq!(processed.body(), b"Hello, world!");
 
@@ -1014,8 +1063,10 @@ mod interface_tests {
             .unwrap();
 
         // Process the response (should NOT cache it)
-        let processed =
-            cache.process_response(analysis.clone(), response).await.unwrap();
+        let processed = cache
+            .process_response(analysis.clone(), response, None)
+            .await
+            .unwrap();
         assert_eq!(processed.status(), StatusCode::OK);
         assert_eq!(processed.body(), b"Hello, world!");
 
@@ -1163,8 +1214,10 @@ mod response_cache_mode_tests {
             .unwrap();
 
         // Process the response - should be cached despite no-cache headers
-        let result =
-            cache.process_response(analysis.clone(), response).await.unwrap();
+        let result = cache
+            .process_response(analysis.clone(), response, None)
+            .await
+            .unwrap();
 
         assert_eq!(result.status(), StatusCode::OK);
         assert_eq!(result.body(), b"important data");
@@ -1218,8 +1271,10 @@ mod response_cache_mode_tests {
             .body(b"Rate limit exceeded".to_vec())
             .unwrap();
 
-        let result =
-            cache.process_response(analysis.clone(), response).await.unwrap();
+        let result = cache
+            .process_response(analysis.clone(), response, None)
+            .await
+            .unwrap();
 
         assert_eq!(result.status(), StatusCode::TOO_MANY_REQUESTS);
         assert_eq!(result.body(), b"Rate limit exceeded");
@@ -1279,7 +1334,7 @@ mod response_cache_mode_tests {
             .unwrap();
 
         let _ = cache
-            .process_response(auth_analysis.clone(), auth_response)
+            .process_response(auth_analysis.clone(), auth_response, None)
             .await
             .unwrap();
 
@@ -1308,7 +1363,7 @@ mod response_cache_mode_tests {
             .unwrap();
 
         let _ = cache
-            .process_response(public_analysis.clone(), public_response)
+            .process_response(public_analysis.clone(), public_response, None)
             .await
             .unwrap();
 
@@ -1383,8 +1438,10 @@ mod response_cache_mode_tests {
             .body(b"body { margin: 0; }".to_vec())
             .unwrap();
 
-        let _ =
-            cache.process_response(analysis.clone(), response).await.unwrap();
+        let _ = cache
+            .process_response(analysis.clone(), response, None)
+            .await
+            .unwrap();
 
         // Should be cached despite no-cache header
         let cached =
@@ -1409,8 +1466,10 @@ mod response_cache_mode_tests {
             .body(b"<html><body>Error occurred</body></html>".to_vec())
             .unwrap();
 
-        let _ =
-            cache.process_response(analysis2.clone(), response2).await.unwrap();
+        let _ = cache
+            .process_response(analysis2.clone(), response2, None)
+            .await
+            .unwrap();
 
         // Should not be cached due to error marker
         let cached =
@@ -1458,8 +1517,10 @@ mod response_cache_mode_tests {
             .body(b"normal data".to_vec())
             .unwrap();
 
-        let _ =
-            cache.process_response(analysis.clone(), response).await.unwrap();
+        let _ = cache
+            .process_response(analysis.clone(), response, None)
+            .await
+            .unwrap();
 
         // Should be cached using normal HTTP cache semantics
         let cached =
