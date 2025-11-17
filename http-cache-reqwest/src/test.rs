@@ -1274,7 +1274,7 @@ mod streaming_tests {
 
         // Process and cache the response
         let cached_response =
-            cache.process_response(analysis.clone(), response).await?;
+            cache.process_response(analysis.clone(), response, None).await?;
         assert_eq!(cached_response.status(), 200);
 
         // Verify the response body
@@ -1323,7 +1323,7 @@ mod streaming_tests {
 
         // Process the large response
         let cached_response =
-            cache.process_response(analysis.clone(), response).await?;
+            cache.process_response(analysis.clone(), response, None).await?;
         assert_eq!(cached_response.status(), 200);
 
         // Verify the large response body
@@ -1365,7 +1365,7 @@ mod streaming_tests {
 
         // Process the empty response
         let cached_response =
-            cache.process_response(analysis.clone(), response).await?;
+            cache.process_response(analysis.clone(), response, None).await?;
         assert_eq!(cached_response.status(), 204);
 
         // Verify empty body
@@ -1734,7 +1734,7 @@ mod streaming_tests {
 
         // Process the response
         let cached_response =
-            cache.process_response(analysis.clone(), response).await?;
+            cache.process_response(analysis.clone(), response, None).await?;
         assert_eq!(cached_response.status(), 200);
 
         // Verify the body
