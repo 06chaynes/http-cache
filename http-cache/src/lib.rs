@@ -542,13 +542,27 @@ impl HttpHeaders {
 
 impl From<&http::HeaderMap> for HttpHeaders {
     fn from(headers: &http::HeaderMap) -> Self {
-        let mut http_headers = HttpHeaders::new();
-        for (k, v) in headers.iter() {
-            if let Ok(value_str) = v.to_str() {
-                http_headers.insert(k.to_string(), value_str.to_string());
+        let mut modern_headers = HashMap::new();
+
+        // Collect all unique header names first
+        let header_names: std::collections::HashSet<_> =
+            headers.keys().collect();
+
+        // For each header name, collect ALL values
+        for name in header_names {
+            let values: Vec<String> = headers
+                .get_all(name)
+                .iter()
+                .filter_map(|v| v.to_str().ok())
+                .map(|s| s.to_string())
+                .collect();
+
+            if !values.is_empty() {
+                modern_headers.insert(name.to_string(), values);
             }
         }
-        http_headers
+
+        HttpHeaders::Modern(modern_headers)
     }
 }
 
