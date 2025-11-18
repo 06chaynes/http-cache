@@ -27,8 +27,6 @@ use {
     std::sync::atomic::{AtomicU64, AtomicUsize, Ordering},
 };
 
-use std::collections::HashMap;
-
 // Import async-compatible synchronization primitives based on feature flags
 cfg_if::cfg_if! {
     if #[cfg(feature = "streaming-tokio")] {
@@ -348,7 +346,7 @@ pub struct CacheIntegrityReport {
 pub struct CacheMetadata {
     pub status: u16,
     pub version: u8,
-    pub headers: HashMap<String, String>,
+    pub headers: crate::HttpHeaders,
     pub content_digest: String,
     pub policy: CachePolicy,
     pub created_at: u64,
@@ -1086,9 +1084,7 @@ impl StreamingCacheManager for StreamingManager {
                 Version::HTTP_3 => 3,
                 _ => 11,
             },
-            headers: crate::HttpCacheOptions::headers_to_hashmap(
-                &parts.headers,
-            ),
+            headers: crate::HttpHeaders::from(&parts.headers),
             content_digest: content_digest.clone(),
             policy,
             created_at: std::time::SystemTime::now()

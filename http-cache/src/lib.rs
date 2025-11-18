@@ -276,7 +276,7 @@ use http::{
     header::CACHE_CONTROL, request, response, HeaderValue, Response, StatusCode,
 };
 use http_cache_semantics::{AfterResponse, BeforeRequest, CachePolicy};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use url::Url;
 
 pub use body::StreamingBody;
@@ -425,13 +425,53 @@ fn determine_scheme(host: &str, headers: &http::HeaderMap) -> Result<String> {
 }
 
 /// Represents HTTP headers in either legacy or modern format
-#[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(untagged)]
+#[derive(Debug, Clone)]
 pub enum HttpHeaders {
     /// Modern header representation - allows multiple values per key
     Modern(HashMap<String, Vec<String>>),
     /// Legacy header representation - kept for backward compatibility with deserialization
     Legacy(HashMap<String, String>),
+}
+
+// Serialize as enum (needed for bincode to match deserialization)
+impl Serialize for HttpHeaders {
+    fn serialize<S>(
+        &self,
+        serializer: S,
+    ) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        // Serialize the enum properly with variant tags
+        // This matches how RawHttpHeaders deserializes
+        match self {
+            HttpHeaders::Modern(modern) => serializer
+                .serialize_newtype_variant("HttpHeaders", 0, "Modern", modern),
+            HttpHeaders::Legacy(legacy) => serializer
+                .serialize_newtype_variant("HttpHeaders", 1, "Legacy", legacy),
+        }
+    }
+}
+
+// Deserialize: Need to handle enum variant properly for bincode
+impl<'de> Deserialize<'de> for HttpHeaders {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        // Bincode serializes enums with a variant index
+        // We need to deserialize it properly as an enum
+        #[derive(Deserialize)]
+        enum RawHttpHeaders {
+            Modern(HashMap<String, Vec<String>>),
+            Legacy(HashMap<String, String>),
+        }
+
+        match RawHttpHeaders::deserialize(deserializer)? {
+            RawHttpHeaders::Modern(m) => Ok(HttpHeaders::Modern(m)),
+            RawHttpHeaders::Legacy(l) => Ok(HttpHeaders::Legacy(l)),
+        }
+    }
 }
 
 impl HttpHeaders {
@@ -440,14 +480,15 @@ impl HttpHeaders {
         HttpHeaders::Modern(HashMap::new())
     }
 
-    /// Inserts a header key-value pair
+    /// Inserts a header key-value pair, replacing any existing values for that key
     pub fn insert(&mut self, key: String, value: String) {
         match self {
             HttpHeaders::Legacy(legacy) => {
                 legacy.insert(key, value);
             }
             HttpHeaders::Modern(modern) => {
-                modern.entry(key).or_default().push(value);
+                // Replace existing values with a new single-element vec
+                modern.insert(key, vec![value]);
             }
         }
     }
@@ -471,6 +512,14 @@ impl HttpHeaders {
             HttpHeaders::Modern(modern) => {
                 modern.remove(key);
             }
+        }
+    }
+
+    /// Checks if a header key exists
+    pub fn contains_key(&self, key: &str) -> bool {
+        match self {
+            HttpHeaders::Legacy(legacy) => legacy.contains_key(key),
+            HttpHeaders::Modern(modern) => modern.contains_key(key),
         }
     }
 

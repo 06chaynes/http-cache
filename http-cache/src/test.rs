@@ -1,8 +1,10 @@
-use crate::{error, CacheMode, HitOrMiss, HttpResponse, HttpVersion, Result};
+use crate::{
+    error, CacheMode, HitOrMiss, HttpHeaders, HttpResponse, HttpVersion, Result,
+};
 use http::{header::CACHE_CONTROL, StatusCode};
 use url::Url;
 
-use std::{collections::HashMap, str::FromStr};
+use std::str::FromStr;
 
 #[cfg(feature = "cacache-smol")]
 use macro_rules_attribute::apply;
@@ -51,12 +53,12 @@ fn response_methods_work() -> Result<()> {
     let url = Url::from_str("http://example.com")?;
     let mut res = HttpResponse {
         body: TEST_BODY.to_vec(),
-        headers: HashMap::default(),
+        headers: HttpHeaders::new(),
         status: 200,
         url: url.clone(),
         version: HttpVersion::Http11,
     };
-    assert_eq!(format!("{:?}", res.clone()), "HttpResponse { body: [116, 101, 115, 116], headers: {}, status: 200, url: Url { scheme: \"http\", cannot_be_a_base: false, username: \"\", password: None, host: Some(Domain(\"example.com\")), port: None, path: \"/\", query: None, fragment: None }, version: Http11 }");
+    assert_eq!(format!("{:?}", res.clone()), "HttpResponse { body: [116, 101, 115, 116], headers: Modern({}), status: 200, url: Url { scheme: \"http\", cannot_be_a_base: false, username: \"\", password: None, host: Some(Domain(\"example.com\")), port: None, path: \"/\", query: None, fragment: None }, version: Http11 }");
     res.add_warning(&url, 112, "Test Warning");
     let code = res.warning_code();
     assert!(code.is_some());
@@ -595,7 +597,7 @@ mod interface_tests {
         // Create a cached response
         let cached_response = crate::HttpResponse {
             body: b"Cached content".to_vec(),
-            headers: std::collections::HashMap::new(),
+            headers: crate::HttpHeaders::new(),
             status: 200,
             url: Url::parse("https://example.com/test").unwrap(),
             version: crate::HttpVersion::Http11,
@@ -636,7 +638,7 @@ mod interface_tests {
         // Create a cached response
         let cached_response = crate::HttpResponse {
             body: b"Cached content".to_vec(),
-            headers: std::collections::HashMap::new(),
+            headers: crate::HttpHeaders::new(),
             status: 200,
             url: Url::parse("https://example.com/test").unwrap(),
             version: crate::HttpVersion::Http11,
@@ -879,7 +881,7 @@ mod interface_tests {
         // Create a cached response
         let cached_response = crate::HttpResponse {
             body: b"Cached content".to_vec(),
-            headers: std::collections::HashMap::new(),
+            headers: crate::HttpHeaders::new(),
             status: 200,
             url: Url::parse("https://example.com/test").unwrap(),
             version: crate::HttpVersion::Http11,
@@ -920,7 +922,7 @@ mod interface_tests {
         // Create a cached response
         let cached_response = crate::HttpResponse {
             body: b"Cached content".to_vec(),
-            headers: std::collections::HashMap::new(),
+            headers: crate::HttpHeaders::new(),
             status: 200,
             url: Url::parse("https://example.com/test").unwrap(),
             version: crate::HttpVersion::Http11,
