@@ -233,6 +233,9 @@
 //! - `manager-cacache` (default): enable [cacache](https://github.com/zkat/cacache-rs),
 //! a disk cache, backend manager.
 //! - `cacache-smol` (default): enable [smol](https://github.com/smol-rs/smol) runtime support for cacache.
+//! - `http-headers-compat` (disabled): enable backwards compatibility for deserializing cached
+//! responses from older versions that used single-value headers. Enable this if you need to read
+//! cache entries created by older versions of http-cache.
 //! - `cacache-tokio` (disabled): enable [tokio](https://github.com/tokio-rs/tokio) runtime support for cacache.
 //! - `manager-moka` (disabled): enable [moka](https://github.com/moka-rs/moka),
 //! an in-memory cache, backend manager.
@@ -430,6 +433,7 @@ pub enum HttpHeaders {
     /// Modern header representation - allows multiple values per key
     Modern(HashMap<String, Vec<String>>),
     /// Legacy header representation - kept for backward compatibility with deserialization
+    #[cfg(feature = "http-headers-compat")]
     Legacy(HashMap<String, String>),
 }
 
@@ -447,6 +451,7 @@ impl Serialize for HttpHeaders {
         match self {
             HttpHeaders::Modern(modern) => serializer
                 .serialize_newtype_variant("HttpHeaders", 0, "Modern", modern),
+            #[cfg(feature = "http-headers-compat")]
             HttpHeaders::Legacy(legacy) => serializer
                 .serialize_newtype_variant("HttpHeaders", 1, "Legacy", legacy),
         }
@@ -461,15 +466,30 @@ impl<'de> Deserialize<'de> for HttpHeaders {
     {
         // Bincode serializes enums with a variant index
         // We need to deserialize it properly as an enum
-        #[derive(Deserialize)]
-        enum RawHttpHeaders {
-            Modern(HashMap<String, Vec<String>>),
-            Legacy(HashMap<String, String>),
+        #[cfg(feature = "http-headers-compat")]
+        {
+            #[derive(Deserialize)]
+            enum RawHttpHeaders {
+                Modern(HashMap<String, Vec<String>>),
+                Legacy(HashMap<String, String>),
+            }
+
+            match RawHttpHeaders::deserialize(deserializer)? {
+                RawHttpHeaders::Modern(m) => Ok(HttpHeaders::Modern(m)),
+                RawHttpHeaders::Legacy(l) => Ok(HttpHeaders::Legacy(l)),
+            }
         }
 
-        match RawHttpHeaders::deserialize(deserializer)? {
-            RawHttpHeaders::Modern(m) => Ok(HttpHeaders::Modern(m)),
-            RawHttpHeaders::Legacy(l) => Ok(HttpHeaders::Legacy(l)),
+        #[cfg(not(feature = "http-headers-compat"))]
+        {
+            #[derive(Deserialize)]
+            enum RawHttpHeaders {
+                Modern(HashMap<String, Vec<String>>),
+            }
+
+            match RawHttpHeaders::deserialize(deserializer)? {
+                RawHttpHeaders::Modern(m) => Ok(HttpHeaders::Modern(m)),
+            }
         }
     }
 }
@@ -483,6 +503,7 @@ impl HttpHeaders {
     /// Inserts a header key-value pair, replacing any existing values for that key
     pub fn insert(&mut self, key: String, value: String) {
         match self {
+            #[cfg(feature = "http-headers-compat")]
             HttpHeaders::Legacy(legacy) => {
                 legacy.insert(key, value);
             }
@@ -496,6 +517,7 @@ impl HttpHeaders {
     /// Retrieves the first value for a given header key
     pub fn get(&self, key: &str) -> Option<&String> {
         match self {
+            #[cfg(feature = "http-headers-compat")]
             HttpHeaders::Legacy(legacy) => legacy.get(key),
             HttpHeaders::Modern(modern) => {
                 modern.get(key).and_then(|vals| vals.first())
@@ -506,6 +528,7 @@ impl HttpHeaders {
     /// Removes a header key and its associated values
     pub fn remove(&mut self, key: &str) {
         match self {
+            #[cfg(feature = "http-headers-compat")]
             HttpHeaders::Legacy(legacy) => {
                 legacy.remove(key);
             }
@@ -518,6 +541,7 @@ impl HttpHeaders {
     /// Checks if a header key exists
     pub fn contains_key(&self, key: &str) -> bool {
         match self {
+            #[cfg(feature = "http-headers-compat")]
             HttpHeaders::Legacy(legacy) => legacy.contains_key(key),
             HttpHeaders::Modern(modern) => modern.contains_key(key),
         }
@@ -526,6 +550,7 @@ impl HttpHeaders {
     /// Returns an iterator over the header key-value pairs
     pub fn iter(&self) -> HttpHeadersIterator<'_> {
         match self {
+            #[cfg(feature = "http-headers-compat")]
             HttpHeaders::Legacy(legacy) => {
                 HttpHeadersIterator { inner: legacy.iter().collect(), index: 0 }
             }
@@ -569,6 +594,7 @@ impl From<&http::HeaderMap> for HttpHeaders {
 impl From<HttpHeaders> for HashMap<String, Vec<String>> {
     fn from(headers: HttpHeaders) -> Self {
         match headers {
+            #[cfg(feature = "http-headers-compat")]
             HttpHeaders::Legacy(legacy) => {
                 legacy.into_iter().map(|(k, v)| (k, vec![v])).collect()
             }
@@ -590,6 +616,7 @@ impl IntoIterator for HttpHeaders {
     fn into_iter(self) -> Self::IntoIter {
         HttpHeadersIntoIterator {
             inner: match self {
+                #[cfg(feature = "http-headers-compat")]
                 HttpHeaders::Legacy(legacy) => legacy.into_iter().collect(),
                 HttpHeaders::Modern(modern) => modern
                     .into_iter()
