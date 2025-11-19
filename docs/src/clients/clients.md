@@ -1,4 +1,17 @@
-# Client Implementations
+# Client-Side Caching
+
+These middleware implementations cache responses from external APIs that your application calls. This is different from server-side caching, which caches your own application's responses.
+
+**Use client-side caching when:**
+- Calling external APIs
+- Reducing API rate limit consumption
+- Improving offline support
+- Reducing bandwidth usage
+- Speeding up repeated API calls
+
+**For server-side caching** (caching your own app's responses), see [Server-Side Caching](../server/server.md).
+
+## Available Client Implementations
 
 The following client implementations are provided by this crate:
 
