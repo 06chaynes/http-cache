@@ -724,6 +724,13 @@ where
                             );
                         }
 
+                        // Insert metadata into response extensions if present
+                        if let Some(metadata) = cached_response.metadata {
+                            response.extensions_mut().insert(
+                                http_cache::HttpCacheMetadata::from(metadata),
+                            );
+                        }
+
                         return Ok(response);
                     }
                     BeforeRequest::Stale {
@@ -764,6 +771,15 @@ where
                             if cache.options.cache_status_headers {
                                 response = add_cache_status_headers(
                                     response, "HIT", "HIT",
+                                );
+                            }
+
+                            // Insert metadata into response extensions if present
+                            if let Some(metadata) = updated_response.metadata {
+                                response.extensions_mut().insert(
+                                    http_cache::HttpCacheMetadata::from(
+                                        metadata,
+                                    ),
                                 );
                             }
 

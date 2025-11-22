@@ -574,6 +574,7 @@ pub trait StreamingCacheManager: Send + Sync + 'static {
         response: Response<B>,
         policy: CachePolicy,
         request_url: Url,
+        metadata: Option<Vec<u8>>,
     ) -> Result<Response<Self::Body>>
     where
         B: http_body::Body + Send + 'static,
@@ -1896,7 +1897,7 @@ where
         let http_response = self.options.parts_to_http_response(
             &parts,
             &analysis.request_parts,
-            effective_metadata,
+            effective_metadata.clone(),
         )?;
 
         // Check for response-based cache mode override
@@ -1950,7 +1951,13 @@ where
             // Cache the response using the streaming manager
             let mut cached_response = self
                 .manager
-                .put(analysis.cache_key, response, policy, request_url)
+                .put(
+                    analysis.cache_key,
+                    response,
+                    policy,
+                    request_url,
+                    effective_metadata,
+                )
                 .await?;
 
             // Add cache miss headers (response is being stored for first time)

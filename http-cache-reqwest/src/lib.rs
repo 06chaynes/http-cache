@@ -467,6 +467,7 @@ impl Middleware for ReqwestMiddleware<'_> {
 
 // Converts an [`HttpResponse`] to a reqwest [`Response`]
 fn convert_response(response: HttpResponse) -> Result<Response> {
+    let metadata = response.metadata.clone();
     let mut ret_res = http::Response::builder()
         .status(response.status)
         .url(response.url)
@@ -477,6 +478,10 @@ fn convert_response(response: HttpResponse) -> Result<Response> {
             HeaderName::from_str(&header.0)?,
             HeaderValue::from_str(&header.1)?,
         );
+    }
+    // Insert metadata into response extensions if present
+    if let Some(metadata) = metadata {
+        ret_res.extensions_mut().insert(HttpCacheMetadata::from(metadata));
     }
     Ok(Response::from(ret_res))
 }
