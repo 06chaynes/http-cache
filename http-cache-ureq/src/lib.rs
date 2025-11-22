@@ -671,15 +671,13 @@ fn convert_ureq_response_to_http_response(
     // Copy headers
     let headers = response.headers().into();
 
-    // Read body using read_to_string
-    let body_string = response.body_mut().read_to_string().map_err(|e| {
+    // Read body as bytes to handle binary content (images, etc.)
+    let body = response.body_mut().read_to_vec().map_err(|e| {
         HttpCacheError::http(Box::new(std::io::Error::other(format!(
             "Failed to read response body: {}",
             e
         ))))
     })?;
-
-    let body = body_string.into_bytes();
 
     // Parse the provided URL
     let parsed_url = Url::parse(url).map_err(|e| {
@@ -791,13 +789,8 @@ impl CachedResponse {
         // Note: Cache headers will be added by the cache system based on cache_status_headers option
         // Don't add them here unconditionally
 
-        // Read the body
-        let body = if let Ok(body_string) = response.body_mut().read_to_string()
-        {
-            body_string.into_bytes()
-        } else {
-            Vec::new()
-        };
+        // Read the body as bytes to handle binary content (images, etc.)
+        let body = response.body_mut().read_to_vec().unwrap_or_default();
 
         Self { status, headers, body, url: url.to_string(), cached: false }
     }
