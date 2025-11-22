@@ -55,6 +55,7 @@ smol-macros = "0.1.1"
 
 [features]
 default = ["manager-cacache", "cacache-smol"]
+http-headers-compat = []
 manager-cacache = ["cacache", "bincode"]
 cacache-tokio = ["cacache/tokio-runtime", "tokio", "bincode"]  
 cacache-smol = ["cacache/async-std", "smol"]

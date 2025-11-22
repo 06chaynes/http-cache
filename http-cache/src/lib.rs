@@ -233,6 +233,9 @@
 //! - `manager-cacache` (default): enable [cacache](https://github.com/zkat/cacache-rs),
 //! a disk cache, backend manager.
 //! - `cacache-smol` (default): enable [smol](https://github.com/smol-rs/smol) runtime support for cacache.
+//! - `http-headers-compat` (disabled): enable backwards compatibility for deserializing cached
+//! responses from older versions that used single-value headers. Enable this if you need to read
+//! cache entries created by older versions of http-cache.
 //! - `cacache-tokio` (disabled): enable [tokio](https://github.com/tokio-rs/tokio) runtime support for cacache.
 //! - `manager-moka` (disabled): enable [moka](https://github.com/moka-rs/moka),
 //! an in-memory cache, backend manager.
@@ -276,7 +279,7 @@ use http::{
     header::CACHE_CONTROL, request, response, HeaderValue, Response, StatusCode,
 };
 use http_cache_semantics::{AfterResponse, BeforeRequest, CachePolicy};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use url::Url;
 
 pub use body::StreamingBody;
@@ -424,13 +427,267 @@ fn determine_scheme(host: &str, headers: &http::HeaderMap) -> Result<String> {
     }
 }
 
+/// Represents HTTP headers in either legacy or modern format
+#[derive(Debug, Clone)]
+pub enum HttpHeaders {
+    /// Modern header representation - allows multiple values per key
+    Modern(HashMap<String, Vec<String>>),
+    /// Legacy header representation - kept for backward compatibility with deserialization
+    #[cfg(feature = "http-headers-compat")]
+    Legacy(HashMap<String, String>),
+}
+
+// Serialize as enum (needed for bincode to match deserialization)
+impl Serialize for HttpHeaders {
+    fn serialize<S>(
+        &self,
+        serializer: S,
+    ) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        // Serialize the enum properly with variant tags
+        // This matches how RawHttpHeaders deserializes
+        match self {
+            HttpHeaders::Modern(modern) => serializer
+                .serialize_newtype_variant("HttpHeaders", 0, "Modern", modern),
+            #[cfg(feature = "http-headers-compat")]
+            HttpHeaders::Legacy(legacy) => serializer
+                .serialize_newtype_variant("HttpHeaders", 1, "Legacy", legacy),
+        }
+    }
+}
+
+// Deserialize: Need to handle enum variant properly for bincode
+impl<'de> Deserialize<'de> for HttpHeaders {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        // Bincode serializes enums with a variant index
+        // We need to deserialize it properly as an enum
+        #[cfg(feature = "http-headers-compat")]
+        {
+            #[derive(Deserialize)]
+            enum RawHttpHeaders {
+                Modern(HashMap<String, Vec<String>>),
+                Legacy(HashMap<String, String>),
+            }
+
+            match RawHttpHeaders::deserialize(deserializer)? {
+                RawHttpHeaders::Modern(m) => Ok(HttpHeaders::Modern(m)),
+                RawHttpHeaders::Legacy(l) => Ok(HttpHeaders::Legacy(l)),
+            }
+        }
+
+        #[cfg(not(feature = "http-headers-compat"))]
+        {
+            #[derive(Deserialize)]
+            enum RawHttpHeaders {
+                Modern(HashMap<String, Vec<String>>),
+            }
+
+            match RawHttpHeaders::deserialize(deserializer)? {
+                RawHttpHeaders::Modern(m) => Ok(HttpHeaders::Modern(m)),
+            }
+        }
+    }
+}
+
+impl HttpHeaders {
+    /// Creates a new empty HttpHeaders in modern format
+    pub fn new() -> Self {
+        HttpHeaders::Modern(HashMap::new())
+    }
+
+    /// Inserts a header key-value pair, replacing any existing values for that key
+    pub fn insert(&mut self, key: String, value: String) {
+        match self {
+            #[cfg(feature = "http-headers-compat")]
+            HttpHeaders::Legacy(legacy) => {
+                legacy.insert(key, value);
+            }
+            HttpHeaders::Modern(modern) => {
+                // Replace existing values with a new single-element vec
+                modern.insert(key, vec![value]);
+            }
+        }
+    }
+
+    /// Retrieves the first value for a given header key
+    pub fn get(&self, key: &str) -> Option<&String> {
+        match self {
+            #[cfg(feature = "http-headers-compat")]
+            HttpHeaders::Legacy(legacy) => legacy.get(key),
+            HttpHeaders::Modern(modern) => {
+                modern.get(key).and_then(|vals| vals.first())
+            }
+        }
+    }
+
+    /// Removes a header key and its associated values
+    pub fn remove(&mut self, key: &str) {
+        match self {
+            #[cfg(feature = "http-headers-compat")]
+            HttpHeaders::Legacy(legacy) => {
+                legacy.remove(key);
+            }
+            HttpHeaders::Modern(modern) => {
+                modern.remove(key);
+            }
+        }
+    }
+
+    /// Checks if a header key exists
+    pub fn contains_key(&self, key: &str) -> bool {
+        match self {
+            #[cfg(feature = "http-headers-compat")]
+            HttpHeaders::Legacy(legacy) => legacy.contains_key(key),
+            HttpHeaders::Modern(modern) => modern.contains_key(key),
+        }
+    }
+
+    /// Returns an iterator over the header key-value pairs
+    pub fn iter(&self) -> HttpHeadersIterator<'_> {
+        match self {
+            #[cfg(feature = "http-headers-compat")]
+            HttpHeaders::Legacy(legacy) => {
+                HttpHeadersIterator { inner: legacy.iter().collect(), index: 0 }
+            }
+            HttpHeaders::Modern(modern) => HttpHeadersIterator {
+                inner: modern
+                    .iter()
+                    .flat_map(|(k, vals)| vals.iter().map(move |v| (k, v)))
+                    .collect(),
+                index: 0,
+            },
+        }
+    }
+}
+
+impl From<&http::HeaderMap> for HttpHeaders {
+    fn from(headers: &http::HeaderMap) -> Self {
+        let mut modern_headers = HashMap::new();
+
+        // Collect all unique header names first
+        let header_names: std::collections::HashSet<_> =
+            headers.keys().collect();
+
+        // For each header name, collect ALL values
+        for name in header_names {
+            let values: Vec<String> = headers
+                .get_all(name)
+                .iter()
+                .filter_map(|v| v.to_str().ok())
+                .map(|s| s.to_string())
+                .collect();
+
+            if !values.is_empty() {
+                modern_headers.insert(name.to_string(), values);
+            }
+        }
+
+        HttpHeaders::Modern(modern_headers)
+    }
+}
+
+impl From<HttpHeaders> for HashMap<String, Vec<String>> {
+    fn from(headers: HttpHeaders) -> Self {
+        match headers {
+            #[cfg(feature = "http-headers-compat")]
+            HttpHeaders::Legacy(legacy) => {
+                legacy.into_iter().map(|(k, v)| (k, vec![v])).collect()
+            }
+            HttpHeaders::Modern(modern) => modern,
+        }
+    }
+}
+
+impl Default for HttpHeaders {
+    fn default() -> Self {
+        HttpHeaders::new()
+    }
+}
+
+impl IntoIterator for HttpHeaders {
+    type Item = (String, String);
+    type IntoIter = HttpHeadersIntoIterator;
+
+    fn into_iter(self) -> Self::IntoIter {
+        HttpHeadersIntoIterator {
+            inner: match self {
+                #[cfg(feature = "http-headers-compat")]
+                HttpHeaders::Legacy(legacy) => legacy.into_iter().collect(),
+                HttpHeaders::Modern(modern) => modern
+                    .into_iter()
+                    .flat_map(|(k, vals)| {
+                        vals.into_iter().map(move |v| (k.clone(), v))
+                    })
+                    .collect(),
+            },
+            index: 0,
+        }
+    }
+}
+
+/// Iterator for HttpHeaders
+#[derive(Debug)]
+pub struct HttpHeadersIntoIterator {
+    inner: Vec<(String, String)>,
+    index: usize,
+}
+
+impl Iterator for HttpHeadersIntoIterator {
+    type Item = (String, String);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.index < self.inner.len() {
+            let item = self.inner[self.index].clone();
+            self.index += 1;
+            Some(item)
+        } else {
+            None
+        }
+    }
+}
+
+impl<'a> IntoIterator for &'a HttpHeaders {
+    type Item = (&'a String, &'a String);
+    type IntoIter = HttpHeadersIterator<'a>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
+    }
+}
+
+/// Iterator for HttpHeaders references
+#[derive(Debug)]
+pub struct HttpHeadersIterator<'a> {
+    inner: Vec<(&'a String, &'a String)>,
+    index: usize,
+}
+
+impl<'a> Iterator for HttpHeadersIterator<'a> {
+    type Item = (&'a String, &'a String);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.index < self.inner.len() {
+            let item = self.inner[self.index];
+            self.index += 1;
+            Some(item)
+        } else {
+            None
+        }
+    }
+}
+
 /// A basic generic type that represents an HTTP response
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct HttpResponse {
     /// HTTP response body
     pub body: Vec<u8>,
     /// HTTP response headers
-    pub headers: HashMap<String, String>,
+    pub headers: HttpHeaders,
     /// HTTP response status code
     pub status: u16,
     /// HTTP response url
@@ -1175,16 +1432,6 @@ impl HttpCacheOptions {
         self.create_cache_key(parts, Some(method_override))
     }
 
-    /// Converts http::HeaderMap to HashMap<String, String> for HttpResponse
-    fn headers_to_hashmap(
-        headers: &http::HeaderMap,
-    ) -> HashMap<String, String> {
-        headers
-            .iter()
-            .map(|(k, v)| (k.to_string(), v.to_str().unwrap_or("").to_string()))
-            .collect()
-    }
-
     /// Converts HttpResponse to http::Response with the given body type
     pub fn http_response_to_response<B>(
         http_response: &HttpResponse,
@@ -1214,7 +1461,7 @@ impl HttpCacheOptions {
     ) -> Result<HttpResponse> {
         Ok(HttpResponse {
             body: vec![], // We don't need the full body for cache mode decision
-            headers: Self::headers_to_hashmap(&parts.headers),
+            headers: (&parts.headers).into(),
             status: parts.status.as_u16(),
             url: extract_url_from_request_parts(request_parts)?,
             version: parts.version.try_into()?,
@@ -1536,7 +1783,7 @@ impl<T: CacheManager> HttpCache<T> {
                     // ENOTCACHED
                     let mut res = HttpResponse {
                         body: b"GatewayTimeout".to_vec(),
-                        headers: HashMap::default(),
+                        headers: HttpHeaders::default(),
                         status: 504,
                         url: middleware.url()?,
                         version: HttpVersion::Http11,

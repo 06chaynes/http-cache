@@ -42,10 +42,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - run: |
+          cargo test --all-targets --no-default-features --features manager-cacache,cacache-smol,with-http-types,manager-moka,streaming-smol,http-headers-compat
+          cargo test --all-targets --no-default-features --features manager-cacache,cacache-tokio,with-http-types,manager-moka,streaming-tokio,http-headers-compat
+          cargo test --all-targets --no-default-features --features manager-cacache,cacache-smol,with-http-types,manager-moka,streaming-smol,rate-limiting,http-headers-compat
+          cargo test --all-targets --no-default-features --features manager-cacache,cacache-tokio,with-http-types,manager-moka,streaming-tokio,rate-limiting,http-headers-compat
           cargo test --all-targets --no-default-features --features manager-cacache,cacache-smol,with-http-types,manager-moka,streaming-smol
-          cargo test --all-targets --no-default-features --features manager-cacache,cacache-tokio,with-http-types,manager-moka,streaming-tokio
-          cargo test --all-targets --no-default-features --features manager-cacache,cacache-smol,with-http-types,manager-moka,streaming-smol,rate-limiting
-          cargo test --all-targets --no-default-features --features manager-cacache,cacache-tokio,with-http-types,manager-moka,streaming-tokio,rate-limiting
 
   clippy:
     name: Check clippy
@@ -57,10 +58,11 @@ jobs:
         with:
           components: "clippy"
       - run: |
+          cargo clippy --lib --tests --all-targets --no-default-features --features manager-cacache,cacache-smol,with-http-types,manager-moka,streaming-smol,http-headers-compat -- -D warnings
+          cargo clippy --lib --tests --all-targets --no-default-features --features manager-cacache,cacache-tokio,with-http-types,manager-moka,streaming-tokio,http-headers-compat -- -D warnings
+          cargo clippy --lib --tests --all-targets --no-default-features --features manager-cacache,cacache-smol,with-http-types,manager-moka,streaming-smol,rate-limiting,http-headers-compat -- -D warnings
+          cargo clippy --lib --tests --all-targets --no-default-features --features manager-cacache,cacache-tokio,with-http-types,manager-moka,streaming-tokio,rate-limiting,http-headers-compat -- -D warnings
           cargo clippy --lib --tests --all-targets --no-default-features --features manager-cacache,cacache-smol,with-http-types,manager-moka,streaming-smol -- -D warnings
-          cargo clippy --lib --tests --all-targets --no-default-features --features manager-cacache,cacache-tokio,with-http-types,manager-moka,streaming-tokio -- -D warnings
-          cargo clippy --lib --tests --all-targets --no-default-features --features manager-cacache,cacache-smol,with-http-types,manager-moka,streaming-smol,rate-limiting -- -D warnings
-          cargo clippy --lib --tests --all-targets --no-default-features --features manager-cacache,cacache-tokio,with-http-types,manager-moka,streaming-tokio,rate-limiting -- -D warnings
 
   docs:
     name: Build docs
@@ -74,7 +76,7 @@ jobs:
           RUSTDOCFLAGS: --cfg docsrs -Dwarnings
       - run: |
           cargo doc --no-deps --document-private-items
-          cargo test --doc --no-default-features --features manager-cacache,cacache-smol,with-http-types,manager-moka,streaming-smol
-          cargo test --doc --no-default-features --features manager-cacache,cacache-tokio,with-http-types,manager-moka,streaming-tokio
-          cargo test --doc --no-default-features --features manager-cacache,cacache-smol,with-http-types,manager-moka,streaming-smol,rate-limiting
-          cargo test --doc --no-default-features --features manager-cacache,cacache-tokio,with-http-types,manager-moka,streaming-tokio,rate-limiting
+          cargo test --doc --no-default-features --features manager-cacache,cacache-smol,with-http-types,manager-moka,streaming-smol,http-headers-compat
+          cargo test --doc --no-default-features --features manager-cacache,cacache-tokio,with-http-types,manager-moka,streaming-tokio,http-headers-compat
+          cargo test --doc --no-default-features --features manager-cacache,cacache-smol,with-http-types,manager-moka,streaming-smol,rate-limiting,http-headers-compat
+          cargo test --doc --no-default-features --features manager-cacache,cacache-tokio,with-http-types,manager-moka,streaming-tokio,rate-limiting,http-headers-compat
