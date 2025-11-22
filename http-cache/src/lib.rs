@@ -1216,6 +1216,9 @@ pub type CacheBust = Arc<
         + Sync,
 >;
 
+/// A closure that takes a mutable reference to [`HttpResponse`] and modifies it before caching.
+pub type ModifyResponse = Arc<dyn Fn(&mut HttpResponse) + Send + Sync>;
+
 /// Configuration options for customizing HTTP cache behavior on a per-request basis.
 ///
 /// This struct allows you to override default caching behavior for individual requests
@@ -1338,6 +1341,8 @@ pub struct HttpCacheOptions {
     pub response_cache_mode_fn: Option<ResponseCacheModeFn>,
     /// Bust the caches of the returned keys.
     pub cache_bust: Option<CacheBust>,
+    /// Modifies the response before storing it in the cache.
+    pub modify_response: Option<ModifyResponse>,
     /// Determines if the cache status headers should be added to the response.
     pub cache_status_headers: bool,
     /// Maximum time-to-live for cached responses.
@@ -1360,6 +1365,7 @@ impl Default for HttpCacheOptions {
             cache_mode_fn: None,
             response_cache_mode_fn: None,
             cache_bust: None,
+            modify_response: None,
             cache_status_headers: true,
             max_ttl: None,
             #[cfg(feature = "rate-limiting")]
@@ -1381,6 +1387,7 @@ impl Debug for HttpCacheOptions {
                     &"Fn(&request::Parts, &HttpResponse) -> Option<CacheMode>",
                 )
                 .field("cache_bust", &"Fn(&request::Parts) -> Vec<String>")
+                .field("modify_response", &"Fn(&mut ModifyResponse)")
                 .field("cache_status_headers", &self.cache_status_headers)
                 .field("max_ttl", &self.max_ttl)
                 .field("rate_limiter", &"Option<CacheAwareRateLimiter>")
@@ -1398,6 +1405,7 @@ impl Debug for HttpCacheOptions {
                     &"Fn(&request::Parts, &HttpResponse) -> Option<CacheMode>",
                 )
                 .field("cache_bust", &"Fn(&request::Parts) -> Vec<String>")
+                .field("modify_response", &"Fn(&mut ModifyResponse)")
                 .field("cache_status_headers", &self.cache_status_headers)
                 .field("max_ttl", &self.max_ttl)
                 .finish()
@@ -1483,6 +1491,13 @@ impl HttpCacheOptions {
             }
         }
         original_mode
+    }
+
+    /// Modifies the response before caching if a modifier function is provided
+    fn modify_response_before_caching(&self, response: &mut HttpResponse) {
+        if let Some(modify_response) = &self.modify_response {
+            modify_response(response);
+        }
     }
 
     /// Creates a cache policy for the given request and response
@@ -1847,6 +1862,7 @@ impl<T: CacheManager> HttpCache<T> {
         );
 
         if is_cacheable {
+            self.options.modify_response_before_caching(&mut res);
             Ok(self
                 .manager
                 .put(self.options.create_cache_key(&parts, None), res, policy)
@@ -1923,6 +1939,8 @@ impl<T: CacheManager> HttpCache<T> {
                         cached_res.cache_status(HitOrMiss::HIT);
                         cached_res.cache_lookup_status(HitOrMiss::HIT);
                     }
+                    self.options
+                        .modify_response_before_caching(&mut cached_res);
                     let res = self
                         .manager
                         .put(
@@ -1942,6 +1960,7 @@ impl<T: CacheManager> HttpCache<T> {
                         cond_res.cache_status(HitOrMiss::MISS);
                         cond_res.cache_lookup_status(HitOrMiss::HIT);
                     }
+                    self.options.modify_response_before_caching(&mut cond_res);
                     let res = self
                         .manager
                         .put(
