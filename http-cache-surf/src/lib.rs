@@ -274,6 +274,7 @@ impl Middleware for SurfMiddleware<'_> {
             status,
             url,
             version: version.try_into()?,
+            metadata: None,
         })
     }
 }
