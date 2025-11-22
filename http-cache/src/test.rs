@@ -1156,6 +1156,554 @@ mod interface_tests {
 }
 
 #[cfg(feature = "manager-cacache")]
+mod metadata_provider_tests {
+    use crate::{
+        CACacheManager, CacheMode, HttpCache, HttpCacheInterface,
+        HttpCacheOptions,
+    };
+    use http::{Request, Response, StatusCode};
+    use std::sync::Arc;
+
+    #[cfg(feature = "cacache-tokio")]
+    use tokio::test as async_test;
+
+    #[cfg(feature = "cacache-smol")]
+    use macro_rules_attribute::apply;
+    #[cfg(feature = "cacache-smol")]
+    use smol_macros::test;
+
+    #[cfg(feature = "cacache-smol")]
+    #[apply(test!)]
+    async fn test_metadata_provider_generates_metadata() {
+        let cache_dir = tempfile::tempdir().unwrap();
+        let manager = CACacheManager::new(cache_dir.path().to_path_buf(), true);
+
+        // Configure cache with a metadata provider
+        let options = HttpCacheOptions {
+            metadata_provider: Some(Arc::new(
+                |request_parts, response_parts| {
+                    // Generate metadata based on request path and response status
+                    let metadata = format!(
+                        "path={};status={}",
+                        request_parts.uri.path(),
+                        response_parts.status.as_u16()
+                    );
+                    Some(metadata.into_bytes())
+                },
+            )),
+            ..Default::default()
+        };
+
+        let cache = HttpCache { mode: CacheMode::Default, manager, options };
+
+        // Create a GET request
+        let request = Request::builder()
+            .method("GET")
+            .uri("https://example.com/api/data")
+            .body(())
+            .unwrap();
+        let (request_parts, _) = request.into_parts();
+
+        let analysis = cache.analyze_request(&request_parts, None).unwrap();
+
+        // Create a cacheable response
+        let response = Response::builder()
+            .status(StatusCode::OK)
+            .header("cache-control", "max-age=3600")
+            .body(b"response body".to_vec())
+            .unwrap();
+
+        // Process the response (should generate and store metadata)
+        let _ = cache
+            .process_response(analysis.clone(), response, None)
+            .await
+            .unwrap();
+
+        // Look up the cached response
+        let cached =
+            cache.lookup_cached_response(&analysis.cache_key).await.unwrap();
+        assert!(cached.is_some());
+
+        let (cached_response, _policy) = cached.unwrap();
+
+        // Verify metadata was generated and stored
+        assert!(cached_response.metadata.is_some());
+        let metadata = cached_response.metadata.unwrap();
+        let metadata_str = String::from_utf8(metadata).unwrap();
+        assert_eq!(metadata_str, "path=/api/data;status=200");
+    }
+
+    #[cfg(feature = "cacache-tokio")]
+    #[async_test]
+    async fn test_metadata_provider_generates_metadata() {
+        let cache_dir = tempfile::tempdir().unwrap();
+        let manager = CACacheManager::new(cache_dir.path().to_path_buf(), true);
+
+        // Configure cache with a metadata provider
+        let options = HttpCacheOptions {
+            metadata_provider: Some(Arc::new(
+                |request_parts, response_parts| {
+                    // Generate metadata based on request path and response status
+                    let metadata = format!(
+                        "path={};status={}",
+                        request_parts.uri.path(),
+                        response_parts.status.as_u16()
+                    );
+                    Some(metadata.into_bytes())
+                },
+            )),
+            ..Default::default()
+        };
+
+        let cache = HttpCache { mode: CacheMode::Default, manager, options };
+
+        // Create a GET request
+        let request = Request::builder()
+            .method("GET")
+            .uri("https://example.com/api/data")
+            .body(())
+            .unwrap();
+        let (request_parts, _) = request.into_parts();
+
+        let analysis = cache.analyze_request(&request_parts, None).unwrap();
+
+        // Create a cacheable response
+        let response = Response::builder()
+            .status(StatusCode::OK)
+            .header("cache-control", "max-age=3600")
+            .body(b"response body".to_vec())
+            .unwrap();
+
+        // Process the response (should generate and store metadata)
+        let _ = cache
+            .process_response(analysis.clone(), response, None)
+            .await
+            .unwrap();
+
+        // Look up the cached response
+        let cached =
+            cache.lookup_cached_response(&analysis.cache_key).await.unwrap();
+        assert!(cached.is_some());
+
+        let (cached_response, _policy) = cached.unwrap();
+
+        // Verify metadata was generated and stored
+        assert!(cached_response.metadata.is_some());
+        let metadata = cached_response.metadata.unwrap();
+        let metadata_str = String::from_utf8(metadata).unwrap();
+        assert_eq!(metadata_str, "path=/api/data;status=200");
+    }
+
+    #[cfg(feature = "cacache-smol")]
+    #[apply(test!)]
+    async fn test_metadata_provider_returns_none() {
+        let cache_dir = tempfile::tempdir().unwrap();
+        let manager = CACacheManager::new(cache_dir.path().to_path_buf(), true);
+
+        // Configure cache with a metadata provider that returns None
+        let options = HttpCacheOptions {
+            metadata_provider: Some(Arc::new(
+                |_request_parts, _response_parts| {
+                    None // Don't generate metadata for this response
+                },
+            )),
+            ..Default::default()
+        };
+
+        let cache = HttpCache { mode: CacheMode::Default, manager, options };
+
+        // Create a GET request
+        let request = Request::builder()
+            .method("GET")
+            .uri("https://example.com/test")
+            .body(())
+            .unwrap();
+        let (request_parts, _) = request.into_parts();
+
+        let analysis = cache.analyze_request(&request_parts, None).unwrap();
+
+        // Create a cacheable response
+        let response = Response::builder()
+            .status(StatusCode::OK)
+            .header("cache-control", "max-age=3600")
+            .body(b"response body".to_vec())
+            .unwrap();
+
+        // Process the response
+        let _ = cache
+            .process_response(analysis.clone(), response, None)
+            .await
+            .unwrap();
+
+        // Look up the cached response
+        let cached =
+            cache.lookup_cached_response(&analysis.cache_key).await.unwrap();
+        assert!(cached.is_some());
+
+        let (cached_response, _policy) = cached.unwrap();
+
+        // Verify metadata is None
+        assert!(cached_response.metadata.is_none());
+    }
+
+    #[cfg(feature = "cacache-tokio")]
+    #[async_test]
+    async fn test_metadata_provider_returns_none() {
+        let cache_dir = tempfile::tempdir().unwrap();
+        let manager = CACacheManager::new(cache_dir.path().to_path_buf(), true);
+
+        // Configure cache with a metadata provider that returns None
+        let options = HttpCacheOptions {
+            metadata_provider: Some(Arc::new(
+                |_request_parts, _response_parts| {
+                    None // Don't generate metadata for this response
+                },
+            )),
+            ..Default::default()
+        };
+
+        let cache = HttpCache { mode: CacheMode::Default, manager, options };
+
+        // Create a GET request
+        let request = Request::builder()
+            .method("GET")
+            .uri("https://example.com/test")
+            .body(())
+            .unwrap();
+        let (request_parts, _) = request.into_parts();
+
+        let analysis = cache.analyze_request(&request_parts, None).unwrap();
+
+        // Create a cacheable response
+        let response = Response::builder()
+            .status(StatusCode::OK)
+            .header("cache-control", "max-age=3600")
+            .body(b"response body".to_vec())
+            .unwrap();
+
+        // Process the response
+        let _ = cache
+            .process_response(analysis.clone(), response, None)
+            .await
+            .unwrap();
+
+        // Look up the cached response
+        let cached =
+            cache.lookup_cached_response(&analysis.cache_key).await.unwrap();
+        assert!(cached.is_some());
+
+        let (cached_response, _policy) = cached.unwrap();
+
+        // Verify metadata is None
+        assert!(cached_response.metadata.is_none());
+    }
+
+    #[cfg(feature = "cacache-smol")]
+    #[apply(test!)]
+    async fn test_explicit_metadata_overrides_provider() {
+        let cache_dir = tempfile::tempdir().unwrap();
+        let manager = CACacheManager::new(cache_dir.path().to_path_buf(), true);
+
+        // Configure cache with a metadata provider
+        let options = HttpCacheOptions {
+            metadata_provider: Some(Arc::new(
+                |_request_parts, _response_parts| {
+                    Some(b"from-provider".to_vec())
+                },
+            )),
+            ..Default::default()
+        };
+
+        let cache = HttpCache { mode: CacheMode::Default, manager, options };
+
+        // Create a GET request
+        let request = Request::builder()
+            .method("GET")
+            .uri("https://example.com/test")
+            .body(())
+            .unwrap();
+        let (request_parts, _) = request.into_parts();
+
+        let analysis = cache.analyze_request(&request_parts, None).unwrap();
+
+        // Create a cacheable response
+        let response = Response::builder()
+            .status(StatusCode::OK)
+            .header("cache-control", "max-age=3600")
+            .body(b"response body".to_vec())
+            .unwrap();
+
+        // Process the response with explicit metadata (should override provider)
+        let _ = cache
+            .process_response(
+                analysis.clone(),
+                response,
+                Some(b"explicit-metadata".to_vec()),
+            )
+            .await
+            .unwrap();
+
+        // Look up the cached response
+        let cached =
+            cache.lookup_cached_response(&analysis.cache_key).await.unwrap();
+        assert!(cached.is_some());
+
+        let (cached_response, _policy) = cached.unwrap();
+
+        // Verify explicit metadata takes precedence over provider
+        assert!(cached_response.metadata.is_some());
+        let metadata = cached_response.metadata.unwrap();
+        assert_eq!(metadata, b"explicit-metadata");
+    }
+
+    #[cfg(feature = "cacache-tokio")]
+    #[async_test]
+    async fn test_explicit_metadata_overrides_provider() {
+        let cache_dir = tempfile::tempdir().unwrap();
+        let manager = CACacheManager::new(cache_dir.path().to_path_buf(), true);
+
+        // Configure cache with a metadata provider
+        let options = HttpCacheOptions {
+            metadata_provider: Some(Arc::new(
+                |_request_parts, _response_parts| {
+                    Some(b"from-provider".to_vec())
+                },
+            )),
+            ..Default::default()
+        };
+
+        let cache = HttpCache { mode: CacheMode::Default, manager, options };
+
+        // Create a GET request
+        let request = Request::builder()
+            .method("GET")
+            .uri("https://example.com/test")
+            .body(())
+            .unwrap();
+        let (request_parts, _) = request.into_parts();
+
+        let analysis = cache.analyze_request(&request_parts, None).unwrap();
+
+        // Create a cacheable response
+        let response = Response::builder()
+            .status(StatusCode::OK)
+            .header("cache-control", "max-age=3600")
+            .body(b"response body".to_vec())
+            .unwrap();
+
+        // Process the response with explicit metadata (should override provider)
+        let _ = cache
+            .process_response(
+                analysis.clone(),
+                response,
+                Some(b"explicit-metadata".to_vec()),
+            )
+            .await
+            .unwrap();
+
+        // Look up the cached response
+        let cached =
+            cache.lookup_cached_response(&analysis.cache_key).await.unwrap();
+        assert!(cached.is_some());
+
+        let (cached_response, _policy) = cached.unwrap();
+
+        // Verify explicit metadata takes precedence over provider
+        assert!(cached_response.metadata.is_some());
+        let metadata = cached_response.metadata.unwrap();
+        assert_eq!(metadata, b"explicit-metadata");
+    }
+
+    #[cfg(feature = "cacache-smol")]
+    #[apply(test!)]
+    async fn test_metadata_provider_with_conditional_logic() {
+        let cache_dir = tempfile::tempdir().unwrap();
+        let manager = CACacheManager::new(cache_dir.path().to_path_buf(), true);
+
+        // Configure cache with a metadata provider that only generates metadata for certain paths
+        let options = HttpCacheOptions {
+            metadata_provider: Some(Arc::new(
+                |request_parts, response_parts| {
+                    // Only generate metadata for API paths
+                    if request_parts.uri.path().starts_with("/api/") {
+                        let content_type = response_parts
+                            .headers
+                            .get("content-type")
+                            .and_then(|v| v.to_str().ok())
+                            .unwrap_or("unknown");
+                        Some(
+                            format!("content-type={}", content_type)
+                                .into_bytes(),
+                        )
+                    } else {
+                        None
+                    }
+                },
+            )),
+            ..Default::default()
+        };
+
+        let cache = HttpCache { mode: CacheMode::Default, manager, options };
+
+        // Test 1: API path should generate metadata
+        let api_request = Request::builder()
+            .method("GET")
+            .uri("https://example.com/api/users")
+            .body(())
+            .unwrap();
+        let (api_parts, _) = api_request.into_parts();
+
+        let api_analysis = cache.analyze_request(&api_parts, None).unwrap();
+
+        let api_response = Response::builder()
+            .status(StatusCode::OK)
+            .header("cache-control", "max-age=3600")
+            .header("content-type", "application/json")
+            .body(b"[]".to_vec())
+            .unwrap();
+
+        let _ = cache
+            .process_response(api_analysis.clone(), api_response, None)
+            .await
+            .unwrap();
+
+        let cached = cache
+            .lookup_cached_response(&api_analysis.cache_key)
+            .await
+            .unwrap();
+        let (cached_response, _) = cached.unwrap();
+        assert!(cached_response.metadata.is_some());
+        let metadata_str =
+            String::from_utf8(cached_response.metadata.unwrap()).unwrap();
+        assert_eq!(metadata_str, "content-type=application/json");
+
+        // Test 2: Non-API path should not generate metadata
+        let static_request = Request::builder()
+            .method("GET")
+            .uri("https://example.com/static/style.css")
+            .body(())
+            .unwrap();
+        let (static_parts, _) = static_request.into_parts();
+
+        let static_analysis =
+            cache.analyze_request(&static_parts, None).unwrap();
+
+        let static_response = Response::builder()
+            .status(StatusCode::OK)
+            .header("cache-control", "max-age=3600")
+            .header("content-type", "text/css")
+            .body(b"body {}".to_vec())
+            .unwrap();
+
+        let _ = cache
+            .process_response(static_analysis.clone(), static_response, None)
+            .await
+            .unwrap();
+
+        let cached = cache
+            .lookup_cached_response(&static_analysis.cache_key)
+            .await
+            .unwrap();
+        let (cached_response, _) = cached.unwrap();
+        assert!(cached_response.metadata.is_none());
+    }
+
+    #[cfg(feature = "cacache-tokio")]
+    #[async_test]
+    async fn test_metadata_provider_with_conditional_logic() {
+        let cache_dir = tempfile::tempdir().unwrap();
+        let manager = CACacheManager::new(cache_dir.path().to_path_buf(), true);
+
+        // Configure cache with a metadata provider that only generates metadata for certain paths
+        let options = HttpCacheOptions {
+            metadata_provider: Some(Arc::new(
+                |request_parts, response_parts| {
+                    // Only generate metadata for API paths
+                    if request_parts.uri.path().starts_with("/api/") {
+                        let content_type = response_parts
+                            .headers
+                            .get("content-type")
+                            .and_then(|v| v.to_str().ok())
+                            .unwrap_or("unknown");
+                        Some(
+                            format!("content-type={}", content_type)
+                                .into_bytes(),
+                        )
+                    } else {
+                        None
+                    }
+                },
+            )),
+            ..Default::default()
+        };
+
+        let cache = HttpCache { mode: CacheMode::Default, manager, options };
+
+        // Test 1: API path should generate metadata
+        let api_request = Request::builder()
+            .method("GET")
+            .uri("https://example.com/api/users")
+            .body(())
+            .unwrap();
+        let (api_parts, _) = api_request.into_parts();
+
+        let api_analysis = cache.analyze_request(&api_parts, None).unwrap();
+
+        let api_response = Response::builder()
+            .status(StatusCode::OK)
+            .header("cache-control", "max-age=3600")
+            .header("content-type", "application/json")
+            .body(b"[]".to_vec())
+            .unwrap();
+
+        let _ = cache
+            .process_response(api_analysis.clone(), api_response, None)
+            .await
+            .unwrap();
+
+        let cached = cache
+            .lookup_cached_response(&api_analysis.cache_key)
+            .await
+            .unwrap();
+        let (cached_response, _) = cached.unwrap();
+        assert!(cached_response.metadata.is_some());
+        let metadata_str =
+            String::from_utf8(cached_response.metadata.unwrap()).unwrap();
+        assert_eq!(metadata_str, "content-type=application/json");
+
+        // Test 2: Non-API path should not generate metadata
+        let static_request = Request::builder()
+            .method("GET")
+            .uri("https://example.com/static/style.css")
+            .body(())
+            .unwrap();
+        let (static_parts, _) = static_request.into_parts();
+
+        let static_analysis =
+            cache.analyze_request(&static_parts, None).unwrap();
+
+        let static_response = Response::builder()
+            .status(StatusCode::OK)
+            .header("cache-control", "max-age=3600")
+            .header("content-type", "text/css")
+            .body(b"body {}".to_vec())
+            .unwrap();
+
+        let _ = cache
+            .process_response(static_analysis.clone(), static_response, None)
+            .await
+            .unwrap();
+
+        let cached = cache
+            .lookup_cached_response(&static_analysis.cache_key)
+            .await
+            .unwrap();
+        let (cached_response, _) = cached.unwrap();
+        assert!(cached_response.metadata.is_none());
+    }
+}
+
+#[cfg(feature = "manager-cacache")]
 mod response_cache_mode_tests {
     #[cfg(feature = "cacache-smol")]
     use crate::{

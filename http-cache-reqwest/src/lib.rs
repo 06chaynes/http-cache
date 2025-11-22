@@ -305,8 +305,8 @@ fn to_middleware_error<E: std::error::Error + Send + Sync + 'static>(
 use url::Url;
 
 pub use http_cache::{
-    CacheManager, CacheMode, CacheOptions, HttpCache, HttpCacheOptions,
-    HttpResponse, ResponseCacheModeFn,
+    CacheManager, CacheMode, CacheOptions, HttpCache, HttpCacheMetadata,
+    HttpCacheOptions, HttpResponse, MetadataProvider, ResponseCacheModeFn,
 };
 
 #[cfg(feature = "streaming")]

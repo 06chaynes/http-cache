@@ -963,6 +963,18 @@ pub type CacheBust = Arc<
         + Sync,
 >;
 
+/// Type alias for metadata stored alongside cached responses.
+/// Users are responsible for serialization/deserialization of this data.
+pub type HttpCacheMetadata = Vec<u8>;
+
+/// A closure that takes [`http::request::Parts`] and [`http::response::Parts`] and returns optional metadata to store with the cached response.
+/// This allows middleware to compute and store additional information alongside cached responses.
+pub type MetadataProvider = Arc<
+    dyn Fn(&request::Parts, &response::Parts) -> Option<HttpCacheMetadata>
+        + Send
+        + Sync,
+>;
+
 /// Configuration options for customizing HTTP cache behavior on a per-request basis.
 ///
 /// This struct allows you to override default caching behavior for individual requests
@@ -1069,6 +1081,28 @@ pub type CacheBust = Arc<
 ///     ..Default::default()
 /// };
 /// ```
+///
+/// ## Storing Metadata with Cached Responses
+/// ```rust
+/// use http_cache::{HttpCacheOptions, MetadataProvider};
+/// use http::{request, response};
+/// use std::sync::Arc;
+///
+/// let options = HttpCacheOptions {
+///     metadata_provider: Some(Arc::new(|request_parts: &request::Parts, response_parts: &response::Parts| {
+///         // Store computed information with the cached response
+///         let content_type = response_parts
+///             .headers
+///             .get("content-type")
+///             .and_then(|v| v.to_str().ok())
+///             .unwrap_or("unknown");
+///
+///         // Return serialized metadata (users handle serialization)
+///         Some(format!("path={};content-type={}", request_parts.uri.path(), content_type).into_bytes())
+///     })),
+///     ..Default::default()
+/// };
+/// ```
 #[derive(Clone)]
 pub struct HttpCacheOptions {
     /// Override the default cache options.
@@ -1097,6 +1131,11 @@ pub struct HttpCacheOptions {
     /// This provides the optimal behavior for web scrapers and similar applications.
     #[cfg(feature = "rate-limiting")]
     pub rate_limiter: Option<Arc<dyn CacheAwareRateLimiter>>,
+    /// Optional callback to provide metadata to store alongside cached responses.
+    /// The callback receives request and response parts and can return metadata bytes.
+    /// This is useful for storing computed information that should be associated with
+    /// cached responses without recomputation on cache hits.
+    pub metadata_provider: Option<MetadataProvider>,
 }
 
 impl Default for HttpCacheOptions {
@@ -1111,6 +1150,7 @@ impl Default for HttpCacheOptions {
             max_ttl: None,
             #[cfg(feature = "rate-limiting")]
             rate_limiter: None,
+            metadata_provider: None,
         }
     }
 }
@@ -1131,6 +1171,10 @@ impl Debug for HttpCacheOptions {
                 .field("cache_status_headers", &self.cache_status_headers)
                 .field("max_ttl", &self.max_ttl)
                 .field("rate_limiter", &"Option<CacheAwareRateLimiter>")
+                .field(
+                    "metadata_provider",
+                    &"Fn(&request::Parts, &response::Parts) -> Option<Vec<u8>>",
+                )
                 .finish()
         }
 
@@ -1147,6 +1191,10 @@ impl Debug for HttpCacheOptions {
                 .field("cache_bust", &"Fn(&request::Parts) -> Vec<String>")
                 .field("cache_status_headers", &self.cache_status_headers)
                 .field("max_ttl", &self.max_ttl)
+                .field(
+                    "metadata_provider",
+                    &"Fn(&request::Parts, &response::Parts) -> Option<Vec<u8>>",
+                )
                 .finish()
         }
     }
@@ -1242,6 +1290,17 @@ impl HttpCacheOptions {
             }
         }
         original_mode
+    }
+
+    /// Generates metadata for a response using the metadata_provider callback if configured
+    pub fn generate_metadata(
+        &self,
+        request_parts: &request::Parts,
+        response_parts: &response::Parts,
+    ) -> Option<HttpCacheMetadata> {
+        self.metadata_provider
+            .as_ref()
+            .and_then(|provider| provider(request_parts, response_parts))
     }
 
     /// Creates a cache policy for the given request and response
@@ -1607,6 +1666,11 @@ impl<T: CacheManager> HttpCache<T> {
         );
 
         if is_cacheable {
+            // Generate metadata using the provider callback if configured
+            let response_parts = res.parts()?;
+            res.metadata =
+                self.options.generate_metadata(&parts, &response_parts);
+
             Ok(self
                 .manager
                 .put(self.options.create_cache_key(&parts, None), res, policy)
@@ -1702,6 +1766,11 @@ impl<T: CacheManager> HttpCache<T> {
                         cond_res.cache_status(HitOrMiss::MISS);
                         cond_res.cache_lookup_status(HitOrMiss::HIT);
                     }
+                    // Generate metadata using the provider callback if configured
+                    let response_parts = cond_res.parts()?;
+                    cond_res.metadata =
+                        self.options.generate_metadata(&parts, &response_parts);
+
                     let res = self
                         .manager
                         .put(
@@ -1820,10 +1889,14 @@ where
 
         // Convert response to HttpResponse format for response-based cache mode evaluation
         let (parts, body) = response.into_parts();
+        // Use provided metadata or generate from provider
+        let effective_metadata = metadata.or_else(|| {
+            self.options.generate_metadata(&analysis.request_parts, &parts)
+        });
         let http_response = self.options.parts_to_http_response(
             &parts,
             &analysis.request_parts,
-            metadata,
+            effective_metadata,
         )?;
 
         // Check for response-based cache mode override
@@ -1971,10 +2044,14 @@ impl<T: CacheManager> HttpCacheInterface for HttpCache<T> {
 
         // Convert response to HttpResponse format
         let (parts, body) = response.into_parts();
+        // Use provided metadata or generate from provider
+        let effective_metadata = metadata.or_else(|| {
+            self.options.generate_metadata(&analysis.request_parts, &parts)
+        });
         let mut http_response = self.options.parts_to_http_response(
             &parts,
             &analysis.request_parts,
-            metadata,
+            effective_metadata,
         )?;
         http_response.body = body.clone(); // Include the body for buffered cache managers
 
