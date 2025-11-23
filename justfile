@@ -23,6 +23,8 @@
     cd http-cache-ureq && cargo nextest run --all-features
     echo "\n----------\nTower middleware:\n"
     cd http-cache-tower && cargo nextest run --all-features
+    echo "\n----------\nTower server middleware:\n"
+    cd http-cache-tower-server && cargo nextest run --all-features
     echo "\n----------\nQuickcache middleware:\n"
     cd http-cache-quickcache && cargo nextest run --all-features
 
@@ -45,6 +47,8 @@
     cd http-cache-ureq && cargo test --doc --all-features
     echo "\n----------\nTower middleware:\n"
     cd http-cache-tower && cargo test --doc --all-features
+    echo "\n----------\nTower server middleware:\n"
+    cd http-cache-tower-server && cargo test --doc --all-features
     echo "\n----------\nQuickcache middleware:\n"
     cd http-cache-quickcache && cargo test --doc --all-features
 
@@ -68,6 +72,8 @@
     cd http-cache-ureq && cargo check --all-features
     echo "\n----------\nTower middleware:\n"
     cd http-cache-tower && cargo check --all-features
+    echo "\n----------\nTower server middleware:\n"
+    cd http-cache-tower-server && cargo check --all-features
     echo "\n----------\nQuickcache middleware:\n"
     cd http-cache-quickcache && cargo check --all-features
 
@@ -141,6 +147,8 @@ changelog TAG:
     cd http-cache-ureq && cargo clippy --lib --tests --all-targets --all-features -- -D warnings
     echo "\n----------\nTower middleware:\n"
     cd http-cache-tower && cargo clippy --lib --tests --all-targets --all-features -- -D warnings
+    echo "\n----------\nTower server middleware:\n"
+    cd http-cache-tower-server && cargo clippy --lib --tests --all-targets --all-features -- -D warnings
     echo "\n----------\nQuickcache middleware:\n"
     cd http-cache-quickcache && cargo clippy --lib --tests --all-targets --all-features -- -D warnings
     echo "\n----------\nFormatting check:\n"
@@ -162,6 +170,8 @@ changelog TAG:
     cd http-cache-ureq && cargo msrv find
     echo "\n----------\nTower middleware:\n"
     cd http-cache-tower && cargo msrv find
+    echo "\n----------\nTower server middleware:\n"
+    cd http-cache-tower-server && cargo msrv find
     echo "\n----------\nQuickcache middleware:\n"
     cd http-cache-quickcache && cargo msrv find
 
@@ -177,6 +187,8 @@ changelog TAG:
     cd http-cache-ureq && cargo msrv verify
     echo "\n----------\nTower middleware:\n"
     cd http-cache-tower && cargo msrv verify
+    echo "\n----------\nTower server middleware:\n"
+    cd http-cache-tower-server && cargo msrv verify
     echo "\n----------\nQuickcache middleware:\n"
     cd http-cache-quickcache && cargo msrv verify
 
@@ -196,6 +208,8 @@ changelog TAG:
     cd http-cache-ureq && cargo publish --dry-run
     echo "Tower middleware:"
     cd http-cache-tower && cargo publish --dry-run
+    echo "Tower server middleware:"
+    cd http-cache-tower-server && cargo publish --dry-run
     echo "Quickcache middleware:"
     cd http-cache-quickcache && cargo publish --dry-run
 
@@ -218,6 +232,8 @@ changelog TAG:
     cd http-cache-ureq && cargo publish
     echo "Tower middleware:"
     cd http-cache-tower && cargo publish
+    echo "Tower server middleware:"
+    cd http-cache-tower-server && cargo publish
     echo "Quickcache middleware:"
     cd http-cache-quickcache && cargo publish
 
