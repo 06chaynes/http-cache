@@ -423,6 +423,11 @@ impl Middleware for ReqwestMiddleware<'_> {
             builder = builder.header(name, value);
         }
 
+        // Add extensions
+        if let Some(no_error) = builder.extensions_mut() {
+            *no_error = self.extensions.clone();
+        }
+
         // Build with empty body just to get the Parts
         let http_req = builder.body(()).map_err(Box::new)?;
         Ok(http_req.into_parts().0)
