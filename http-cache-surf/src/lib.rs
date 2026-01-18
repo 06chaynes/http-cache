@@ -144,8 +144,8 @@
 //! ```
 
 use std::convert::TryInto;
+use std::str::FromStr;
 use std::time::SystemTime;
-use std::{collections::HashMap, str::FromStr};
 
 use http::{
     header::CACHE_CONTROL,
@@ -155,7 +155,7 @@ use http_cache::{
     BadHeader, BoxError, CacheManager, CacheOptions, HitOrMiss, HttpResponse,
     Middleware, Result, XCACHE, XCACHELOOKUP,
 };
-pub use http_cache::{CacheMode, HttpCache};
+pub use http_cache::{CacheMode, HttpCache, HttpHeaders};
 use http_cache_semantics::CachePolicy;
 use http_types::{
     headers::HeaderValue as HttpTypesHeaderValue,
@@ -258,7 +258,7 @@ impl Middleware for SurfMiddleware<'_> {
         let url = self.req.url().clone();
         let mut res =
             self.next.run(self.req.clone().into(), self.client.clone()).await?;
-        let mut headers = HashMap::new();
+        let mut headers = HttpHeaders::new();
         for header in res.iter() {
             headers.insert(
                 header.0.as_str().to_owned(),

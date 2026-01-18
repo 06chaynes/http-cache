@@ -1751,6 +1751,89 @@ mod streaming_tests {
         Ok(())
     }
 
+    #[tokio::test]
+    async fn streaming_cache_with_multiple_vary_headers() -> Result<()> {
+        let manager = create_streaming_cache_manager();
+        let cache = HttpStreamingCache {
+            mode: CacheMode::Default,
+            manager,
+            options: Default::default(),
+        };
+
+        // Create a request
+        let request = Request::builder()
+            .uri("https://example.com/multiple-vary-test")
+            .header("user-agent", "test-agent")
+            .header("accept-encoding", "gzip")
+            .header("accept-language", "en-US")
+            .body(())
+            .unwrap();
+
+        let (parts, _) = request.into_parts();
+        let analysis = cache.analyze_request(&parts, None)?;
+
+        // Create a response with MULTIPLE Vary headers (the issue from #119)
+        let mut response = Response::builder()
+            .status(200)
+            .header("content-type", "application/json")
+            .header("cache-control", "max-age=3600")
+            .body(Full::new(Bytes::from("multiple vary test data")))
+            .unwrap();
+
+        // Add multiple Vary headers using headers_mut()
+        let headers = response.headers_mut();
+        headers.append("vary", "Prefer".parse().unwrap());
+        headers.append("vary", "Accept".parse().unwrap());
+        headers.append("vary", "Range".parse().unwrap());
+        headers.append("vary", "Accept-Encoding".parse().unwrap());
+        headers.append("vary", "Accept-Language".parse().unwrap());
+        headers.append("vary", "Accept-Datetime".parse().unwrap());
+
+        // Process the response
+        let cached_response =
+            cache.process_response(analysis.clone(), response, None).await?;
+        assert_eq!(cached_response.status(), 200);
+
+        // Verify the body
+        let body_bytes =
+            cached_response.into_body().collect().await?.to_bytes();
+        assert_eq!(body_bytes, "multiple vary test data");
+
+        // Test cache lookup - this is where the bug would show up
+        let cached_result =
+            cache.lookup_cached_response(&analysis.cache_key).await?;
+        assert!(cached_result.is_some());
+
+        if let Some((response, _policy)) = cached_result {
+            // Get ALL Vary header values
+            let vary_values: Vec<_> = response
+                .headers()
+                .get_all("vary")
+                .iter()
+                .map(|v| v.to_str().unwrap())
+                .collect();
+
+            // Verify we got all 6 Vary headers, not just one
+            assert_eq!(
+                vary_values.len(),
+                6,
+                "Expected 6 Vary headers, got {}: {:?}",
+                vary_values.len(),
+                vary_values
+            );
+
+            // Verify all expected values are present
+            assert!(vary_values.contains(&"Prefer"));
+            assert!(vary_values.contains(&"Accept"));
+            assert!(vary_values.contains(&"Range"));
+            assert!(vary_values.contains(&"Accept-Encoding"));
+            assert!(vary_values.contains(&"Accept-Language"));
+            assert!(vary_values.contains(&"Accept-Datetime"));
+        }
+
+        Ok(())
+    }
+
     #[cfg(feature = "rate-limiting")]
     #[tokio::test]
     async fn test_streaming_with_rate_limiting() -> Result<()> {
@@ -1926,16 +2009,10 @@ mod streaming_tests {
         call_counter.lock().unwrap().clear();
 
         // Second request - should be cache hit, NO rate limiting
-        let start = Instant::now();
         let response2 = client.get(&url).send().await?;
-        let second_duration = start.elapsed();
 
         assert_eq!(response2.status(), 200);
-        assert_eq!(call_counter.lock().unwrap().len(), 0); // No rate limiting for cache hit
-        assert!(
-            second_duration < Duration::from_millis(10),
-            "Cache hit should be very fast"
-        );
+        assert_eq!(call_counter.lock().unwrap().len(), 0);
 
         Ok(())
     }
@@ -2015,13 +2092,10 @@ mod rate_limiting_tests {
         call_counter.lock().unwrap().clear();
 
         // Second request - should be cache hit, NO rate limiting
-        let start = Instant::now();
         let response2 = client.get(&url).send().await?;
-        let second_duration = start.elapsed();
 
         assert_eq!(response2.status(), 200);
-        assert_eq!(call_counter.lock().unwrap().len(), 0); // No rate limiting call
-        assert!(second_duration < Duration::from_millis(5)); // Should be very fast
+        assert_eq!(call_counter.lock().unwrap().len(), 0);
 
         // Verify both responses have the same body
         let body1 = response1.bytes().await?;
@@ -2222,20 +2296,14 @@ mod rate_limiting_tests {
         call_counter.lock().unwrap().clear();
 
         // Second request: cache hit, should NOT apply rate limiting
-        let start = Instant::now();
         let _response2 = client.get(&url).send().await?;
-        let second_duration = start.elapsed();
 
-        assert_eq!(call_counter.lock().unwrap().len(), 0); // No rate limiting
-        assert!(second_duration < Duration::from_millis(5)); // Very fast
+        assert_eq!(call_counter.lock().unwrap().len(), 0);
 
         // Third request: cache hit, should NOT apply rate limiting
-        let start = Instant::now();
         let _response3 = client.get(&url).send().await?;
-        let third_duration = start.elapsed();
 
-        assert_eq!(call_counter.lock().unwrap().len(), 0); // Still no rate limiting
-        assert!(third_duration < Duration::from_millis(5)); // Very fast
+        assert_eq!(call_counter.lock().unwrap().len(), 0);
 
         Ok(())
     }

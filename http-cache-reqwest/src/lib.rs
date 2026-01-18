@@ -279,9 +279,7 @@ pub type ReqwestStreamingError = http_cache::ClientStreamingError;
 #[cfg(feature = "streaming")]
 use http_cache::StreamingCacheManager;
 
-use std::{
-    collections::HashMap, convert::TryInto, str::FromStr, time::SystemTime,
-};
+use std::{convert::TryInto, str::FromStr, time::SystemTime};
 
 pub use http::request::Parts;
 use http::{
@@ -425,6 +423,11 @@ impl Middleware for ReqwestMiddleware<'_> {
             builder = builder.header(name, value);
         }
 
+        // Add extensions
+        if let Some(no_error) = builder.extensions_mut() {
+            *no_error = self.extensions.clone();
+        }
+
         // Build with empty body just to get the Parts
         let http_req = builder.body(()).map_err(Box::new)?;
         Ok(http_req.into_parts().0)
@@ -443,13 +446,7 @@ impl Middleware for ReqwestMiddleware<'_> {
             .run(copied_req, self.extensions)
             .await
             .map_err(BoxError::from)?;
-        let mut headers = HashMap::new();
-        for header in res.headers() {
-            headers.insert(
-                header.0.as_str().to_owned(),
-                header.1.to_str()?.to_owned(),
-            );
-        }
+        let headers = res.headers().into();
         let url = res.url().clone();
         let status = res.status().into();
         let version = res.version();

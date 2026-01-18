@@ -4,4 +4,8 @@ Cargo.lock
 http-cacache/
 /.idea
 /public
-/.DS_Store
+**/.DS_Store
+
+# Cache directories from examples
+**/cache/
+**/cache-*/

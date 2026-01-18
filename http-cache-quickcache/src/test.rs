@@ -128,6 +128,7 @@ async fn default_mode_with_options() -> Result<()> {
                 cache_status_headers: true,
                 max_ttl: None,
                 metadata_provider: None,
+                modify_response: None,
             },
         }))
         .build();

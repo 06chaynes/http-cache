@@ -27,8 +27,6 @@ use {
     std::sync::atomic::{AtomicU64, AtomicUsize, Ordering},
 };
 
-use std::collections::HashMap;
-
 // Import async-compatible synchronization primitives based on feature flags
 cfg_if::cfg_if! {
     if #[cfg(feature = "streaming-tokio")] {
@@ -348,7 +346,7 @@ pub struct CacheIntegrityReport {
 pub struct CacheMetadata {
     pub status: u16,
     pub version: u8,
-    pub headers: HashMap<String, String>,
+    pub headers: crate::HttpHeaders,
     pub content_digest: String,
     pub policy: CachePolicy,
     pub created_at: u64,
@@ -1097,9 +1095,7 @@ impl StreamingCacheManager for StreamingManager {
                 Version::HTTP_3 => 3,
                 _ => 11,
             },
-            headers: crate::HttpCacheOptions::headers_to_hashmap(
-                &parts.headers,
-            ),
+            headers: crate::HttpHeaders::from(&parts.headers),
             content_digest: content_digest.clone(),
             policy,
             created_at: std::time::SystemTime::now()
@@ -1668,8 +1664,8 @@ mod tests {
     /// Test concurrent access to reference counting
     #[tokio::test]
     async fn test_concurrent_reference_counting() {
+        use futures::future::join_all;
         use std::sync::Arc;
-        use tokio::task;
 
         let temp_dir = TempDir::new().unwrap();
         let cache =
@@ -1679,49 +1675,47 @@ mod tests {
         let shared_content = Bytes::from("concurrent test content");
         let tasks_count = 10;
 
-        // Create multiple tasks that store identical content concurrently
-        let mut handles = Vec::new();
-        for i in 0..tasks_count {
-            let cache = Arc::clone(&cache);
-            let content = shared_content.clone();
-            let url = request_url.clone();
+        // Create multiple futures that store identical content concurrently
+        let put_futures: Vec<_> = (0..tasks_count)
+            .map(|i| {
+                let cache = Arc::clone(&cache);
+                let content = shared_content.clone();
+                let url = request_url.clone();
 
-            let handle = task::spawn(async move {
-                let response = Response::builder()
-                    .status(200)
-                    .header("x-task-id", i.to_string())
-                    .body(Full::new(content))
-                    .unwrap();
+                async move {
+                    let response = Response::builder()
+                        .status(200)
+                        .header("x-task-id", i.to_string())
+                        .body(Full::new(content))
+                        .unwrap();
 
-                let policy = CachePolicy::new(
-                    &http::request::Request::builder()
-                        .method("GET")
-                        .uri(format!("/concurrent-test-{}", i))
-                        .body(())
-                        .unwrap()
-                        .into_parts()
-                        .0,
-                    &response.clone().map(|_| ()),
-                );
+                    let policy = CachePolicy::new(
+                        &http::request::Request::builder()
+                            .method("GET")
+                            .uri(format!("/concurrent-test-{}", i))
+                            .body(())
+                            .unwrap()
+                            .into_parts()
+                            .0,
+                        &response.clone().map(|_| ()),
+                    );
 
-                cache
-                    .put(
-                        format!("concurrent-key-{}", i),
-                        response,
-                        policy,
-                        url,
-                        None,
-                    )
-                    .await
-                    .unwrap();
-            });
-            handles.push(handle);
-        }
+                    cache
+                        .put(
+                            format!("concurrent-key-{}", i),
+                            response,
+                            policy,
+                            url,
+                            None,
+                        )
+                        .await
+                        .unwrap();
+                }
+            })
+            .collect();
 
-        // Wait for all tasks to complete
-        for handle in handles {
-            handle.await.unwrap();
-        }
+        // Wait for all futures to complete
+        join_all(put_futures).await;
 
         // Verify all entries can be retrieved
         for i in 0..tasks_count {
@@ -1737,35 +1731,37 @@ mod tests {
         assert!(content_path.exists(), "Shared content file should exist");
 
         // Delete half the entries concurrently
-        let mut delete_handles = Vec::new();
-        for i in 0..tasks_count / 2 {
-            let cache = Arc::clone(&cache);
-            let handle = task::spawn(async move {
-                cache.delete(&format!("concurrent-key-{}", i)).await.unwrap();
-            });
-            delete_handles.push(handle);
-        }
+        let delete_futures: Vec<_> = (0..tasks_count / 2)
+            .map(|i| {
+                let cache = Arc::clone(&cache);
+                async move {
+                    cache
+                        .delete(&format!("concurrent-key-{}", i))
+                        .await
+                        .unwrap();
+                }
+            })
+            .collect();
 
-        for handle in delete_handles {
-            handle.await.unwrap();
-        }
+        join_all(delete_futures).await;
 
         // Content should still exist (remaining references)
         assert!(content_path.exists(), "Content file should still exist");
 
         // Delete remaining entries
-        let mut final_delete_handles = Vec::new();
-        for i in tasks_count / 2..tasks_count {
-            let cache = Arc::clone(&cache);
-            let handle = task::spawn(async move {
-                cache.delete(&format!("concurrent-key-{}", i)).await.unwrap();
-            });
-            final_delete_handles.push(handle);
-        }
+        let final_delete_futures: Vec<_> = (tasks_count / 2..tasks_count)
+            .map(|i| {
+                let cache = Arc::clone(&cache);
+                async move {
+                    cache
+                        .delete(&format!("concurrent-key-{}", i))
+                        .await
+                        .unwrap();
+                }
+            })
+            .collect();
 
-        for handle in final_delete_handles {
-            handle.await.unwrap();
-        }
+        join_all(final_delete_futures).await;
 
         // Now content should be deleted
         assert!(

@@ -584,11 +584,14 @@ impl<'a, T: CacheManager> CachedRequestBuilder<'a, T> {
             if cache_status_headers {
                 cached_response
                     .headers
-                    .insert(XCACHE.to_string(), HitOrMiss::MISS.to_string());
-                cached_response.headers.insert(
-                    XCACHELOOKUP.to_string(),
-                    HitOrMiss::MISS.to_string(),
-                );
+                    .entry(XCACHE.to_string())
+                    .or_insert_with(Vec::new)
+                    .push(HitOrMiss::MISS.to_string());
+                cached_response
+                    .headers
+                    .entry(XCACHELOOKUP.to_string())
+                    .or_insert_with(Vec::new)
+                    .push(HitOrMiss::MISS.to_string());
             }
 
             Ok(cached_response)
@@ -664,28 +667,17 @@ fn convert_ureq_response_to_http_response(
     url: &str,
 ) -> Result<HttpResponse, HttpCacheError> {
     let status = response.status();
-    let mut headers = HashMap::new();
 
     // Copy headers
-    for (name, value) in response.headers() {
-        let value_str = value.to_str().map_err(|e| {
-            HttpCacheError::http(Box::new(std::io::Error::other(format!(
-                "Invalid header value: {}",
-                e
-            ))))
-        })?;
-        headers.insert(name.as_str().to_string(), value_str.to_string());
-    }
+    let headers = response.headers().into();
 
-    // Read body using read_to_string
-    let body_string = response.body_mut().read_to_string().map_err(|e| {
+    // Read body as bytes to handle binary content (images, etc.)
+    let body = response.body_mut().read_to_vec().map_err(|e| {
         HttpCacheError::http(Box::new(std::io::Error::other(format!(
             "Failed to read response body: {}",
             e
         ))))
     })?;
-
-    let body = body_string.into_bytes();
 
     // Parse the provided URL
     let parsed_url = Url::parse(url).map_err(|e| {
@@ -709,7 +701,7 @@ fn convert_ureq_response_to_http_response(
 #[derive(Debug)]
 pub struct CachedResponse {
     status: u16,
-    headers: HashMap<String, String>,
+    headers: HashMap<String, Vec<String>>,
     body: Vec<u8>,
     url: String,
     cached: bool,
@@ -728,7 +720,9 @@ impl CachedResponse {
 
     /// Get a header value
     pub fn header(&self, name: &str) -> Option<&str> {
-        self.headers.get(name).map(|s| s.as_str())
+        self.headers
+            .get(name)
+            .and_then(|values| values.first().map(|s| s.as_str()))
     }
 
     /// Get all header names
@@ -787,19 +781,17 @@ impl CachedResponse {
         let mut headers = HashMap::new();
         for (name, value) in response.headers() {
             let value_str = value.to_str().unwrap_or("");
-            headers.insert(name.as_str().to_string(), value_str.to_string());
+            headers
+                .entry(name.as_str().to_string())
+                .or_insert_with(Vec::new)
+                .push(value_str.to_string());
         }
 
         // Note: Cache headers will be added by the cache system based on cache_status_headers option
         // Don't add them here unconditionally
 
-        // Read the body
-        let body = if let Ok(body_string) = response.body_mut().read_to_string()
-        {
-            body_string.into_bytes()
-        } else {
-            Vec::new()
-        };
+        // Read the body as bytes to handle binary content (images, etc.)
+        let body = response.body_mut().read_to_vec().unwrap_or_default();
 
         Self { status, headers, body, url: url.to_string(), cached: false }
     }
@@ -811,7 +803,7 @@ impl From<HttpResponse> for CachedResponse {
         // based on the cache_status_headers option, so don't add them here
         Self {
             status: response.status,
-            headers: response.headers,
+            headers: response.headers.into(),
             body: response.body,
             url: response.url.to_string(),
             cached: true,

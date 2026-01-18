@@ -13,7 +13,7 @@ categories = [
     "web-programming::http-client"
 ]
 edition = "2021"
-rust-version = "1.82.0"
+rust-version = "1.83.0"
 
 [dependencies]
 async-trait = "0.1.85"
@@ -32,8 +32,8 @@ features = ["bincode"]
 
 [dev-dependencies]
 http = "1.2.0"
-reqwest = { version = "0.12.12", default-features = false }
-reqwest-middleware = "0.4.0"
+reqwest = { version = "0.13.1", default-features = false }
+reqwest-middleware = "0.5.0"
 tokio = { version = "1.43.0", features = [ "macros", "rt", "rt-multi-thread" ] }
 macro_rules_attribute = "0.2.0"
 smol-macros = "0.1.1"

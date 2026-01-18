@@ -20,7 +20,7 @@ See the [Provided Client Implementations](#provided-client-implementations) sect
 
 ## Minimum Supported Rust Version (MSRV)
 
-1.82.0
+1.83.0
 
 ## Install
 
@@ -51,6 +51,11 @@ The following features are available. By default `manager-cacache` and `cacache-
 - **Reqwest**: See [README](https://github.com/06chaynes/http-cache/blob/main/http-cache-reqwest/README.md) for more details
 - **Tower**: See [README](https://github.com/06chaynes/http-cache/blob/main/http-cache-tower/README.md) for more details
 - **Surf**: See [README](https://github.com/06chaynes/http-cache/blob/main/http-cache-surf/README.md) for more details
+- **Ureq**: See [README](https://github.com/06chaynes/http-cache/blob/main/http-cache-ureq/README.md) for more details
+
+## Server-Side Caching Middleware
+
+- **Tower Server**: See [README](https://github.com/06chaynes/http-cache/blob/main/http-cache-tower-server/README.md) for more details
 
 ## Additional Manager Implementations
 
