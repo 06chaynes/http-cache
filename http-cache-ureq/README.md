@@ -15,7 +15,7 @@ Provides a simple caching wrapper around [ureq](https://github.com/algesten/ureq
 
 ## Minimum Supported Rust Version (MSRV)
 
-1.83.0
+1.85.0
 
 ## Install
 

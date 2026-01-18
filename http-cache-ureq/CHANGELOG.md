@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.0.0-alpha.2] - 2026-01-18
+
+### Added
+
+- Response metadata integration for storing data with cached responses
+
+### Changed
+
+- MSRV is now 1.85.0
+
+### Fixed
+
+- Serialize all header values instead of just the first value per header name
+- Read body to bytes correctly
+
 ## [1.0.0-alpha.1] - 2025-08-24
 
 ### Added

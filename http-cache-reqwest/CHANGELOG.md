@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.0.0-alpha.3] - 2026-01-18
+
+### Added
+
+- Response metadata integration for storing data with cached responses
+
+### Changed
+
+- Updated `reqwest` to 0.13.1
+- Updated `reqwest-middleware` to 0.5.0
+- MSRV is now 1.85.0
+
+### Fixed
+
+- Add extensions to `ReqwestMiddleware::parts`
+- Serialize all header values instead of just the first value per header name
+- Preserve all header values sharing the same name
+
 ## [1.0.0-alpha.2] - 2025-08-24
 
 ### Added

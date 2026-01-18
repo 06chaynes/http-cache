@@ -14,7 +14,7 @@ This crate provides Tower Layer and Service implementations that add HTTP cachin
 
 ## Minimum Supported Rust Version (MSRV)
 
-1.83.0
+1.85.0
 
 ## Install
 

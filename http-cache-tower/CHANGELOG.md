@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.0.0-alpha.3] - 2026-01-18
+
+### Added
+
+- Response metadata integration for storing data with cached responses
+
+### Changed
+
+- MSRV is now 1.85.0
+
 ## [1.0.0-alpha.2] - 2025-08-24
 
 ### Added

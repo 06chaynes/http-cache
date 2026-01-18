@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.0.0-alpha.3] - 2026-01-18
+
+### Added
+
+- `modify_response` field to `HttpCacheOptions` for modifying responses before storing in cache
+- `http-headers-compat` feature flag for header compatibility options
+- `metadata` field to `HttpResponse` for storing arbitrary data with cached responses
+- `metadata_provider` function to `HttpCacheOptions` for computing metadata on cache store
+
+### Changed
+
+- MSRV is now 1.85.0
+
+### Fixed
+
+- Serialize all header values instead of just the first value per header name
+- `HttpHeaders` serialization and insert behavior for bincode compatibility
+- Preserve all header values sharing the same name
+
 ## [1.0.0-alpha.2] - 2025-08-24
 
 ### Added

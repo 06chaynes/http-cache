@@ -1,6 +1,6 @@
 [package]
 name = "http-cache-surf"
-version = "1.0.0-alpha.2"
+version = "1.0.0-alpha.3"
 description = "http-cache middleware implementation for surf"
 authors = ["Christian Haynes <06chaynes@gmail.com>", "Kat Marchán <kzm@zkat.tech>"]
 repository = "https://github.com/06chaynes/http-cache"
@@ -13,7 +13,7 @@ categories = [
     "web-programming::http-client"
 ]
 edition = "2021"
-rust-version = "1.83.0"
+rust-version = "1.85.0"
 
 [dependencies]
 async-trait = "0.1.85"
@@ -25,7 +25,7 @@ url = { version = "2.5.4", features = ["serde"] }
 
 [dependencies.http-cache]
 path = "../http-cache"
-version = "1.0.0-alpha.2"
+version = "1.0.0-alpha.3"
 default-features = false
 features = ["with-http-types"]
 

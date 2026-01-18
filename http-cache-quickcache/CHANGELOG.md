@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.0.0-alpha.3] - 2026-01-18
+
+### Changed
+
+- MSRV is now 1.85.0
+
 ## [1.0.0-alpha.2] - 2025-08-24
 
 ### Changed
