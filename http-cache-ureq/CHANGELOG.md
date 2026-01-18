@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.0.0-alpha.3] - 2026-01-18
+
+### Fixed
+
+- Response body read failures now propagate errors instead of silently returning empty body
+
 ## [1.0.0-alpha.2] - 2026-01-18
 
 ### Added

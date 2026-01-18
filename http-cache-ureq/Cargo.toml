@@ -1,6 +1,6 @@
 [package]
 name = "http-cache-ureq"
-version = "1.0.0-alpha.2"
+version = "1.0.0-alpha.3"
 description = "http-cache middleware implementation for ureq"
 authors = ["Christian Haynes <06chaynes@gmail.com>", "Kat Marchán <kzm@zkat.tech>"]
 repository = "https://github.com/06chaynes/http-cache"
@@ -27,7 +27,7 @@ url = { version = "2.5.4", features = ["serde"] }
 
 [dependencies.http-cache]
 path = "../http-cache"
-version = "1.0.0-alpha.3"
+version = "1.0.0-alpha.4"
 default-features = false
 
 [dev-dependencies]

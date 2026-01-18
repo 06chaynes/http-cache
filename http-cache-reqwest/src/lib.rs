@@ -401,7 +401,7 @@ impl Middleware for ReqwestMiddleware<'_> {
     }
     fn update_headers(&mut self, parts: &Parts) -> Result<()> {
         for header in parts.headers.iter() {
-            self.req.headers_mut().insert(header.0.clone(), header.1.clone());
+            self.req.headers_mut().append(header.0.clone(), header.1.clone());
         }
         Ok(())
     }
@@ -471,7 +471,7 @@ fn convert_response(response: HttpResponse) -> Result<Response> {
         .version(response.version.into())
         .body(response.body)?;
     for header in response.headers {
-        ret_res.headers_mut().insert(
+        ret_res.headers_mut().append(
             HeaderName::from_str(&header.0)?,
             HeaderValue::from_str(&header.1)?,
         );
@@ -824,6 +824,31 @@ where
                     }
                 }
             }
+        }
+
+        // Handle OnlyIfCached mode: return 504 Gateway Timeout on cache miss
+        if analysis.cache_mode == CacheMode::OnlyIfCached {
+            let http_response = http::Response::builder()
+                .status(504)
+                .body(self.cache.manager.empty_body())
+                .map_err(|e| {
+                    to_middleware_error(HttpCacheError::Cache(e.to_string()))
+                })?;
+
+            let mut final_response = http_response;
+            if self.cache.options.cache_status_headers {
+                final_response = add_cache_status_headers_to_response(
+                    final_response,
+                    "MISS",
+                    "MISS",
+                );
+            }
+
+            return convert_streaming_body_to_reqwest::<T>(final_response)
+                .await
+                .map_err(|e| {
+                    to_middleware_error(HttpCacheError::Cache(e.to_string()))
+                });
         }
 
         // Apply rate limiting before fresh request

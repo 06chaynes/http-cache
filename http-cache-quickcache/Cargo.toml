@@ -1,6 +1,6 @@
 [package]
 name = "http-cache-quickcache"
-version = "1.0.0-alpha.3"
+version = "1.0.0-alpha.4"
 description = "http-cache manager implementation for quick-cache"
 authors = ["Christian Haynes <06chaynes@gmail.com>", "Kat Marchán <kzm@zkat.tech>"]
 repository = "https://github.com/06chaynes/http-cache"
@@ -26,7 +26,7 @@ http = "1.2.0"
 
 [dependencies.http-cache]
 path = "../http-cache"
-version = "1.0.0-alpha.3"
+version = "1.0.0-alpha.4"
 default-features = false
 features = ["bincode"]
 

@@ -476,10 +476,7 @@ impl<'a, T: CacheManager> CachedRequestBuilder<'a, T> {
         .await?;
 
         let cached = smol::unblock(move || {
-            Ok::<_, HttpCacheError>(CachedResponse::from_ureq_response(
-                response,
-                &url_for_response,
-            ))
+            CachedResponse::from_ureq_response(response, &url_for_response)
         })
         .await?;
 
@@ -509,10 +506,7 @@ impl<'a, T: CacheManager> CachedRequestBuilder<'a, T> {
         .await?;
 
         let cached = smol::unblock(move || {
-            Ok::<_, HttpCacheError>(CachedResponse::from_ureq_response(
-                response,
-                &url_for_response,
-            ))
+            CachedResponse::from_ureq_response(response, &url_for_response)
         })
         .await?;
 
@@ -573,10 +567,7 @@ impl<'a, T: CacheManager> CachedRequestBuilder<'a, T> {
             .await?;
 
             let mut cached_response = smol::unblock(move || {
-                Ok::<_, HttpCacheError>(CachedResponse::from_ureq_response(
-                    response,
-                    &url_for_response,
-                ))
+                CachedResponse::from_ureq_response(response, &url_for_response)
             })
             .await?;
 
@@ -775,7 +766,7 @@ impl CachedResponse {
     fn from_ureq_response(
         mut response: http::Response<ureq::Body>,
         url: &str,
-    ) -> Self {
+    ) -> Result<Self, HttpCacheError> {
         let status = response.status().as_u16();
 
         let mut headers = HashMap::new();
@@ -791,9 +782,15 @@ impl CachedResponse {
         // Don't add them here unconditionally
 
         // Read the body as bytes to handle binary content (images, etc.)
-        let body = response.body_mut().read_to_vec().unwrap_or_default();
+        // Properly propagate errors instead of silently returning empty body
+        let body = response.body_mut().read_to_vec().map_err(|e| {
+            HttpCacheError::http(Box::new(std::io::Error::other(format!(
+                "Failed to read response body: {}",
+                e
+            ))))
+        })?;
 
-        Self { status, headers, body, url: url.to_string(), cached: false }
+        Ok(Self { status, headers, body, url: url.to_string(), cached: false })
     }
 }
 

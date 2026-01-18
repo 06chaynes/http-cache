@@ -1,6 +1,6 @@
 [package]
 name = "http-cache-reqwest"
-version = "1.0.0-alpha.3"
+version = "1.0.0-alpha.4"
 description = "http-cache middleware implementation for reqwest"
 authors = [
     "Christian Haynes <06chaynes@gmail.com>",
@@ -34,7 +34,7 @@ futures-util = { version = "0.3.31", optional = true }
 
 [dependencies.http-cache]
 path = "../http-cache"
-version = "1.0.0-alpha.3"
+version = "1.0.0-alpha.4"
 default-features = false
 
 [dev-dependencies]

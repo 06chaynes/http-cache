@@ -646,20 +646,7 @@ where
             // Use the core library's cache interface for analysis
             let analysis = cache.analyze_request(&parts, None).cache_err()?;
 
-            // Handle cache busting and non-cacheable requests
-            for key in &analysis.cache_bust_keys {
-                cache.manager.delete(key).await.cache_err()?;
-            }
-
-            // For non-GET/HEAD requests, invalidate cached GET responses
-            if !analysis.should_cache && !analysis.is_get_head {
-                let get_cache_key = cache
-                    .options
-                    .create_cache_key_for_invalidation(&parts, "GET");
-                let _ = cache.manager.delete(&get_cache_key).await;
-            }
-
-            // If not cacheable, just pass through
+            // If not cacheable, execute request FIRST, then invalidate on success (RFC 7234 Section 4.4)
             if !analysis.should_cache {
                 let req = Request::from_parts(parts, body);
                 let response =
@@ -668,6 +655,31 @@ where
                             "service error".to_string(),
                         )))
                     })?;
+
+                // Only invalidate AFTER successful response (RFC 7234 Section 4.4)
+                if response.status().is_success()
+                    || response.status().is_redirection()
+                {
+                    for key in &analysis.cache_bust_keys {
+                        let _ = cache.manager.delete(key).await;
+                    }
+                    // Invalidate both GET and HEAD caches per RFC 7234 Section 4.4
+                    if !analysis.is_get_head {
+                        let get_cache_key =
+                            cache.options.create_cache_key_for_invalidation(
+                                &analysis.request_parts,
+                                "GET",
+                            );
+                        let _ = cache.manager.delete(&get_cache_key).await;
+                        let head_cache_key =
+                            cache.options.create_cache_key_for_invalidation(
+                                &analysis.request_parts,
+                                "HEAD",
+                            );
+                        let _ = cache.manager.delete(&head_cache_key).await;
+                    }
+                }
+
                 return Ok(response.map(HttpCacheBody::Original));
             }
 
@@ -942,25 +954,16 @@ where
             // Use the core library's streaming cache interface
             let analysis = cache.analyze_request(&parts, None).cache_err()?;
 
-            // Handle cache busting
-            for key in &analysis.cache_bust_keys {
-                cache.manager.delete(key).await.cache_err()?;
-            }
-
-            // For non-GET/HEAD requests, invalidate cached GET responses
-            if !analysis.should_cache && !analysis.is_get_head {
-                let get_cache_key = cache
-                    .options
-                    .create_cache_key_for_invalidation(&parts, "GET");
-                let _ = cache.manager.delete(&get_cache_key).await;
-            }
-
-            // If not cacheable, convert body type and return
+            // If not cacheable, execute request FIRST, then invalidate on success (RFC 7234 Section 4.4)
             if !analysis.should_cache {
                 // Apply rate limiting before non-cached request
                 #[cfg(feature = "rate-limiting")]
                 if let Some(rate_limiter) = &cache.options.rate_limiter {
-                    if let Ok(url) = parts.uri.to_string().parse::<::url::Url>()
+                    if let Ok(url) = analysis
+                        .request_parts
+                        .uri
+                        .to_string()
+                        .parse::<::url::Url>()
                     {
                         let rate_limit_key =
                             url.host_str().unwrap_or("unknown");
@@ -975,6 +978,31 @@ where
                             "service error".to_string(),
                         )))
                     })?;
+
+                // Only invalidate AFTER successful response (RFC 7234 Section 4.4)
+                if response.status().is_success()
+                    || response.status().is_redirection()
+                {
+                    for key in &analysis.cache_bust_keys {
+                        let _ = cache.manager.delete(key).await;
+                    }
+                    // Invalidate both GET and HEAD caches per RFC 7234 Section 4.4
+                    if !analysis.is_get_head {
+                        let get_cache_key =
+                            cache.options.create_cache_key_for_invalidation(
+                                &analysis.request_parts,
+                                "GET",
+                            );
+                        let _ = cache.manager.delete(&get_cache_key).await;
+                        let head_cache_key =
+                            cache.options.create_cache_key_for_invalidation(
+                                &analysis.request_parts,
+                                "HEAD",
+                            );
+                        let _ = cache.manager.delete(&head_cache_key).await;
+                    }
+                }
+
                 let mut converted_response =
                     cache.manager.convert_body(response).await.cache_err()?;
 
@@ -1128,6 +1156,22 @@ where
                         }
                     }
                 }
+            }
+
+            // Handle OnlyIfCached mode: return 504 Gateway Timeout on cache miss
+            if analysis.cache_mode == CacheMode::OnlyIfCached {
+                let mut response = Response::builder()
+                    .status(504)
+                    .body(cache.manager.empty_body())
+                    .map_err(|e| HttpCacheError::other(e.to_string()))?;
+
+                if cache.options.cache_status_headers {
+                    response = add_cache_status_headers_streaming(
+                        response, "MISS", "MISS",
+                    );
+                }
+
+                return Ok(response);
             }
 
             // Apply rate limiting before fresh request

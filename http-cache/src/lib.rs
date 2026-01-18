@@ -501,49 +501,76 @@ impl HttpHeaders {
     }
 
     /// Inserts a header key-value pair, replacing any existing values for that key
+    /// Keys are normalized to lowercase per RFC 7230
     pub fn insert(&mut self, key: String, value: String) {
+        let normalized_key = key.to_ascii_lowercase();
         match self {
             #[cfg(feature = "http-headers-compat")]
             HttpHeaders::Legacy(legacy) => {
-                legacy.insert(key, value);
+                legacy.insert(normalized_key, value);
             }
             HttpHeaders::Modern(modern) => {
                 // Replace existing values with a new single-element vec
-                modern.insert(key, vec![value]);
+                modern.insert(normalized_key, vec![value]);
+            }
+        }
+    }
+
+    /// Appends a header value, preserving existing values for the same key
+    /// Keys are normalized to lowercase per RFC 7230
+    pub fn append(&mut self, key: String, value: String) {
+        let normalized_key = key.to_ascii_lowercase();
+        match self {
+            #[cfg(feature = "http-headers-compat")]
+            HttpHeaders::Legacy(legacy) => {
+                // Legacy format doesn't support multi-value, fall back to insert
+                legacy.insert(normalized_key, value);
+            }
+            HttpHeaders::Modern(modern) => {
+                modern
+                    .entry(normalized_key)
+                    .or_insert_with(Vec::new)
+                    .push(value);
             }
         }
     }
 
     /// Retrieves the first value for a given header key
+    /// Keys are normalized to lowercase per RFC 7230
     pub fn get(&self, key: &str) -> Option<&String> {
+        let normalized_key = key.to_ascii_lowercase();
         match self {
             #[cfg(feature = "http-headers-compat")]
-            HttpHeaders::Legacy(legacy) => legacy.get(key),
+            HttpHeaders::Legacy(legacy) => legacy.get(&normalized_key),
             HttpHeaders::Modern(modern) => {
-                modern.get(key).and_then(|vals| vals.first())
+                modern.get(&normalized_key).and_then(|vals| vals.first())
             }
         }
     }
 
     /// Removes a header key and its associated values
+    /// Keys are normalized to lowercase per RFC 7230
     pub fn remove(&mut self, key: &str) {
+        let normalized_key = key.to_ascii_lowercase();
         match self {
             #[cfg(feature = "http-headers-compat")]
             HttpHeaders::Legacy(legacy) => {
-                legacy.remove(key);
+                legacy.remove(&normalized_key);
             }
             HttpHeaders::Modern(modern) => {
-                modern.remove(key);
+                modern.remove(&normalized_key);
             }
         }
     }
 
     /// Checks if a header key exists
+    /// Keys are normalized to lowercase per RFC 7230
     pub fn contains_key(&self, key: &str) -> bool {
+        let normalized_key = key.to_ascii_lowercase();
         match self {
             #[cfg(feature = "http-headers-compat")]
-            HttpHeaders::Legacy(legacy) => legacy.contains_key(key),
-            HttpHeaders::Modern(modern) => modern.contains_key(key),
+            HttpHeaders::Legacy(legacy) => legacy.contains_key(&normalized_key),
+            HttpHeaders::Modern(modern) => modern.contains_key(&normalized_key),
         }
     }
 
@@ -706,7 +733,7 @@ impl HttpResponse {
         {
             let headers = converted.headers_mut();
             for header in &self.headers {
-                headers.insert(
+                headers.append(
                     http::header::HeaderName::from_str(header.0.as_str())?,
                     HeaderValue::from_str(header.1.as_str())?,
                 );
@@ -858,6 +885,10 @@ pub trait StreamingCacheManager: Send + Sync + 'static {
 
     /// Attempts to remove a record from cache.
     async fn delete(&self, cache_key: &str) -> Result<()>;
+
+    /// Creates an empty body of the manager's body type.
+    /// Used for returning 504 Gateway Timeout responses on OnlyIfCached cache misses.
+    fn empty_body(&self) -> Self::Body;
 
     /// Convert the manager's body type to a reqwest-compatible bytes stream.
     /// This enables efficient streaming without collecting the entire body.
@@ -2048,10 +2079,12 @@ impl<T: CacheManager> HttpCache<T> {
                         .await?;
                     Ok(res)
                 } else {
+                    // Return fresh response for any status other than 304 or 200
                     if self.options.cache_status_headers {
-                        cached_res.cache_status(HitOrMiss::HIT);
+                        cond_res.cache_status(HitOrMiss::MISS);
+                        cond_res.cache_lookup_status(HitOrMiss::HIT);
                     }
-                    Ok(cached_res)
+                    Ok(cond_res)
                 }
             }
             Err(e) => {

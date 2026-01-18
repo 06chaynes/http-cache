@@ -240,7 +240,7 @@ impl Middleware for SurfMiddleware<'_> {
         {
             let headers = converted.headers_mut();
             for header in self.req.iter() {
-                headers.insert(
+                headers.append(
                     http::header::HeaderName::from_str(header.0.as_str())?,
                     http::HeaderValue::from_str(header.1.as_str())?,
                 );
@@ -260,7 +260,7 @@ impl Middleware for SurfMiddleware<'_> {
             self.next.run(self.req.clone().into(), self.client.clone()).await?;
         let mut headers = HttpHeaders::new();
         for header in res.iter() {
-            headers.insert(
+            headers.append(
                 header.0.as_str().to_owned(),
                 header.1.as_str().to_owned(),
             );

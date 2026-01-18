@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.0.0-alpha.4] - 2026-01-18
+
+### Added
+
+- `empty_body` method to `StreamingCacheManager` trait for creating empty body responses
+- `get_ref_count` method to `ContentRefCounter` for non-mutating reference count checks
+
+### Changed
+
+- `StreamingManager` now wraps `ContentRefCounter` in `Arc` to ensure all clones share the same state
+- Atomic operations in streaming cache now use proper memory ordering (`Acquire`/`Release`/`AcqRel`) instead of `Relaxed`
+
+### Fixed
+
+- Race condition in `remove_ref` using atomic `compare_exchange` loop to prevent TOCTOU bugs
+- Cache size and entry count divergence when `StreamingManager` is cloned
+- Memory leak in `delete` where reference count was decremented but not restored on non-orphaned content
+- Race condition in `delete` by using non-mutating `get_ref_count` instead of remove/add pattern
+
 ## [1.0.0-alpha.3] - 2026-01-18
 
 ### Added

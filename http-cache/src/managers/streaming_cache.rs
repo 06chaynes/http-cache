@@ -77,6 +77,8 @@ struct ContentRefCounter {
     lru_cache: Arc<Mutex<LruCache<String, LruEntry>>>,
     current_cache_size: AtomicU64,
     current_entries: AtomicUsize,
+    /// Per-content write locks to prevent TOCTOU race conditions in put()
+    content_locks: DashMap<String, Arc<Mutex<()>>>,
 }
 
 impl ContentRefCounter {
@@ -88,17 +90,26 @@ impl ContentRefCounter {
             ))),
             current_cache_size: AtomicU64::new(0),
             current_entries: AtomicUsize::new(0),
+            content_locks: DashMap::new(),
         }
+    }
+
+    /// Acquire a per-content write lock to prevent TOCTOU race conditions
+    fn acquire_content_lock(&self, digest: &str) -> Arc<Mutex<()>> {
+        self.content_locks
+            .entry(digest.to_string())
+            .or_insert_with(|| Arc::new(Mutex::new(())))
+            .clone()
     }
 
     /// Get current cache size in bytes
     async fn current_cache_size(&self) -> Result<u64> {
-        Ok(self.current_cache_size.load(Ordering::Relaxed))
+        Ok(self.current_cache_size.load(Ordering::Acquire))
     }
 
     /// Get current number of cache entries
     async fn current_entries(&self) -> Result<usize> {
-        Ok(self.current_entries.load(Ordering::Relaxed))
+        Ok(self.current_entries.load(Ordering::Acquire))
     }
 
     /// Add cache entry to LRU tracking
@@ -121,22 +132,32 @@ impl ContentRefCounter {
         };
 
         // Use modern LRU cache with atomic counters
+        // Counter ops must be inside lock to prevent race conditions
         cfg_if::cfg_if! {
             if #[cfg(any(feature = "streaming-tokio", feature = "streaming-smol"))] {
                 let mut lru = self.lru_cache.lock().await;
-                lru.put(cache_key, entry);
+                if let Some(old_entry) = lru.put(cache_key, entry) {
+                    // Entry was replaced - subtract old entry's size and count
+                    self.current_cache_size.fetch_sub(old_entry.file_size, Ordering::AcqRel);
+                    self.current_entries.fetch_sub(1, Ordering::AcqRel);
+                }
+                self.current_cache_size.fetch_add(file_size, Ordering::AcqRel);
+                self.current_entries.fetch_add(1, Ordering::AcqRel);
             } else {
                 let mut lru = self.lru_cache.lock().map_err(|e| {
                     StreamingError::concurrency(format!(
                         "Failed to acquire lock for lru_cache: {e}"
                     ))
                 })?;
-                lru.put(cache_key, entry);
+                if let Some(old_entry) = lru.put(cache_key, entry) {
+                    // Entry was replaced - subtract old entry's size and count
+                    self.current_cache_size.fetch_sub(old_entry.file_size, Ordering::AcqRel);
+                    self.current_entries.fetch_sub(1, Ordering::AcqRel);
+                }
+                self.current_cache_size.fetch_add(file_size, Ordering::AcqRel);
+                self.current_entries.fetch_add(1, Ordering::AcqRel);
             }
         }
-
-        self.current_cache_size.fetch_add(file_size, Ordering::Relaxed);
-        self.current_entries.fetch_add(1, Ordering::Relaxed);
 
         Ok(())
     }
@@ -235,8 +256,8 @@ impl ContentRefCounter {
             if #[cfg(any(feature = "streaming-tokio", feature = "streaming-smol"))] {
                 let mut lru = self.lru_cache.lock().await;
                 if let Some(entry) = lru.pop(cache_key) {
-                    self.current_cache_size.fetch_sub(entry.file_size, Ordering::Relaxed);
-                    self.current_entries.fetch_sub(1, Ordering::Relaxed);
+                    self.current_cache_size.fetch_sub(entry.file_size, Ordering::AcqRel);
+                    self.current_entries.fetch_sub(1, Ordering::AcqRel);
                     return Ok(Some(entry));
                 }
             } else {
@@ -246,8 +267,8 @@ impl ContentRefCounter {
                     ))
                 })?;
                 if let Some(entry) = lru.pop(cache_key) {
-                    self.current_cache_size.fetch_sub(entry.file_size, Ordering::Relaxed);
-                    self.current_entries.fetch_sub(1, Ordering::Relaxed);
+                    self.current_cache_size.fetch_sub(entry.file_size, Ordering::AcqRel);
+                    self.current_entries.fetch_sub(1, Ordering::AcqRel);
                     return Ok(Some(entry));
                 }
             }
@@ -267,8 +288,8 @@ impl ContentRefCounter {
             if #[cfg(any(feature = "streaming-tokio", feature = "streaming-smol"))] {
                 let mut lru = self.lru_cache.lock().await;
                 if lru.pop(cache_key).is_some() {
-                    self.current_cache_size.fetch_sub(exact_file_size, Ordering::Relaxed);
-                    self.current_entries.fetch_sub(1, Ordering::Relaxed);
+                    self.current_cache_size.fetch_sub(exact_file_size, Ordering::AcqRel);
+                    self.current_entries.fetch_sub(1, Ordering::AcqRel);
                 }
             } else {
                 let mut lru = self.lru_cache.lock().map_err(|e| {
@@ -277,8 +298,8 @@ impl ContentRefCounter {
                     ))
                 })?;
                 if lru.pop(cache_key).is_some() {
-                    self.current_cache_size.fetch_sub(exact_file_size, Ordering::Relaxed);
-                    self.current_entries.fetch_sub(1, Ordering::Relaxed);
+                    self.current_cache_size.fetch_sub(exact_file_size, Ordering::AcqRel);
+                    self.current_entries.fetch_sub(1, Ordering::AcqRel);
                 }
             }
         }
@@ -293,25 +314,41 @@ impl ContentRefCounter {
             .refs
             .entry(digest.to_string())
             .or_insert_with(|| Arc::new(AtomicUsize::new(0)));
-        Ok(counter.fetch_add(1, Ordering::Relaxed) + 1)
+        Ok(counter.fetch_add(1, Ordering::AcqRel) + 1)
     }
 
     /// Decrement reference count for a content digest, returns true if safe to delete
+    /// Uses compare_exchange loop to prevent TOCTOU race conditions
     async fn remove_ref(&self, digest: &str) -> Result<bool> {
-        // Simple approach: use entry API for atomic decrement and removal
-        if let Some(entry) = self.refs.get_mut(digest) {
-            let current_count = entry.load(Ordering::Relaxed);
-            if current_count > 0 {
-                entry.fetch_sub(1, Ordering::Relaxed);
-                let new_count = entry.load(Ordering::Relaxed);
-                if new_count == 0 {
-                    drop(entry); // Release the mutable reference
-                    self.refs.remove(digest);
-                    return Ok(true);
+        // Use remove_if for atomic decrement-and-conditional-remove
+        let removed = self.refs.remove_if(digest, |_, counter| {
+            loop {
+                let current = counter.load(Ordering::Acquire);
+                if current == 0 {
+                    return false;
+                }
+                match counter.compare_exchange(
+                    current,
+                    current - 1,
+                    Ordering::AcqRel,
+                    Ordering::Acquire,
+                ) {
+                    Ok(_) => return current - 1 == 0,
+                    Err(_) => continue, // Retry on contention
                 }
             }
+        });
+        Ok(removed.is_some())
+    }
+
+    /// Get the current reference count for a content digest without modifying it
+    /// Used to safely check if content would become orphaned
+    async fn get_ref_count(&self, digest: &str) -> Result<usize> {
+        if let Some(counter) = self.refs.get(digest) {
+            Ok(counter.load(Ordering::Acquire))
+        } else {
+            Ok(0)
         }
-        Ok(false)
     }
 }
 
@@ -356,30 +393,13 @@ pub struct CacheMetadata {
 }
 
 /// File-based streaming cache manager
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct StreamingManager {
     root_path: PathBuf,
-    ref_counter: ContentRefCounter,
+    /// Shared reference counter wrapped in Arc to ensure all clones share the same state.
+    /// This prevents cache size/entry count divergence when the manager is cloned.
+    ref_counter: Arc<ContentRefCounter>,
     config: StreamingCacheConfig,
-}
-
-impl Clone for StreamingManager {
-    fn clone(&self) -> Self {
-        Self {
-            root_path: self.root_path.clone(),
-            ref_counter: ContentRefCounter {
-                refs: self.ref_counter.refs.clone(),
-                lru_cache: self.ref_counter.lru_cache.clone(),
-                current_cache_size: AtomicU64::new(
-                    self.ref_counter.current_cache_size.load(Ordering::Relaxed),
-                ),
-                current_entries: AtomicUsize::new(
-                    self.ref_counter.current_entries.load(Ordering::Relaxed),
-                ),
-            },
-            config: self.config,
-        }
-    }
 }
 
 impl StreamingManager {
@@ -393,7 +413,11 @@ impl StreamingManager {
         root_path: PathBuf,
         config: StreamingCacheConfig,
     ) -> Self {
-        Self { root_path, ref_counter: ContentRefCounter::new(), config }
+        Self {
+            root_path,
+            ref_counter: Arc::new(ContentRefCounter::new()),
+            config,
+        }
     }
 
     /// Create a new streaming cache manager and rebuild reference counts from existing cache
@@ -1057,22 +1081,37 @@ impl StreamingCacheManager for StreamingManager {
             self.process_body_streaming(body).await?;
         let content_path = self.content_path(&content_digest);
 
-        // Ensure content directory exists and write content if not already present
-        if runtime::metadata(&content_path).await.is_err() {
-            Self::atomic_write(&content_path, &body_bytes).await?;
+        // Acquire per-content write lock to prevent TOCTOU race conditions
+        let content_lock =
+            self.ref_counter.acquire_content_lock(&content_digest);
+        cfg_if::cfg_if! {
+            if #[cfg(any(feature = "streaming-tokio", feature = "streaming-smol"))] {
+                let _guard = content_lock.lock().await;
+            } else {
+                let _guard = content_lock.lock().map_err(|e| {
+                    StreamingError::concurrency(format!("Failed to acquire content lock: {e}"))
+                })?;
+            }
         }
 
-        // Add reference count for this content file (atomic operation)
+        // Add reference FIRST while holding lock (prevents race condition)
         let _ref_count = self.ref_counter.add_ref(&content_digest).await?;
 
-        // Ensure content file still exists after adding reference
+        // Write content if not already present (while still holding lock)
         if runtime::metadata(&content_path).await.is_err() {
-            // Content was deleted between creation and reference addition - rollback
-            self.ref_counter.remove_ref(&content_digest).await?;
-            return Err(StreamingError::consistency(
-                "Content file was deleted during cache operation - possible race condition".to_string()
-            ).into());
+            if let Err(e) = Self::atomic_write(&content_path, &body_bytes).await
+            {
+                // Rollback reference on write failure
+                let _ = self.ref_counter.remove_ref(&content_digest).await;
+                return Err(e);
+            }
         }
+
+        // Release guard BEFORE enforce_cache_limits to prevent deadlock
+        // The guard is dropped here when _guard goes out of scope at end of block
+        drop(_guard);
+        // Also drop the Arc to allow cleanup (don't use strong_count for cleanup decisions)
+        drop(content_lock);
 
         // Add to LRU tracking and enforce cache limits
         self.ref_counter
@@ -1172,20 +1211,11 @@ impl StreamingCacheManager for StreamingManager {
         let metadata: CacheMetadata = serde_json::from_slice(&metadata_content)
             .map_err(StreamingError::serialization)?;
 
-        // Phase 1: Check if we can delete content file (if it would be orphaned)
-        let can_delete_content = {
-            // Temporarily decrement reference count to check
-            let would_be_orphaned =
-                self.ref_counter.remove_ref(&metadata.content_digest).await?;
-            if would_be_orphaned {
-                // Add the reference back for now - we'll remove it again if all operations succeed
-                self.ref_counter.add_ref(&metadata.content_digest).await?;
-                true
-            } else {
-                // Reference count was decremented but content still has other references
-                false
-            }
-        };
+        // Phase 1: Check if content would become orphaned using non-mutating check
+        // This avoids the race condition of the previous remove_ref/add_ref pattern
+        let ref_count =
+            self.ref_counter.get_ref_count(&metadata.content_digest).await?;
+        let can_delete_content = ref_count <= 1;
 
         // Phase 2: If content needs deletion, verify we can delete it before proceeding
         if can_delete_content {
@@ -1195,7 +1225,6 @@ impl StreamingCacheManager for StreamingManager {
                 match runtime::File::open(&content_path).await {
                     Ok(_) => {} // File can be accessed, proceed
                     Err(e) => {
-                        // Restore reference count and abort
                         return Err(StreamingError::io(format!(
                             "Cannot delete content file {:?} (may be locked): {}",
                             content_path, e
@@ -1209,13 +1238,9 @@ impl StreamingCacheManager for StreamingManager {
         // 3a. Remove from LRU tracking
         self.ref_counter.remove_cache_entry(cache_key).await?;
 
-        // 3b. Decrement reference count (final time)
-        let should_delete_content = if can_delete_content {
-            // We added back the reference earlier, so remove it again
-            self.ref_counter.remove_ref(&metadata.content_digest).await?
-        } else {
-            false
-        };
+        // 3b. Decrement reference count atomically and check if we should delete content
+        let should_delete_content =
+            self.ref_counter.remove_ref(&metadata.content_digest).await?;
 
         // 3c. Remove content file first (if needed) - if this fails, we can still rollback
         if should_delete_content {
@@ -1249,6 +1274,10 @@ impl StreamingCacheManager for StreamingManager {
         }
 
         Ok(())
+    }
+
+    fn empty_body(&self) -> Self::Body {
+        StreamingBody::buffered(Bytes::new())
     }
 
     #[cfg(feature = "streaming")]

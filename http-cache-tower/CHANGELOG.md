@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.0.0-alpha.4] - 2026-01-18
+
+### Fixed
+
+- `OnlyIfCached` mode now correctly returns 504 Gateway Timeout on cache miss in streaming middleware
+
 ## [1.0.0-alpha.3] - 2026-01-18
 
 ### Added
