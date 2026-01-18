@@ -693,6 +693,7 @@ where
                     .process_response(
                         analysis,
                         Response::from_parts(res_parts, body_bytes.clone()),
+                        None,
                     )
                     .await
                     .cache_err()?;
@@ -720,6 +721,13 @@ where
                         if cache.options.cache_status_headers {
                             response = add_cache_status_headers(
                                 response, "HIT", "HIT",
+                            );
+                        }
+
+                        // Insert metadata into response extensions if present
+                        if let Some(metadata) = cached_response.metadata {
+                            response.extensions_mut().insert(
+                                http_cache::HttpCacheMetadata::from(metadata),
                             );
                         }
 
@@ -766,6 +774,15 @@ where
                                 );
                             }
 
+                            // Insert metadata into response extensions if present
+                            if let Some(metadata) = updated_response.metadata {
+                                response.extensions_mut().insert(
+                                    http_cache::HttpCacheMetadata::from(
+                                        metadata,
+                                    ),
+                                );
+                            }
+
                             return Ok(response);
                         } else {
                             // Process fresh response
@@ -787,6 +804,7 @@ where
                                         parts,
                                         body_bytes.clone(),
                                     ),
+                                    None,
                                 )
                                 .await
                                 .cache_err()?;
@@ -827,6 +845,7 @@ where
                 .process_response(
                     analysis,
                     Response::from_parts(res_parts, body_bytes.clone()),
+                    None,
                 )
                 .await
                 .cache_err()?;
@@ -993,7 +1012,7 @@ where
                     })?;
 
                 let cached_response = cache
-                    .process_response(analysis, response)
+                    .process_response(analysis, response, None)
                     .await
                     .cache_err()?;
 
@@ -1091,6 +1110,7 @@ where
                                 .process_response(
                                     analysis,
                                     conditional_response,
+                                    None,
                                 )
                                 .await
                                 .cache_err()?;
@@ -1128,8 +1148,10 @@ where
             })?;
 
             // Process using streaming interface
-            let cached_response =
-                cache.process_response(analysis, response).await.cache_err()?;
+            let cached_response = cache
+                .process_response(analysis, response, None)
+                .await
+                .cache_err()?;
 
             let mut final_response = cached_response;
 

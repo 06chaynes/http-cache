@@ -738,6 +738,7 @@ where
                             "http://localhost/".parse().unwrap()
                         }),
                         version: HttpVersion::Http11,
+                        metadata: None,
                     };
 
                     // Create CachePolicy from actual request/response for Vary support

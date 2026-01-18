@@ -2130,4 +2130,82 @@ mod tests {
 
         Ok(())
     }
+
+    #[tokio::test]
+    async fn test_metadata_retrieval_through_extensions() -> Result<()> {
+        use http_cache::HttpCacheMetadata;
+        use std::sync::Arc;
+
+        let cache_dir = tempfile::tempdir()?;
+        let manager =
+            CACacheManager::new(cache_dir.path().to_path_buf(), false);
+
+        // Create cache options with a metadata provider
+        let options = HttpCacheOptions {
+            metadata_provider: Some(Arc::new(
+                |_request_parts, _response_parts| {
+                    // Return some test metadata
+                    Some(b"test-metadata-value".to_vec())
+                },
+            )),
+            ..Default::default()
+        };
+
+        let cache_layer =
+            HttpCacheLayer::with_options(manager.clone(), options);
+
+        let test_service = TestService::new(
+            StatusCode::OK,
+            vec![("cache-control", CACHEABLE_PUBLIC)],
+            TEST_BODY,
+        );
+
+        let mut cached_service = cache_layer.layer(test_service);
+
+        // First request - stores the response with metadata
+        let request = Request::builder()
+            .method("GET")
+            .uri("http://example.com/metadata-test")
+            .body(Full::new(Bytes::new()))
+            .map_err(|e| {
+                Box::new(e) as Box<dyn std::error::Error + Send + Sync>
+            })?;
+
+        let response1 = cached_service.ready().await?.call(request).await?;
+
+        // First response (cache miss) does NOT have metadata in extensions
+        // (metadata is generated and stored but not returned on the first request)
+        let metadata1 = response1.extensions().get::<HttpCacheMetadata>();
+        assert!(
+            metadata1.is_none(),
+            "Metadata should NOT be present on cache miss"
+        );
+
+        // Second request - should retrieve from cache with metadata in extensions
+        let request = Request::builder()
+            .method("GET")
+            .uri("http://example.com/metadata-test")
+            .body(Full::new(Bytes::new()))
+            .map_err(|e| {
+                Box::new(e) as Box<dyn std::error::Error + Send + Sync>
+            })?;
+
+        let response2 = cached_service.ready().await?.call(request).await?;
+
+        // Check that metadata is in the response extensions
+        let metadata = response2.extensions().get::<HttpCacheMetadata>();
+        assert!(
+            metadata.is_some(),
+            "Metadata should be present in response extensions"
+        );
+
+        let metadata_value = metadata.unwrap();
+        assert_eq!(
+            metadata_value.as_slice(),
+            b"test-metadata-value",
+            "Metadata value should match what was stored"
+        );
+
+        Ok(())
+    }
 }

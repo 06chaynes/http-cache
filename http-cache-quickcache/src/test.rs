@@ -48,6 +48,7 @@ async fn quickcache() -> Result<()> {
         status: 200,
         url: url.clone(),
         version: HttpVersion::Http11,
+        metadata: None,
     };
     let req = http::Request::get("http://example.com").body(())?;
     let res = http::Response::builder().status(200).body(TEST_BODY.to_vec())?;
@@ -126,6 +127,7 @@ async fn default_mode_with_options() -> Result<()> {
                 cache_bust: None,
                 cache_status_headers: true,
                 max_ttl: None,
+                metadata_provider: None,
                 modify_response: None,
             },
         }))

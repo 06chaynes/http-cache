@@ -350,6 +350,9 @@ pub struct CacheMetadata {
     pub content_digest: String,
     pub policy: CachePolicy,
     pub created_at: u64,
+    /// User-provided metadata stored with the cached response
+    #[serde(default)]
+    pub user_metadata: Option<Vec<u8>>,
 }
 
 /// File-based streaming cache manager
@@ -1018,8 +1021,15 @@ impl StreamingCacheManager for StreamingManager {
 
         // Create streaming body from file
         let body = StreamingBody::from_file(file);
-        let response =
+        let mut response =
             response_builder.body(body).map_err(StreamingError::new)?;
+
+        // Insert user metadata into response extensions if present
+        if let Some(user_metadata) = metadata.user_metadata {
+            response
+                .extensions_mut()
+                .insert(crate::HttpCacheMetadata::from(user_metadata));
+        }
 
         Ok(Some((response, metadata.policy)))
     }
@@ -1030,6 +1040,7 @@ impl StreamingCacheManager for StreamingManager {
         response: Response<B>,
         policy: CachePolicy,
         _request_url: Url,
+        metadata: Option<Vec<u8>>,
     ) -> Result<Response<Self::Body>>
     where
         B: http_body::Body + Send + 'static,
@@ -1074,7 +1085,7 @@ impl StreamingCacheManager for StreamingManager {
         self.enforce_cache_limits().await?;
 
         // Create metadata
-        let metadata = CacheMetadata {
+        let cache_metadata = CacheMetadata {
             status: parts.status.as_u16(),
             version: match parts.version {
                 Version::HTTP_09 => 9,
@@ -1091,11 +1102,12 @@ impl StreamingCacheManager for StreamingManager {
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default()
                 .as_secs(),
+            user_metadata: metadata,
         };
 
         // Write metadata atomically
         let metadata_path = self.metadata_path(&cache_key);
-        let metadata_json = serde_json::to_vec(&metadata)
+        let metadata_json = serde_json::to_vec(&cache_metadata)
             .map_err(StreamingError::serialization)?;
 
         // If metadata write fails, we need to rollback to prevent resource leaks
@@ -1291,7 +1303,13 @@ mod tests {
 
         // Put response into cache
         let cached_response = cache
-            .put("test-key".to_string(), response, policy.clone(), request_url)
+            .put(
+                "test-key".to_string(),
+                response,
+                policy.clone(),
+                request_url,
+                None,
+            )
             .await
             .unwrap();
 
@@ -1312,6 +1330,66 @@ mod tests {
         // Verify policy is preserved
         let now = std::time::SystemTime::now();
         assert_eq!(cached_policy.time_to_live(now), policy.time_to_live(now));
+    }
+
+    #[tokio::test]
+    async fn test_streaming_cache_metadata() {
+        use crate::HttpCacheMetadata;
+
+        let temp_dir = TempDir::new().unwrap();
+        let cache = StreamingManager::new(temp_dir.path().to_path_buf());
+
+        let original_body = Full::new(Bytes::from("test response body"));
+        let response = Response::builder()
+            .status(200)
+            .header("content-type", "text/plain")
+            .body(original_body)
+            .unwrap();
+
+        let policy = CachePolicy::new(
+            &http::request::Request::builder()
+                .method("GET")
+                .uri("/test")
+                .body(())
+                .unwrap()
+                .into_parts()
+                .0,
+            &response.clone().map(|_| ()),
+        );
+
+        let request_url = Url::parse("http://example.com/test").unwrap();
+        let test_metadata = b"test-metadata-value".to_vec();
+
+        // Put response into cache with metadata
+        let cached_response = cache
+            .put(
+                "metadata-key".to_string(),
+                response,
+                policy.clone(),
+                request_url,
+                Some(test_metadata.clone()),
+            )
+            .await
+            .unwrap();
+
+        // Response should be returned immediately
+        assert_eq!(cached_response.status(), 200);
+
+        // Get response from cache
+        let retrieved = cache.get("metadata-key").await.unwrap();
+        assert!(retrieved.is_some());
+
+        let (cached_response, _cached_policy) = retrieved.unwrap();
+        assert_eq!(cached_response.status(), 200);
+
+        // Verify metadata is in response extensions
+        let metadata = cached_response.extensions().get::<HttpCacheMetadata>();
+        assert!(metadata.is_some(), "Metadata should be present in extensions");
+        assert_eq!(
+            metadata.unwrap().as_slice(),
+            test_metadata.as_slice(),
+            "Metadata value should match what was stored"
+        );
     }
 
     #[tokio::test]
@@ -1342,7 +1420,7 @@ mod tests {
 
         // Put response into cache
         cache
-            .put(cache_key.to_string(), response, policy, request_url)
+            .put(cache_key.to_string(), response, policy, request_url, None)
             .await
             .unwrap();
 
@@ -1405,11 +1483,17 @@ mod tests {
 
         // Cache both responses
         cache
-            .put("key1".to_string(), response1, policy1, request_url.clone())
+            .put(
+                "key1".to_string(),
+                response1,
+                policy1,
+                request_url.clone(),
+                None,
+            )
             .await
             .unwrap();
         cache
-            .put("key2".to_string(), response2, policy2, request_url)
+            .put("key2".to_string(), response2, policy2, request_url, None)
             .await
             .unwrap();
 
@@ -1517,6 +1601,7 @@ mod tests {
                     response1,
                     policy1,
                     request_url.clone(),
+                    None,
                 )
                 .await
                 .unwrap();
@@ -1526,6 +1611,7 @@ mod tests {
                     response2,
                     policy2,
                     request_url.clone(),
+                    None,
                 )
                 .await
                 .unwrap();
@@ -1620,6 +1706,7 @@ mod tests {
                             response,
                             policy,
                             url,
+                            None,
                         )
                         .await
                         .unwrap();
@@ -1715,7 +1802,7 @@ mod tests {
 
         // Store large response
         let cached_response = cache
-            .put("large-key".to_string(), response, policy, request_url)
+            .put("large-key".to_string(), response, policy, request_url, None)
             .await
             .unwrap();
 
@@ -1783,7 +1870,7 @@ mod tests {
         let request_url = Url::parse("http://example.com/test").unwrap();
 
         let result = cache
-            .put("valid-key".to_string(), response, policy, request_url)
+            .put("valid-key".to_string(), response, policy, request_url, None)
             .await;
         assert!(result.is_ok(), "Should handle corrupted metadata gracefully");
     }
@@ -1817,7 +1904,13 @@ mod tests {
 
         // Store original content
         cache
-            .put("integrity-key".to_string(), response, policy, request_url)
+            .put(
+                "integrity-key".to_string(),
+                response,
+                policy,
+                request_url,
+                None,
+            )
             .await
             .unwrap();
 
@@ -1884,7 +1977,7 @@ mod tests {
 
             // Store response
             cache
-                .put(cache_key.clone(), response, policy, request_url)
+                .put(cache_key.clone(), response, policy, request_url, None)
                 .await
                 .unwrap();
 
@@ -1950,6 +2043,7 @@ mod tests {
                 response.clone(),
                 policy,
                 request_url,
+                None,
             )
             .await
             .unwrap();
@@ -2033,6 +2127,7 @@ mod tests {
                     test_response,
                     policy.clone(),
                     request_url.clone(),
+                    None,
                 )
                 .await;
 
@@ -2101,7 +2196,13 @@ mod tests {
             );
 
             cache
-                .put(key.to_string(), response, policy, request_url.clone())
+                .put(
+                    key.to_string(),
+                    response,
+                    policy,
+                    request_url.clone(),
+                    None,
+                )
                 .await
                 .unwrap();
 
@@ -2131,7 +2232,7 @@ mod tests {
         );
 
         cache
-            .put("key4".to_string(), response, policy, request_url)
+            .put("key4".to_string(), response, policy, request_url, None)
             .await
             .unwrap();
 
@@ -2188,7 +2289,7 @@ mod tests {
         );
 
         cache
-            .put("cleanup-key".to_string(), response, policy, request_url)
+            .put("cleanup-key".to_string(), response, policy, request_url, None)
             .await
             .unwrap();
 
@@ -2242,7 +2343,7 @@ mod tests {
 
         // This put operation should fail due to metadata filename being too long
         let result = cache
-            .put(very_long_key.clone(), response, policy, request_url)
+            .put(very_long_key.clone(), response, policy, request_url, None)
             .await;
 
         // The operation should fail
@@ -2318,7 +2419,7 @@ mod tests {
 
                     // Put, get, and delete in rapid succession
                     let put_result = cache
-                        .put(key.clone(), response, policy, url.clone())
+                        .put(key.clone(), response, policy, url.clone(), None)
                         .await;
                     assert!(
                         put_result.is_ok(),
@@ -2414,7 +2515,7 @@ mod tests {
 
         // Should handle extreme config gracefully
         let _result = cache
-            .put("config-key".to_string(), response, policy, request_url)
+            .put("config-key".to_string(), response, policy, request_url, None)
             .await;
 
         // With zero cache size/entries, the put might succeed but get might fail

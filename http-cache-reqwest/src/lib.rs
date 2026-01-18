@@ -303,8 +303,8 @@ fn to_middleware_error<E: std::error::Error + Send + Sync + 'static>(
 use url::Url;
 
 pub use http_cache::{
-    CacheManager, CacheMode, CacheOptions, HttpCache, HttpCacheOptions,
-    HttpResponse, ResponseCacheModeFn,
+    CacheManager, CacheMode, CacheOptions, HttpCache, HttpCacheMetadata,
+    HttpCacheOptions, HttpResponse, MetadataProvider, ResponseCacheModeFn,
 };
 
 #[cfg(feature = "streaming")]
@@ -457,12 +457,14 @@ impl Middleware for ReqwestMiddleware<'_> {
             status,
             url,
             version: version.try_into()?,
+            metadata: None,
         })
     }
 }
 
 // Converts an [`HttpResponse`] to a reqwest [`Response`]
 fn convert_response(response: HttpResponse) -> Result<Response> {
+    let metadata = response.metadata.clone();
     let mut ret_res = http::Response::builder()
         .status(response.status)
         .url(response.url)
@@ -473,6 +475,10 @@ fn convert_response(response: HttpResponse) -> Result<Response> {
             HeaderName::from_str(&header.0)?,
             HeaderValue::from_str(&header.1)?,
         );
+    }
+    // Insert metadata into response extensions if present
+    if let Some(metadata) = metadata {
+        ret_res.extensions_mut().insert(HttpCacheMetadata::from(metadata));
     }
     Ok(Response::from(ret_res))
 }
@@ -786,7 +792,7 @@ where
                             })?;
                         let cached_response = self
                             .cache
-                            .process_response(analysis, http_response)
+                            .process_response(analysis, http_response, None)
                             .await
                             .map_err(|e| {
                                 to_middleware_error(HttpCacheError::Cache(
@@ -840,7 +846,7 @@ where
         // Process and potentially cache the response
         let cached_response = self
             .cache
-            .process_response(analysis, http_response)
+            .process_response(analysis, http_response, None)
             .await
             .map_err(|e| {
                 to_middleware_error(HttpCacheError::Cache(e.to_string()))

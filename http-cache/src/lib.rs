@@ -694,6 +694,8 @@ pub struct HttpResponse {
     pub url: Url,
     /// HTTP response version
     pub version: HttpVersion,
+    /// Metadata
+    pub metadata: Option<Vec<u8>>,
 }
 
 impl HttpResponse {
@@ -829,6 +831,7 @@ pub trait StreamingCacheManager: Send + Sync + 'static {
         response: Response<B>,
         policy: CachePolicy,
         request_url: Url,
+        metadata: Option<Vec<u8>>,
     ) -> Result<Response<Self::Body>>
     where
         B: http_body::Body + Send + 'static,
@@ -929,6 +932,7 @@ pub trait HttpCacheInterface<B = Vec<u8>>: Send + Sync {
         &self,
         analysis: CacheAnalysis,
         response: Response<B>,
+        metadata: Option<Vec<u8>>,
     ) -> Result<Response<B>>;
 
     /// Update request headers for conditional requests (e.g., If-None-Match)
@@ -979,6 +983,7 @@ pub trait HttpCacheStreamInterface: Send + Sync {
         &self,
         analysis: CacheAnalysis,
         response: Response<B>,
+        metadata: Option<Vec<u8>>,
     ) -> Result<Response<Self::Body>>
     where
         B: http_body::Body + Send + 'static,
@@ -1216,6 +1221,18 @@ pub type CacheBust = Arc<
         + Sync,
 >;
 
+/// Type alias for metadata stored alongside cached responses.
+/// Users are responsible for serialization/deserialization of this data.
+pub type HttpCacheMetadata = Vec<u8>;
+
+/// A closure that takes [`http::request::Parts`] and [`http::response::Parts`] and returns optional metadata to store with the cached response.
+/// This allows middleware to compute and store additional information alongside cached responses.
+pub type MetadataProvider = Arc<
+    dyn Fn(&request::Parts, &response::Parts) -> Option<HttpCacheMetadata>
+        + Send
+        + Sync,
+>;
+
 /// A closure that takes a mutable reference to [`HttpResponse`] and modifies it before caching.
 pub type ModifyResponse = Arc<dyn Fn(&mut HttpResponse) + Send + Sync>;
 
@@ -1325,6 +1342,28 @@ pub type ModifyResponse = Arc<dyn Fn(&mut HttpResponse) + Send + Sync>;
 ///     ..Default::default()
 /// };
 /// ```
+///
+/// ## Storing Metadata with Cached Responses
+/// ```rust
+/// use http_cache::{HttpCacheOptions, MetadataProvider};
+/// use http::{request, response};
+/// use std::sync::Arc;
+///
+/// let options = HttpCacheOptions {
+///     metadata_provider: Some(Arc::new(|request_parts: &request::Parts, response_parts: &response::Parts| {
+///         // Store computed information with the cached response
+///         let content_type = response_parts
+///             .headers
+///             .get("content-type")
+///             .and_then(|v| v.to_str().ok())
+///             .unwrap_or("unknown");
+///
+///         // Return serialized metadata (users handle serialization)
+///         Some(format!("path={};content-type={}", request_parts.uri.path(), content_type).into_bytes())
+///     })),
+///     ..Default::default()
+/// };
+/// ```
 #[derive(Clone)]
 pub struct HttpCacheOptions {
     /// Override the default cache options.
@@ -1355,6 +1394,11 @@ pub struct HttpCacheOptions {
     /// This provides the optimal behavior for web scrapers and similar applications.
     #[cfg(feature = "rate-limiting")]
     pub rate_limiter: Option<Arc<dyn CacheAwareRateLimiter>>,
+    /// Optional callback to provide metadata to store alongside cached responses.
+    /// The callback receives request and response parts and can return metadata bytes.
+    /// This is useful for storing computed information that should be associated with
+    /// cached responses without recomputation on cache hits.
+    pub metadata_provider: Option<MetadataProvider>,
 }
 
 impl Default for HttpCacheOptions {
@@ -1370,6 +1414,7 @@ impl Default for HttpCacheOptions {
             max_ttl: None,
             #[cfg(feature = "rate-limiting")]
             rate_limiter: None,
+            metadata_provider: None,
         }
     }
 }
@@ -1391,6 +1436,10 @@ impl Debug for HttpCacheOptions {
                 .field("cache_status_headers", &self.cache_status_headers)
                 .field("max_ttl", &self.max_ttl)
                 .field("rate_limiter", &"Option<CacheAwareRateLimiter>")
+                .field(
+                    "metadata_provider",
+                    &"Fn(&request::Parts, &response::Parts) -> Option<Vec<u8>>",
+                )
                 .finish()
         }
 
@@ -1408,6 +1457,10 @@ impl Debug for HttpCacheOptions {
                 .field("modify_response", &"Fn(&mut ModifyResponse)")
                 .field("cache_status_headers", &self.cache_status_headers)
                 .field("max_ttl", &self.max_ttl)
+                .field(
+                    "metadata_provider",
+                    &"Fn(&request::Parts, &response::Parts) -> Option<Vec<u8>>",
+                )
                 .finish()
         }
     }
@@ -1466,6 +1519,7 @@ impl HttpCacheOptions {
         &self,
         parts: &response::Parts,
         request_parts: &request::Parts,
+        metadata: Option<Vec<u8>>,
     ) -> Result<HttpResponse> {
         Ok(HttpResponse {
             body: vec![], // We don't need the full body for cache mode decision
@@ -1473,6 +1527,7 @@ impl HttpCacheOptions {
             status: parts.status.as_u16(),
             url: extract_url_from_request_parts(request_parts)?,
             version: parts.version.try_into()?,
+            metadata,
         })
     }
 
@@ -1491,6 +1546,17 @@ impl HttpCacheOptions {
             }
         }
         original_mode
+    }
+
+    /// Generates metadata for a response using the metadata_provider callback if configured
+    pub fn generate_metadata(
+        &self,
+        request_parts: &request::Parts,
+        response_parts: &response::Parts,
+    ) -> Option<HttpCacheMetadata> {
+        self.metadata_provider
+            .as_ref()
+            .and_then(|provider| provider(request_parts, response_parts))
     }
 
     /// Modifies the response before caching if a modifier function is provided
@@ -1802,6 +1868,7 @@ impl<T: CacheManager> HttpCache<T> {
                         status: 504,
                         url: middleware.url()?,
                         version: HttpVersion::Http11,
+                        metadata: None,
                     };
                     if self.options.cache_status_headers {
                         res.cache_status(HitOrMiss::MISS);
@@ -1862,6 +1929,11 @@ impl<T: CacheManager> HttpCache<T> {
         );
 
         if is_cacheable {
+            // Generate metadata using the provider callback if configured
+            let response_parts = res.parts()?;
+            res.metadata =
+                self.options.generate_metadata(&parts, &response_parts);
+
             self.options.modify_response_before_caching(&mut res);
             Ok(self
                 .manager
@@ -1960,6 +2032,11 @@ impl<T: CacheManager> HttpCache<T> {
                         cond_res.cache_status(HitOrMiss::MISS);
                         cond_res.cache_lookup_status(HitOrMiss::HIT);
                     }
+                    // Generate metadata using the provider callback if configured
+                    let response_parts = cond_res.parts()?;
+                    cond_res.metadata =
+                        self.options.generate_metadata(&parts, &response_parts);
+
                     self.options.modify_response_before_caching(&mut cond_res);
                     let res = self
                         .manager
@@ -2044,6 +2121,7 @@ where
         &self,
         analysis: CacheAnalysis,
         response: Response<B>,
+        metadata: Option<Vec<u8>>,
     ) -> Result<Response<Self::Body>>
     where
         B: http_body::Body + Send + 'static,
@@ -2078,9 +2156,15 @@ where
 
         // Convert response to HttpResponse format for response-based cache mode evaluation
         let (parts, body) = response.into_parts();
-        let http_response = self
-            .options
-            .parts_to_http_response(&parts, &analysis.request_parts)?;
+        // Use provided metadata or generate from provider
+        let effective_metadata = metadata.or_else(|| {
+            self.options.generate_metadata(&analysis.request_parts, &parts)
+        });
+        let http_response = self.options.parts_to_http_response(
+            &parts,
+            &analysis.request_parts,
+            effective_metadata.clone(),
+        )?;
 
         // Check for response-based cache mode override
         let effective_cache_mode = self.options.evaluate_response_cache_mode(
@@ -2133,7 +2217,13 @@ where
             // Cache the response using the streaming manager
             let mut cached_response = self
                 .manager
-                .put(analysis.cache_key, response, policy, request_url)
+                .put(
+                    analysis.cache_key,
+                    response,
+                    policy,
+                    request_url,
+                    effective_metadata,
+                )
                 .await?;
 
             // Add cache miss headers (response is being stored for first time)
@@ -2214,6 +2304,7 @@ impl<T: CacheManager> HttpCacheInterface for HttpCache<T> {
         &self,
         analysis: CacheAnalysis,
         response: Response<Vec<u8>>,
+        metadata: Option<Vec<u8>>,
     ) -> Result<Response<Vec<u8>>> {
         if !analysis.should_cache {
             return Ok(response);
@@ -2226,9 +2317,15 @@ impl<T: CacheManager> HttpCacheInterface for HttpCache<T> {
 
         // Convert response to HttpResponse format
         let (parts, body) = response.into_parts();
-        let mut http_response = self
-            .options
-            .parts_to_http_response(&parts, &analysis.request_parts)?;
+        // Use provided metadata or generate from provider
+        let effective_metadata = metadata.or_else(|| {
+            self.options.generate_metadata(&analysis.request_parts, &parts)
+        });
+        let mut http_response = self.options.parts_to_http_response(
+            &parts,
+            &analysis.request_parts,
+            effective_metadata,
+        )?;
         http_response.body = body.clone(); // Include the body for buffered cache managers
 
         // Check for response-based cache mode override

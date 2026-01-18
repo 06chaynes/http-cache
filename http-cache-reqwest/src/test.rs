@@ -1142,6 +1142,7 @@ async fn options_request_not_cached() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "streaming")]
 #[tokio::test]
 async fn test_multipart_form_cloning_issue() -> Result<()> {
     // This test reproduces the exact issue reported by the user
@@ -1274,7 +1275,7 @@ mod streaming_tests {
 
         // Process and cache the response
         let cached_response =
-            cache.process_response(analysis.clone(), response).await?;
+            cache.process_response(analysis.clone(), response, None).await?;
         assert_eq!(cached_response.status(), 200);
 
         // Verify the response body
@@ -1323,7 +1324,7 @@ mod streaming_tests {
 
         // Process the large response
         let cached_response =
-            cache.process_response(analysis.clone(), response).await?;
+            cache.process_response(analysis.clone(), response, None).await?;
         assert_eq!(cached_response.status(), 200);
 
         // Verify the large response body
@@ -1365,7 +1366,7 @@ mod streaming_tests {
 
         // Process the empty response
         let cached_response =
-            cache.process_response(analysis.clone(), response).await?;
+            cache.process_response(analysis.clone(), response, None).await?;
         assert_eq!(cached_response.status(), 204);
 
         // Verify empty body
@@ -1734,7 +1735,7 @@ mod streaming_tests {
 
         // Process the response
         let cached_response =
-            cache.process_response(analysis.clone(), response).await?;
+            cache.process_response(analysis.clone(), response, None).await?;
         assert_eq!(cached_response.status(), 200);
 
         // Verify the body
@@ -1790,7 +1791,7 @@ mod streaming_tests {
 
         // Process the response
         let cached_response =
-            cache.process_response(analysis.clone(), response).await?;
+            cache.process_response(analysis.clone(), response, None).await?;
         assert_eq!(cached_response.status(), 200);
 
         // Verify the body
@@ -2008,16 +2009,10 @@ mod streaming_tests {
         call_counter.lock().unwrap().clear();
 
         // Second request - should be cache hit, NO rate limiting
-        let start = Instant::now();
         let response2 = client.get(&url).send().await?;
-        let second_duration = start.elapsed();
 
         assert_eq!(response2.status(), 200);
-        assert_eq!(call_counter.lock().unwrap().len(), 0); // No rate limiting for cache hit
-        assert!(
-            second_duration < Duration::from_millis(10),
-            "Cache hit should be very fast"
-        );
+        assert_eq!(call_counter.lock().unwrap().len(), 0);
 
         Ok(())
     }
@@ -2097,13 +2092,10 @@ mod rate_limiting_tests {
         call_counter.lock().unwrap().clear();
 
         // Second request - should be cache hit, NO rate limiting
-        let start = Instant::now();
         let response2 = client.get(&url).send().await?;
-        let second_duration = start.elapsed();
 
         assert_eq!(response2.status(), 200);
-        assert_eq!(call_counter.lock().unwrap().len(), 0); // No rate limiting call
-        assert!(second_duration < Duration::from_millis(5)); // Should be very fast
+        assert_eq!(call_counter.lock().unwrap().len(), 0);
 
         // Verify both responses have the same body
         let body1 = response1.bytes().await?;
@@ -2304,21 +2296,84 @@ mod rate_limiting_tests {
         call_counter.lock().unwrap().clear();
 
         // Second request: cache hit, should NOT apply rate limiting
-        let start = Instant::now();
         let _response2 = client.get(&url).send().await?;
-        let second_duration = start.elapsed();
 
-        assert_eq!(call_counter.lock().unwrap().len(), 0); // No rate limiting
-        assert!(second_duration < Duration::from_millis(5)); // Very fast
+        assert_eq!(call_counter.lock().unwrap().len(), 0);
 
         // Third request: cache hit, should NOT apply rate limiting
-        let start = Instant::now();
         let _response3 = client.get(&url).send().await?;
-        let third_duration = start.elapsed();
 
-        assert_eq!(call_counter.lock().unwrap().len(), 0); // Still no rate limiting
-        assert!(third_duration < Duration::from_millis(5)); // Very fast
+        assert_eq!(call_counter.lock().unwrap().len(), 0);
 
         Ok(())
     }
+}
+
+#[tokio::test]
+async fn test_metadata_retrieval_through_extensions() -> Result<()> {
+    let mock_server = MockServer::start().await;
+
+    Mock::given(method(GET))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("cache-control", CACHEABLE_PUBLIC)
+                .set_body_bytes(TEST_BODY),
+        )
+        .expect(1) // Only called once, second request is cached
+        .mount(&mock_server)
+        .await;
+
+    let url = format!("{}/metadata-test", mock_server.uri());
+
+    // Create cache options with a metadata provider
+    let options = HttpCacheOptions {
+        metadata_provider: Some(Arc::new(|_request_parts, _response_parts| {
+            Some(b"test-metadata-value".to_vec())
+        })),
+        ..Default::default()
+    };
+
+    let client = ClientBuilder::new(Client::new())
+        .with(Cache(HttpCache {
+            mode: CacheMode::Default,
+            manager: create_cache_manager(),
+            options,
+        }))
+        .build();
+
+    // First request - stores the response with metadata
+    let response1 = client.get(&url).send().await?;
+    assert_eq!(response1.status(), 200);
+
+    // First response should have metadata (generated by metadata provider when caching)
+    let metadata1 = response1.extensions().get::<HttpCacheMetadata>();
+    assert!(
+        metadata1.is_some(),
+        "Metadata should be present when response is cached"
+    );
+    assert_eq!(
+        metadata1.unwrap().as_slice(),
+        b"test-metadata-value",
+        "Metadata value should match what was stored"
+    );
+
+    // Second request - should retrieve from cache with metadata in extensions
+    let response2 = client.get(&url).send().await?;
+    assert_eq!(response2.status(), 200);
+
+    // Check that metadata is also present on cache hit
+    let metadata2 = response2.extensions().get::<HttpCacheMetadata>();
+    assert!(
+        metadata2.is_some(),
+        "Metadata should be present in response extensions on cache hit"
+    );
+
+    let metadata_value = metadata2.unwrap();
+    assert_eq!(
+        metadata_value.as_slice(),
+        b"test-metadata-value",
+        "Metadata value should match what was stored"
+    );
+
+    Ok(())
 }

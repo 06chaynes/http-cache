@@ -384,3 +384,136 @@ let cache = HttpCache {
 5. **Global Settings**: Options like `max_ttl` and `cache_status_headers` provide global configuration
 
 All of these functions are called on a per-request basis, giving you complete control over caching behavior for each individual request.
+
+## Response Metadata
+
+The cache allows storing custom metadata alongside cached responses using the `metadata_provider` callback. This is useful for storing computed information that should be associated with cached responses, avoiding recomputation on cache hits.
+
+### Basic Usage
+
+```rust
+use http_cache::{HttpCacheOptions, CACacheManager, HttpCache, CacheMode};
+use std::sync::Arc;
+
+let manager = CACacheManager::new("./cache".into(), true);
+
+let options = HttpCacheOptions {
+    metadata_provider: Some(Arc::new(|request_parts, response_parts| {
+        // Generate metadata based on request and response
+        let content_type = response_parts
+            .headers
+            .get("content-type")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("unknown");
+
+        // Serialize metadata as bytes (users handle serialization)
+        Some(format!(
+            "path={};content-type={};status={}",
+            request_parts.uri.path(),
+            content_type,
+            response_parts.status.as_u16()
+        ).into_bytes())
+    })),
+    ..Default::default()
+};
+
+let cache = HttpCache {
+    mode: CacheMode::Default,
+    manager,
+    options,
+};
+```
+
+### Use Cases
+
+The `metadata_provider` is particularly useful for:
+
+1. **Computed Information**: Store computed data based on request/response pairs that would be expensive to recompute
+2. **Logging Context**: Store information for logging that should be associated with cached responses
+3. **Custom Headers**: Store additional headers or information that should be returned with cached responses
+4. **Analytics Data**: Store request timing, transformation information, or other analytics data
+
+### Accessing Metadata
+
+When retrieving cached responses through the `HttpCacheInterface`, the `HttpResponse` struct contains the metadata field:
+
+```rust
+// When looking up cached responses
+if let Some((cached_response, policy)) = cache.lookup_cached_response(&cache_key).await? {
+    // Access the metadata
+    if let Some(metadata) = &cached_response.metadata {
+        // Deserialize and use the metadata
+        let metadata_str = String::from_utf8_lossy(metadata);
+        println!("Cached with metadata: {}", metadata_str);
+    }
+
+    // Use the cached response body
+    let body = &cached_response.body;
+}
+```
+
+### Conditional Metadata Generation
+
+The metadata provider can return `None` to skip metadata generation for certain responses:
+
+```rust
+let options = HttpCacheOptions {
+    metadata_provider: Some(Arc::new(|request_parts, response_parts| {
+        // Only generate metadata for API responses
+        if request_parts.uri.path().starts_with("/api/") {
+            let computed_info = format!(
+                "api_version={};response_time={}",
+                response_parts.headers
+                    .get("x-api-version")
+                    .and_then(|v| v.to_str().ok())
+                    .unwrap_or("unknown"),
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_millis()
+            );
+            Some(computed_info.into_bytes())
+        } else {
+            None // No metadata for non-API responses
+        }
+    })),
+    ..Default::default()
+};
+```
+
+### Integration with Middleware
+
+For middleware implementations (like reqwest-middleware), the types `HttpCacheMetadata` and `MetadataProvider` are re-exported:
+
+```rust
+use http_cache_reqwest::{
+    HttpCacheMetadata, MetadataProvider, HttpCacheOptions,
+    CacheMode, CACacheManager, HttpCache, Cache
+};
+use reqwest::Client;
+use reqwest_middleware::ClientBuilder;
+use std::sync::Arc;
+
+let options = HttpCacheOptions {
+    metadata_provider: Some(Arc::new(|req, res| {
+        // Store request path and response status as metadata
+        Some(format!("{}:{}", req.uri.path(), res.status.as_u16()).into_bytes())
+    })),
+    ..Default::default()
+};
+
+let client = ClientBuilder::new(Client::new())
+    .with(Cache(HttpCache {
+        mode: CacheMode::Default,
+        manager: CACacheManager::new("./cache".into(), true),
+        options,
+    }))
+    .build();
+```
+
+### Notes
+
+- Users are responsible for serialization/deserialization of metadata
+- Metadata is stored as `Vec<u8>` bytes
+- When both explicit metadata is passed to `process_response` and a `metadata_provider` is configured, the explicit metadata takes precedence
+- Metadata persists with the cached response and is available on cache hits
