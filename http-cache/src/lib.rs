@@ -288,7 +288,117 @@ use http::{
 };
 use http_cache_semantics::{AfterResponse, BeforeRequest, CachePolicy};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use url::Url;
+
+// URL type alias - allows users to choose between `url` (default) and `ada-url` crates
+// When using `url-ada` feature, this becomes `ada_url::Url`
+#[cfg(feature = "url-ada")]
+pub use ada_url::Url;
+#[cfg(not(feature = "url-ada"))]
+pub use url::Url;
+
+// ============================================================================
+// URL Helper Functions
+// ============================================================================
+// These functions abstract away API differences between `url` and `ada-url` crates.
+// Internal code should use these helpers instead of calling URL methods directly.
+
+/// Parse a URL string into a `Url` type.
+///
+/// This helper abstracts the parsing API difference between `url` and `ada-url`:
+/// - `url` crate: `Url::parse(s)` returns `Result<Url, ParseError>`
+/// - `ada-url` crate: `Url::parse(s, None)` returns `Result<Url, ParseUrlError>`
+#[inline]
+pub fn url_parse(s: &str) -> Result<Url> {
+    #[cfg(feature = "url-ada")]
+    {
+        Url::parse(s, None).map_err(|e| -> BoxError { e.to_string().into() })
+    }
+    #[cfg(not(feature = "url-ada"))]
+    {
+        Url::parse(s).map_err(|e| -> BoxError { Box::new(e) })
+    }
+}
+
+/// Set the path component of a URL.
+///
+/// API differences:
+/// - `url` crate: `url.set_path(path)`
+/// - `ada-url` crate: `url.set_pathname(Some(path))`
+#[inline]
+pub fn url_set_path(url: &mut Url, path: &str) {
+    #[cfg(feature = "url-ada")]
+    {
+        let _ = url.set_pathname(Some(path));
+    }
+    #[cfg(not(feature = "url-ada"))]
+    {
+        url.set_path(path);
+    }
+}
+
+/// Set the query component of a URL.
+///
+/// API differences:
+/// - `url` crate: `url.set_query(Some(query))` or `url.set_query(None)`
+/// - `ada-url` crate: `url.set_search(Some(query))` or `url.set_search(None)`
+#[inline]
+pub fn url_set_query(url: &mut Url, query: Option<&str>) {
+    #[cfg(feature = "url-ada")]
+    {
+        url.set_search(query);
+    }
+    #[cfg(not(feature = "url-ada"))]
+    {
+        url.set_query(query);
+    }
+}
+
+/// Get the hostname of a URL as a string.
+///
+/// API differences:
+/// - `url` crate: `url.host_str()` returns `Option<&str>`
+/// - `ada-url` crate: `url.hostname()` returns `&str` (empty string if no host)
+#[inline]
+#[must_use]
+pub fn url_hostname(url: &Url) -> Option<&str> {
+    #[cfg(feature = "url-ada")]
+    {
+        let hostname = url.hostname();
+        if hostname.is_empty() {
+            None
+        } else {
+            Some(hostname)
+        }
+    }
+    #[cfg(not(feature = "url-ada"))]
+    {
+        url.host_str()
+    }
+}
+
+/// Get the host of a URL as a string for display purposes (e.g., warning headers).
+///
+/// This returns the host portion as a string, or "unknown" if not available.
+/// Used in places like HTTP Warning headers where we need a displayable host value.
+#[inline]
+#[must_use]
+pub fn url_host_str(url: &Url) -> String {
+    #[cfg(feature = "url-ada")]
+    {
+        let hostname = url.hostname();
+        if hostname.is_empty() {
+            "unknown".to_string()
+        } else {
+            hostname.to_string()
+        }
+    }
+    #[cfg(not(feature = "url-ada"))]
+    {
+        url.host()
+            .map(|h| h.to_string())
+            .unwrap_or_else(|| "unknown".to_string())
+    }
+}
 
 pub use body::StreamingBody;
 pub use error::{
@@ -389,7 +499,7 @@ fn extract_url_from_request_parts(parts: &request::Parts) -> Result<Url> {
     // First check if the URI is already absolute
     if let Some(_scheme) = parts.uri.scheme() {
         // URI is absolute, use it directly
-        return Url::parse(&parts.uri.to_string())
+        return url_parse(&parts.uri.to_string())
             .map_err(|_| -> BoxError { BadHeader.into() });
     }
 
@@ -404,15 +514,15 @@ fn extract_url_from_request_parts(parts: &request::Parts) -> Result<Url> {
     // Determine scheme based on host and headers
     let scheme = determine_scheme(host, &parts.headers)?;
 
-    // Create base URL using url crate's builder pattern for safety
-    let mut base_url = Url::parse(&format!("{}://{}/", &scheme, host))
+    // Create base URL using the URL helper for cross-crate compatibility
+    let mut base_url = url_parse(&format!("{}://{}/", &scheme, host))
         .map_err(|_| -> BoxError { BadHeader.into() })?;
 
-    // Set the path and query from the URI
+    // Set the path and query from the URI using helpers
     if let Some(path_and_query) = parts.uri.path_and_query() {
-        base_url.set_path(path_and_query.path());
+        url_set_path(&mut base_url, path_and_query.path());
         if let Some(query) = path_and_query.query() {
-            base_url.set_query(Some(query));
+            url_set_query(&mut base_url, Some(query));
         }
     }
 
@@ -772,10 +882,7 @@ impl HttpResponse {
         // warn-text  = quoted-string
         // warn-date  = <"> HTTP-date <">
         // (https://tools.ietf.org/html/rfc2616#section-14.46)
-        let host = url
-            .host()
-            .map(|h| h.to_string())
-            .unwrap_or_else(|| "unknown".to_string());
+        let host = url_host_str(url);
         // Escape message to prevent header injection and ensure valid HTTP format
         let escaped_message =
             message.replace('"', "'").replace(['\n', '\r'], " ");
@@ -1787,7 +1894,7 @@ impl<T: CacheManager> HttpCache<T> {
     #[cfg(feature = "rate-limiting")]
     async fn apply_rate_limiting(&self, url: &Url) {
         if let Some(rate_limiter) = &self.options.rate_limiter {
-            let rate_limit_key = url.host_str().unwrap_or("unknown");
+            let rate_limit_key = url_hostname(url).unwrap_or("unknown");
             rate_limiter.until_key_ready(rate_limit_key).await;
         }
     }

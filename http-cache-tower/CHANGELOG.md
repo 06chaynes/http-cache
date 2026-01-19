@@ -5,6 +5,7 @@
 ### Added
 
 - `manager-foyer` feature flag for `FoyerManager` support
+- `url-ada` feature flag for using WHATWG-compliant ada-url for URL parsing
 
 ### Fixed
 

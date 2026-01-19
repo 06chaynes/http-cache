@@ -12,13 +12,19 @@
     cd http-cache && cargo nextest run --no-default-features --features manager-foyer,with-http-types,streaming-tokio,http-headers-compat
     echo "\n----------\nCore library (no http-headers-compat):\n"
     cd http-cache && cargo nextest run --no-default-features --features manager-cacache,with-http-types,manager-moka,streaming-tokio
+    echo "\n----------\nCore library (with url-ada):\n"
+    cd http-cache && cargo nextest run --no-default-features --features manager-cacache,with-http-types,manager-moka,streaming-tokio,url-ada
     echo "\n----------\nReqwest middleware:\n"
     cd http-cache-reqwest && cargo nextest run --all-features
+    echo "\n----------\nReqwest middleware (with url-ada):\n"
+    cd http-cache-reqwest && cargo nextest run --no-default-features --features manager-cacache,url-ada
     echo "\n----------\nSurf middleware:\n"
     cd http-cache-surf && cargo nextest run --all-features
     echo "\n----------\nUreq middleware:\n"
     cd http-cache-ureq && cargo nextest run --no-default-features --features manager-cacache
     cd http-cache-ureq && cargo nextest run --all-features
+    echo "\n----------\nUreq middleware (with url-ada):\n"
+    cd http-cache-ureq && cargo nextest run --no-default-features --features manager-cacache,url-ada
     echo "\n----------\nTower middleware:\n"
     cd http-cache-tower && cargo nextest run --all-features
     echo "\n----------\nTower server middleware:\n"
@@ -57,13 +63,19 @@
     cd http-cache && cargo check --no-default-features --features manager-foyer,with-http-types,streaming-tokio,http-headers-compat
     echo "\n----------\nCore library (no http-headers-compat):\n"
     cd http-cache && cargo check --no-default-features --features manager-cacache,with-http-types,manager-moka,streaming-tokio
+    echo "\n----------\nCore library (with url-ada):\n"
+    cd http-cache && cargo check --no-default-features --features manager-cacache,with-http-types,manager-moka,streaming-tokio,url-ada
     echo "\n----------\nReqwest middleware:\n"
     cd http-cache-reqwest && cargo check --all-features
+    echo "\n----------\nReqwest middleware (with url-ada):\n"
+    cd http-cache-reqwest && cargo check --no-default-features --features manager-cacache,url-ada
     echo "\n----------\nSurf middleware:\n"
     cd http-cache-surf && cargo check --all-features
     echo "\n----------\nUreq middleware:\n"
     cd http-cache-ureq && cargo check --no-default-features --features manager-cacache
     cd http-cache-ureq && cargo check --all-features
+    echo "\n----------\nUreq middleware (with url-ada):\n"
+    cd http-cache-ureq && cargo check --no-default-features --features manager-cacache,url-ada
     echo "\n----------\nTower middleware:\n"
     cd http-cache-tower && cargo check --all-features
     echo "\n----------\nTower server middleware:\n"
@@ -127,12 +139,18 @@ changelog TAG:
     cd http-cache && cargo clippy --lib --tests --all-targets --no-default-features --features manager-foyer,with-http-types,streaming-tokio,http-headers-compat -- -D warnings
     echo "\n----------\nCore library (no http-headers-compat):\n"
     cd http-cache && cargo clippy --lib --tests --all-targets --no-default-features --features manager-cacache,with-http-types,manager-moka,streaming-tokio -- -D warnings
+    echo "\n----------\nCore library (with url-ada):\n"
+    cd http-cache && cargo clippy --lib --tests --all-targets --no-default-features --features manager-cacache,with-http-types,manager-moka,streaming-tokio,url-ada -- -D warnings
     echo "\n----------\nReqwest middleware:\n"
     cd http-cache-reqwest && cargo clippy --lib --tests --all-targets --all-features -- -D warnings
+    echo "\n----------\nReqwest middleware (with url-ada):\n"
+    cd http-cache-reqwest && cargo clippy --lib --tests --all-targets --no-default-features --features manager-cacache,url-ada -- -D warnings
     echo "\n----------\nSurf middleware:\n"
     cd http-cache-surf && cargo clippy --lib --tests --all-targets --all-features -- -D warnings
     echo "\n----------\nUreq middleware:\n"
     cd http-cache-ureq && cargo clippy --lib --tests --all-targets --all-features -- -D warnings
+    echo "\n----------\nUreq middleware (with url-ada):\n"
+    cd http-cache-ureq && cargo clippy --lib --tests --all-targets --no-default-features --features manager-cacache,url-ada -- -D warnings
     echo "\n----------\nTower middleware:\n"
     cd http-cache-tower && cargo clippy --lib --tests --all-targets --all-features -- -D warnings
     echo "\n----------\nTower server middleware:\n"

@@ -9,6 +9,8 @@
 - `FoyerManager` cache backend using foyer for hybrid in-memory and disk caching
 - `manager-foyer` feature flag for enabling `FoyerManager`
 - `manager-cacache-bincode` and `manager-moka-bincode` feature flags for legacy bincode serialization
+- `url-ada` feature flag for using WHATWG-compliant ada-url as an alternative to the url crate
+- `url_parse`, `url_set_path`, `url_set_query`, `url_hostname`, `url_host_str` helper functions for URL operations
 
 ### Changed
 

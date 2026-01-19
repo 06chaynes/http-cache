@@ -44,6 +44,7 @@ jobs:
       - run: |
           cargo test --all-targets --no-default-features --features manager-cacache
           cargo test --all-targets --all-features
+          cargo test --all-targets --no-default-features --features manager-cacache,url-ada
 
   clippy:
     name: Check clippy
@@ -57,6 +58,7 @@ jobs:
       - run: |
           cargo clippy --lib --tests --all-targets --no-default-features --features manager-cacache -- -D warnings
           cargo clippy --lib --tests --all-targets --all-features -- -D warnings
+          cargo clippy --lib --tests --all-targets --no-default-features --features manager-cacache,url-ada -- -D warnings
 
   docs:
     name: Build docs

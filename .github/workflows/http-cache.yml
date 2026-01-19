@@ -46,6 +46,7 @@ jobs:
           cargo test --all-targets --no-default-features --features manager-cacache,with-http-types,manager-moka,streaming-tokio,rate-limiting,http-headers-compat
           cargo test --all-targets --no-default-features --features manager-foyer,with-http-types,streaming-tokio,http-headers-compat
           cargo test --all-targets --no-default-features --features manager-cacache,with-http-types,manager-moka,streaming-tokio
+          cargo test --all-targets --no-default-features --features manager-cacache,with-http-types,manager-moka,streaming-tokio,url-ada
 
   clippy:
     name: Check clippy
@@ -61,6 +62,7 @@ jobs:
           cargo clippy --lib --tests --all-targets --no-default-features --features manager-cacache,with-http-types,manager-moka,streaming-tokio,rate-limiting,http-headers-compat -- -D warnings
           cargo clippy --lib --tests --all-targets --no-default-features --features manager-foyer,with-http-types,streaming-tokio,http-headers-compat -- -D warnings
           cargo clippy --lib --tests --all-targets --no-default-features --features manager-cacache,with-http-types,manager-moka,streaming-tokio -- -D warnings
+          cargo clippy --lib --tests --all-targets --no-default-features --features manager-cacache,with-http-types,manager-moka,streaming-tokio,url-ada -- -D warnings
 
   docs:
     name: Build docs

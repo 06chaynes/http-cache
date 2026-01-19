@@ -66,6 +66,7 @@ manager-moka = ["http-cache/manager-moka"]
 manager-foyer = ["http-cache/manager-foyer"]
 streaming = ["http-cache/streaming-tokio", "reqwest/stream", "futures-util"]
 rate-limiting = ["http-cache/rate-limiting"]
+url-ada = ["http-cache/url-ada"]
 
 [package.metadata.docs.rs]
 all-features = true

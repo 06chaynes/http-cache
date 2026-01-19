@@ -1,8 +1,8 @@
 use crate::{
-    error, CacheMode, HitOrMiss, HttpHeaders, HttpResponse, HttpVersion, Result,
+    error, url_parse, CacheMode, HitOrMiss, HttpHeaders, HttpResponse,
+    HttpVersion, Result, Url,
 };
 use http::{header::CACHE_CONTROL, StatusCode};
-use url::Url;
 
 use std::str::FromStr;
 
@@ -54,7 +54,14 @@ fn response_methods_work() -> Result<()> {
         version: HttpVersion::Http11,
         metadata: Some(b"Metadata".to_vec()),
     };
-    assert_eq!(format!("{:?}", res.clone()), "HttpResponse { body: [116, 101, 115, 116], headers: Modern({}), status: 200, url: Url { scheme: \"http\", cannot_be_a_base: false, username: \"\", password: None, host: Some(Domain(\"example.com\")), port: None, path: \"/\", query: None, fragment: None }, version: Http11, metadata: Some([77, 101, 116, 97, 100, 97, 116, 97]) }");
+    // Verify debug output contains expected fields without checking exact format
+    // (URL debug representation differs between url and ada-url crates)
+    let debug = format!("{:?}", res.clone());
+    assert!(debug.contains("HttpResponse"));
+    assert!(debug.contains("body: [116, 101, 115, 116]"));
+    assert!(debug.contains("status: 200"));
+    assert!(debug.contains("example.com"));
+    assert!(debug.contains("Http11"));
     res.add_warning(&url, 112, "Test Warning");
     let code = res.warning_code();
     assert!(code.is_some());
@@ -164,7 +171,7 @@ mod with_cacache {
 
     #[tokio::test]
     async fn cacache() -> Result<()> {
-        let url = Url::parse("http://example.com")?;
+        let url = url_parse("http://example.com")?;
         let cache_dir = tempfile::tempdir().unwrap();
         let manager = CACacheManager::new(cache_dir.path().to_path_buf(), true);
         let http_res = HttpResponse {
@@ -216,7 +223,7 @@ mod with_moka {
         // Added to test custom Debug impl
         let mm = MokaManager::default();
         assert_eq!(format!("{:?}", mm.clone()), "MokaManager { .. }",);
-        let url = Url::parse("http://example.com")?;
+        let url = url_parse("http://example.com")?;
         let manager = Arc::new(mm);
         let http_res = HttpResponse {
             body: TEST_BODY.to_vec(),
@@ -269,7 +276,7 @@ mod with_foyer {
         // Added to test custom Debug impl
         let fm = FoyerManager::in_memory(100).await?;
         assert_eq!(format!("{:?}", fm.clone()), "FoyerManager { .. }",);
-        let url = Url::parse("http://example.com")?;
+        let url = url_parse("http://example.com")?;
         let manager = Arc::new(fm);
         let http_res = HttpResponse {
             body: TEST_BODY.to_vec(),
@@ -310,12 +317,11 @@ mod with_foyer {
 #[cfg(feature = "manager-cacache")]
 mod interface_tests {
     use crate::{
-        CACacheManager, CacheMode, HttpCache, HttpCacheInterface,
+        url_parse, CACacheManager, CacheMode, HttpCache, HttpCacheInterface,
         HttpCacheOptions,
     };
     use http::{Request, Response, StatusCode};
     use std::sync::Arc;
-    use url::Url;
 
     #[tokio::test]
     async fn test_http_cache_interface_analyze_request() {
@@ -483,7 +489,7 @@ mod interface_tests {
             body: b"Cached content".to_vec(),
             headers: crate::HttpHeaders::new(),
             status: 200,
-            url: Url::parse("https://example.com/test").unwrap(),
+            url: url_parse("https://example.com/test").unwrap(),
             version: crate::HttpVersion::Http11,
             metadata: Some(b"Metadata".to_vec()),
         };
@@ -624,7 +630,7 @@ mod interface_tests {
             body: b"Cached content".to_vec(),
             headers: crate::HttpHeaders::new(),
             status: 200,
-            url: Url::parse("https://example.com/test").unwrap(),
+            url: url_parse("https://example.com/test").unwrap(),
             version: crate::HttpVersion::Http11,
             metadata: Some(b"Metadata".to_vec()),
         };
@@ -1005,6 +1011,7 @@ mod rate_limiting_tests {
     use crate::rate_limiting::{
         CacheAwareRateLimiter, DomainRateLimiter, Quota,
     };
+    use crate::url_hostname;
     use crate::HttpCacheOptions;
     use std::num::NonZero;
     use std::sync::{Arc, Mutex};
@@ -1162,20 +1169,20 @@ mod rate_limiting_tests {
     // This tests the flow conceptually but would need a full middleware setup
     #[tokio::test]
     async fn test_rate_limiter_key_extraction() {
-        let url = Url::parse("https://api.example.com/users").unwrap();
-        let host = url.host_str().unwrap_or("unknown");
+        let url = url_parse("https://api.example.com/users").unwrap();
+        let host = url_hostname(&url).unwrap_or("unknown");
 
         assert_eq!(host, "api.example.com");
 
         // Test with different URLs
-        let url2 = Url::parse("https://other-api.example.com/posts").unwrap();
-        let host2 = url2.host_str().unwrap_or("unknown");
+        let url2 = url_parse("https://other-api.example.com/posts").unwrap();
+        let host2 = url_hostname(&url2).unwrap_or("unknown");
 
         assert_eq!(host2, "other-api.example.com");
 
         // Test with localhost
-        let url3 = Url::parse("http://localhost:8080/test").unwrap();
-        let host3 = url3.host_str().unwrap_or("unknown");
+        let url3 = url_parse("http://localhost:8080/test").unwrap();
+        let host3 = url_hostname(&url3).unwrap_or("unknown");
 
         assert_eq!(host3, "localhost");
     }

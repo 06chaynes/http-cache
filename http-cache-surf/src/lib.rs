@@ -152,8 +152,8 @@ use http::{
     request::{self, Parts},
 };
 use http_cache::{
-    BadHeader, BoxError, CacheManager, CacheOptions, HitOrMiss, HttpResponse,
-    Middleware, Result, XCACHE, XCACHELOOKUP,
+    url_parse, BadHeader, BoxError, CacheManager, CacheOptions, HitOrMiss,
+    HttpResponse, Middleware, Result, Url, XCACHE, XCACHELOOKUP,
 };
 pub use http_cache::{CacheMode, HttpCache, HttpHeaders};
 use http_cache_semantics::CachePolicy;
@@ -162,7 +162,7 @@ use http_types::{
     Response as HttpTypesResponse, StatusCode as HttpTypesStatusCode,
     Version as HttpTypesVersion,
 };
-use http_types::{Method as HttpTypesMethod, Request, Url};
+use http_types::{Method as HttpTypesMethod, Request};
 use surf::{middleware::Next, Client};
 
 // Re-export managers and cache types
@@ -249,13 +249,13 @@ impl Middleware for SurfMiddleware<'_> {
         Ok(converted.into_parts().0)
     }
     fn url(&self) -> Result<Url> {
-        Ok(self.req.url().clone())
+        url_parse(self.req.url().as_str())
     }
     fn method(&self) -> Result<String> {
         Ok(self.req.method().as_ref().to_string())
     }
     async fn remote_fetch(&mut self) -> Result<HttpResponse> {
-        let url = self.req.url().clone();
+        let url = url_parse(self.req.url().as_str())?;
         let mut res =
             self.next.run(self.req.clone().into(), self.client.clone()).await?;
         let mut headers = HttpHeaders::new();

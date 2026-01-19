@@ -6,7 +6,7 @@
 use crate::{
     body::StreamingBody,
     error::{Result, StreamingError},
-    runtime, StreamingCacheManager,
+    runtime, StreamingCacheManager, Url,
 };
 use async_trait::async_trait;
 use bytes::Bytes;
@@ -17,7 +17,6 @@ use log::warn;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use url::Url;
 
 use {
     blake3,
@@ -1301,6 +1300,7 @@ impl StreamingCacheManager for StreamingManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::url_parse;
     use crate::StreamingCacheManager as StreamingCacheManagerTrait;
     use http_body_util::Full;
     use tempfile::TempDir;
@@ -1328,7 +1328,7 @@ mod tests {
             &response.clone().map(|_| ()),
         );
 
-        let request_url = Url::parse("http://example.com/test").unwrap();
+        let request_url = url_parse("http://example.com/test").unwrap();
 
         // Put response into cache
         let cached_response = cache
@@ -1386,7 +1386,7 @@ mod tests {
             &response.clone().map(|_| ()),
         );
 
-        let request_url = Url::parse("http://example.com/test").unwrap();
+        let request_url = url_parse("http://example.com/test").unwrap();
         let test_metadata = b"test-metadata-value".to_vec();
 
         // Put response into cache with metadata
@@ -1444,7 +1444,7 @@ mod tests {
             &response.clone().map(|_| ()),
         );
 
-        let request_url = Url::parse("http://example.com/test").unwrap();
+        let request_url = url_parse("http://example.com/test").unwrap();
         let cache_key = "test-key-delete";
 
         // Put response into cache
@@ -1473,7 +1473,7 @@ mod tests {
         let cache = StreamingManager::new(temp_dir.path().to_path_buf());
 
         let identical_content = Bytes::from("identical response body content");
-        let request_url = Url::parse("http://example.com/test").unwrap();
+        let request_url = url_parse("http://example.com/test").unwrap();
 
         // Create two different responses with identical content
         let response1 = Response::builder()
@@ -1586,7 +1586,7 @@ mod tests {
 
         let identical_content =
             Bytes::from("persistent reference test content");
-        let request_url = Url::parse("http://example.com/test").unwrap();
+        let request_url = url_parse("http://example.com/test").unwrap();
 
         // Phase 1: Create initial cache with content deduplication
         {
@@ -1699,7 +1699,7 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let cache =
             Arc::new(StreamingManager::new(temp_dir.path().to_path_buf()));
-        let request_url = Url::parse("http://example.com/test").unwrap();
+        let request_url = url_parse("http://example.com/test").unwrap();
 
         let shared_content = Bytes::from("concurrent test content");
         let tasks_count = 10;
@@ -1827,7 +1827,7 @@ mod tests {
             &response.clone().map(|_| ()),
         );
 
-        let request_url = Url::parse("http://example.com/large-file").unwrap();
+        let request_url = url_parse("http://example.com/large-file").unwrap();
 
         // Store large response
         let cached_response = cache
@@ -1896,7 +1896,7 @@ mod tests {
             &response.clone().map(|_| ()),
         );
 
-        let request_url = Url::parse("http://example.com/test").unwrap();
+        let request_url = url_parse("http://example.com/test").unwrap();
 
         let result = cache
             .put("valid-key".to_string(), response, policy, request_url, None)
@@ -1929,7 +1929,7 @@ mod tests {
         );
 
         let request_url =
-            Url::parse("http://example.com/integrity-test").unwrap();
+            url_parse("http://example.com/integrity-test").unwrap();
 
         // Store original content
         cache
@@ -2000,7 +2000,7 @@ mod tests {
             );
 
             let request_url =
-                Url::parse(&format!("http://example.com/version-test-{}", i))
+                url_parse(&format!("http://example.com/version-test-{}", i))
                     .unwrap();
             let cache_key = format!("version-key-{}", i);
 
@@ -2063,7 +2063,7 @@ mod tests {
             &response.clone().map(|_| ()),
         );
 
-        let request_url = Url::parse("http://example.com/header-test").unwrap();
+        let request_url = url_parse("http://example.com/header-test").unwrap();
 
         // Store response
         cache
@@ -2124,7 +2124,7 @@ mod tests {
             &response.clone().map(|_| ()),
         );
 
-        let request_url = Url::parse("http://example.com/test").unwrap();
+        let request_url = url_parse("http://example.com/test").unwrap();
 
         // Test various cache key formats
         let edge_case_keys = vec![
@@ -2198,7 +2198,7 @@ mod tests {
             config,
         );
 
-        let request_url = Url::parse("http://example.com/test").unwrap();
+        let request_url = url_parse("http://example.com/test").unwrap();
 
         // Add entries that exceed the cache size limit
         let entries = vec![
@@ -2298,7 +2298,7 @@ mod tests {
             config,
         );
 
-        let request_url = Url::parse("http://example.com/test").unwrap();
+        let request_url = url_parse("http://example.com/test").unwrap();
 
         // Add some entries
         let response = Response::builder()
@@ -2346,7 +2346,7 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let cache = StreamingManager::new(temp_dir.path().to_path_buf());
 
-        let request_url = Url::parse("http://example.com/test").unwrap();
+        let request_url = url_parse("http://example.com/test").unwrap();
         let content = Bytes::from("rollback test content");
 
         let response = Response::builder()
@@ -2415,7 +2415,7 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let cache =
             Arc::new(StreamingManager::new(temp_dir.path().to_path_buf()));
-        let request_url = Url::parse("http://example.com/test").unwrap();
+        let request_url = url_parse("http://example.com/test").unwrap();
 
         let tasks_count = 20;
         let mut handles = Vec::new();
@@ -2525,7 +2525,7 @@ mod tests {
             config,
         );
 
-        let request_url = Url::parse("http://example.com/test").unwrap();
+        let request_url = url_parse("http://example.com/test").unwrap();
         let response = Response::builder()
             .status(200)
             .body(Full::new(Bytes::from("config test")))

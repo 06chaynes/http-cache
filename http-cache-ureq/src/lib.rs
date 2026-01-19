@@ -211,11 +211,10 @@ use async_trait::async_trait;
 pub use http::request::Parts;
 use http::{header::CACHE_CONTROL, Method};
 use http_cache::{
-    BoxError, CacheManager, CacheOptions, HitOrMiss, HttpResponse, Middleware,
-    XCACHE, XCACHELOOKUP,
+    url_parse, BoxError, CacheManager, CacheOptions, HitOrMiss, HttpResponse,
+    Middleware, Url, XCACHE, XCACHELOOKUP,
 };
 use http_cache_semantics::CachePolicy;
-use url::Url;
 
 pub use http_cache::{
     CacheMode, HttpCache, HttpCacheOptions, ResponseCacheModeFn,
@@ -670,8 +669,7 @@ fn convert_ureq_response_to_http_response(
         ))))
     })?;
 
-    // Parse the provided URL
-    let parsed_url = Url::parse(url).map_err(|e| {
+    let parsed_url = url_parse(url).map_err(|e| {
         HttpCacheError::http(Box::new(std::io::Error::other(format!(
             "Invalid URL '{}': {}",
             url, e
@@ -858,7 +856,7 @@ impl Middleware for UreqMiddleware<'_> {
     }
 
     fn url(&self) -> http_cache::Result<Url> {
-        Url::parse(&self.url).map_err(BoxError::from)
+        url_parse(&self.url)
     }
 
     fn method(&self) -> http_cache::Result<String> {

@@ -4,11 +4,9 @@ use std::sync::Arc;
 use http_cache::*;
 use reqwest::Client;
 use reqwest_middleware::ClientBuilder;
-use url::Url;
-use wiremock::{
-    matchers::{method, path},
-    Mock, MockServer, ResponseTemplate,
-};
+#[cfg(any(feature = "streaming", feature = "rate-limiting"))]
+use wiremock::matchers::path;
+use wiremock::{matchers::method, Mock, MockServer, ResponseTemplate};
 
 /// Helper function to create a temporary cache manager
 fn create_cache_manager() -> CACacheManager {
@@ -85,7 +83,7 @@ async fn default_mode() -> Result<()> {
 
     // Try to load cached object
     let data =
-        CacheManager::get(&manager, &format!("{}:{}", GET, &Url::parse(&url)?))
+        CacheManager::get(&manager, &format!("{}:{}", GET, &url_parse(&url)?))
             .await?;
     assert!(data.is_some());
 
@@ -123,7 +121,7 @@ async fn default_mode_with_options() -> Result<()> {
 
     // Try to load cached object
     let data =
-        CacheManager::get(&manager, &format!("{}:{}", GET, &Url::parse(&url)?))
+        CacheManager::get(&manager, &format!("{}:{}", GET, &url_parse(&url)?))
             .await?;
     assert!(data.is_some());
     Ok(())
@@ -151,7 +149,7 @@ async fn no_cache_mode() -> Result<()> {
 
     // Try to load cached object
     let data =
-        CacheManager::get(&manager, &format!("{}:{}", GET, &Url::parse(&url)?))
+        CacheManager::get(&manager, &format!("{}:{}", GET, &url_parse(&url)?))
             .await?;
     assert!(data.is_some());
 
@@ -188,7 +186,7 @@ async fn reload_mode() -> Result<()> {
 
     // Try to load cached object
     let data =
-        CacheManager::get(&manager, &format!("{}:{}", GET, &Url::parse(&url)?))
+        CacheManager::get(&manager, &format!("{}:{}", GET, &url_parse(&url)?))
             .await?;
     assert!(data.is_some());
 
@@ -270,7 +268,7 @@ async fn custom_cache_mode_fn() -> Result<()> {
 
     // Try to load cached object
     let data =
-        CacheManager::get(&manager, &format!("{}:{}", GET, &Url::parse(&url)?))
+        CacheManager::get(&manager, &format!("{}:{}", GET, &url_parse(&url)?))
             .await?;
     assert!(data.is_some());
 
@@ -280,7 +278,7 @@ async fn custom_cache_mode_fn() -> Result<()> {
 
     // Check no cache object was created
     let data =
-        CacheManager::get(&manager, &format!("{}:{}", GET, &Url::parse(&url)?))
+        CacheManager::get(&manager, &format!("{}:{}", GET, &url_parse(&url)?))
             .await?;
     assert!(data.is_none());
 
@@ -309,7 +307,7 @@ async fn override_cache_mode() -> Result<()> {
 
     // Try to load cached object
     let data =
-        CacheManager::get(&manager, &format!("{}:{}", GET, &Url::parse(&url)?))
+        CacheManager::get(&manager, &format!("{}:{}", GET, &url_parse(&url)?))
             .await?;
     assert!(data.is_some());
 
@@ -319,7 +317,7 @@ async fn override_cache_mode() -> Result<()> {
 
     // Check no cache object was created
     let data =
-        CacheManager::get(&manager, &format!("{}:{}", GET, &Url::parse(&url)?))
+        CacheManager::get(&manager, &format!("{}:{}", GET, &url_parse(&url)?))
             .await?;
     assert!(data.is_none());
 
@@ -356,7 +354,7 @@ async fn no_status_headers() -> Result<()> {
 
     // Try to load cached object
     let data =
-        CacheManager::get(&manager, &format!("{}:{}", GET, &Url::parse(&url)?))
+        CacheManager::get(&manager, &format!("{}:{}", GET, &url_parse(&url)?))
             .await?;
     assert!(data.is_some());
 
@@ -411,7 +409,7 @@ async fn cache_bust() -> Result<()> {
 
     // Try to load cached object
     let data =
-        CacheManager::get(&manager, &format!("{}:{}", GET, &Url::parse(&url)?))
+        CacheManager::get(&manager, &format!("{}:{}", GET, &url_parse(&url)?))
             .await?;
     assert!(data.is_some());
 
@@ -420,7 +418,7 @@ async fn cache_bust() -> Result<()> {
 
     // Check cache object was busted
     let data =
-        CacheManager::get(&manager, &format!("{}:{}", GET, &Url::parse(&url)?))
+        CacheManager::get(&manager, &format!("{}:{}", GET, &url_parse(&url)?))
             .await?;
     assert!(data.is_none());
 
@@ -449,7 +447,7 @@ async fn delete_after_non_get_head_method_request() -> Result<()> {
 
     // Try to load cached object
     let data =
-        CacheManager::get(&manager, &format!("{}:{}", GET, &Url::parse(&url)?))
+        CacheManager::get(&manager, &format!("{}:{}", GET, &url_parse(&url)?))
             .await?;
     assert!(data.is_some());
 
@@ -457,7 +455,7 @@ async fn delete_after_non_get_head_method_request() -> Result<()> {
     client.post(url.clone()).send().await?;
 
     let data =
-        CacheManager::get(&manager, &format!("{}:{}", GET, &Url::parse(&url)?))
+        CacheManager::get(&manager, &format!("{}:{}", GET, &url_parse(&url)?))
             .await?;
     assert!(data.is_none());
 
@@ -486,7 +484,7 @@ async fn default_mode_no_cache_response() -> Result<()> {
 
     // Try to load cached object
     let data =
-        CacheManager::get(&manager, &format!("{}:{}", GET, &Url::parse(&url)?))
+        CacheManager::get(&manager, &format!("{}:{}", GET, &url_parse(&url)?))
             .await?;
     assert!(data.is_some());
 
@@ -525,7 +523,7 @@ async fn removes_warning() -> Result<()> {
 
     // Try to load cached object
     let data =
-        CacheManager::get(&manager, &format!("{}:{}", GET, &Url::parse(&url)?))
+        CacheManager::get(&manager, &format!("{}:{}", GET, &url_parse(&url)?))
             .await?;
     assert!(data.is_some());
 
@@ -558,7 +556,7 @@ async fn no_store_mode() -> Result<()> {
 
     // Try to load cached object
     let data =
-        CacheManager::get(&manager, &format!("{}:{}", GET, &Url::parse(&url)?))
+        CacheManager::get(&manager, &format!("{}:{}", GET, &url_parse(&url)?))
             .await?;
     assert!(data.is_none());
 
@@ -590,7 +588,7 @@ async fn force_cache_mode() -> Result<()> {
 
     // Try to load cached object
     let data =
-        CacheManager::get(&manager, &format!("{}:{}", GET, &Url::parse(&url)?))
+        CacheManager::get(&manager, &format!("{}:{}", GET, &url_parse(&url)?))
             .await?;
     assert!(data.is_some());
 
@@ -622,7 +620,7 @@ async fn ignore_rules_mode() -> Result<()> {
 
     // Try to load cached object
     let data =
-        CacheManager::get(&manager, &format!("{}:{}", GET, &Url::parse(&url)?))
+        CacheManager::get(&manager, &format!("{}:{}", GET, &url_parse(&url)?))
             .await?;
     assert!(data.is_some());
 
@@ -660,7 +658,7 @@ async fn revalidation_304() -> Result<()> {
 
     // Try to load cached object
     let data =
-        CacheManager::get(&manager, &format!("{}:{}", GET, &Url::parse(&url)?))
+        CacheManager::get(&manager, &format!("{}:{}", GET, &url_parse(&url)?))
             .await?;
     assert!(data.is_some());
 
@@ -696,7 +694,7 @@ async fn revalidation_200() -> Result<()> {
 
     // Try to load cached object
     let data =
-        CacheManager::get(&manager, &format!("{}:{}", GET, &Url::parse(&url)?))
+        CacheManager::get(&manager, &format!("{}:{}", GET, &url_parse(&url)?))
             .await?;
     assert!(data.is_some());
 
@@ -734,7 +732,7 @@ async fn revalidation_500() -> Result<()> {
 
     // Try to load cached object
     let data =
-        CacheManager::get(&manager, &format!("{}:{}", GET, &Url::parse(&url)?))
+        CacheManager::get(&manager, &format!("{}:{}", GET, &url_parse(&url)?))
             .await?;
     assert!(data.is_some());
 
@@ -774,7 +772,7 @@ mod only_if_cached_mode {
         // Try to load cached object
         let data = CacheManager::get(
             &manager,
-            &format!("{}:{}", GET, &Url::parse(&url)?),
+            &format!("{}:{}", GET, &url_parse(&url)?),
         )
         .await?;
         assert!(data.is_none());
@@ -804,7 +802,7 @@ mod only_if_cached_mode {
         // Try to load cached object
         let data = CacheManager::get(
             &manager,
-            &format!("{}:{}", GET, &Url::parse(&url)?),
+            &format!("{}:{}", GET, &url_parse(&url)?),
         )
         .await?;
         assert!(data.is_some());
@@ -862,7 +860,7 @@ async fn head_request_caching() -> Result<()> {
 
     // Try to load cached object - should use HEAD method in cache key
     let data =
-        CacheManager::get(&manager, &format!("HEAD:{}", &Url::parse(&url)?))
+        CacheManager::get(&manager, &format!("HEAD:{}", &url_parse(&url)?))
             .await?;
     assert!(data.is_some());
 
@@ -928,12 +926,12 @@ async fn head_request_cached_like_get() -> Result<()> {
 
     // Verify both GET and HEAD cache entries exist
     let get_data =
-        CacheManager::get(&manager, &format!("GET:{}", &Url::parse(&url)?))
+        CacheManager::get(&manager, &format!("GET:{}", &url_parse(&url)?))
             .await?;
     assert!(get_data.is_some());
 
     let head_data =
-        CacheManager::get(&manager, &format!("HEAD:{}", &Url::parse(&url)?))
+        CacheManager::get(&manager, &format!("HEAD:{}", &url_parse(&url)?))
             .await?;
     assert!(head_data.is_some());
 
@@ -975,7 +973,7 @@ async fn put_request_invalidates_cache() -> Result<()> {
 
     // Verify it's cached
     let data =
-        CacheManager::get(&manager, &format!("GET:{}", &Url::parse(&url)?))
+        CacheManager::get(&manager, &format!("GET:{}", &url_parse(&url)?))
             .await?;
     assert!(data.is_some());
 
@@ -988,7 +986,7 @@ async fn put_request_invalidates_cache() -> Result<()> {
 
     // Verify cache was invalidated
     let data =
-        CacheManager::get(&manager, &format!("GET:{}", &Url::parse(&url)?))
+        CacheManager::get(&manager, &format!("GET:{}", &url_parse(&url)?))
             .await?;
     assert!(data.is_none());
 
@@ -1028,7 +1026,7 @@ async fn patch_request_invalidates_cache() -> Result<()> {
 
     // Verify it's cached
     let data =
-        CacheManager::get(&manager, &format!("GET:{}", &Url::parse(&url)?))
+        CacheManager::get(&manager, &format!("GET:{}", &url_parse(&url)?))
             .await?;
     assert!(data.is_some());
 
@@ -1041,7 +1039,7 @@ async fn patch_request_invalidates_cache() -> Result<()> {
 
     // Verify cache was invalidated
     let data =
-        CacheManager::get(&manager, &format!("GET:{}", &Url::parse(&url)?))
+        CacheManager::get(&manager, &format!("GET:{}", &url_parse(&url)?))
             .await?;
     assert!(data.is_none());
 
@@ -1081,7 +1079,7 @@ async fn delete_request_invalidates_cache() -> Result<()> {
 
     // Verify it's cached
     let data =
-        CacheManager::get(&manager, &format!("GET:{}", &Url::parse(&url)?))
+        CacheManager::get(&manager, &format!("GET:{}", &url_parse(&url)?))
             .await?;
     assert!(data.is_some());
 
@@ -1094,7 +1092,7 @@ async fn delete_request_invalidates_cache() -> Result<()> {
 
     // Verify cache was invalidated
     let data =
-        CacheManager::get(&manager, &format!("GET:{}", &Url::parse(&url)?))
+        CacheManager::get(&manager, &format!("GET:{}", &url_parse(&url)?))
             .await?;
     assert!(data.is_none());
 
@@ -1130,7 +1128,7 @@ async fn options_request_not_cached() -> Result<()> {
 
     // Verify it's not cached
     let data =
-        CacheManager::get(&manager, &format!("OPTIONS:{}", &Url::parse(&url)?))
+        CacheManager::get(&manager, &format!("OPTIONS:{}", &url_parse(&url)?))
             .await?;
     assert!(data.is_none());
 
@@ -1489,7 +1487,7 @@ mod streaming_tests {
         assert_eq!(response.status(), 200);
 
         // Verify it was cached despite no-cache headers
-        let cache_key = format!("{}:{}", GET, &Url::parse(&success_url)?);
+        let cache_key = format!("{}:{}", GET, &url_parse(&success_url)?);
         let cached_data = CacheManager::get(&manager, &cache_key).await?;
         assert!(cached_data.is_some());
         let (cached_response, _) = cached_data.unwrap();
@@ -1501,7 +1499,7 @@ mod streaming_tests {
         assert_eq!(response.status(), 429);
 
         // Verify it was NOT cached despite cacheable headers
-        let cache_key = format!("{}:{}", GET, &Url::parse(&rate_limit_url)?);
+        let cache_key = format!("{}:{}", GET, &url_parse(&rate_limit_url)?);
         let cached_data = CacheManager::get(&manager, &cache_key).await?;
         assert!(cached_data.is_none());
 

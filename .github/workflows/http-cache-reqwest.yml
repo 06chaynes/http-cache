@@ -43,6 +43,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - run: |
           cargo test --all-targets --all-features
+          cargo test --all-targets --no-default-features --features manager-cacache,url-ada
 
   clippy:
     name: Check clippy
@@ -55,6 +56,7 @@ jobs:
           components: "clippy"
       - run: |
           cargo clippy --lib --tests --all-targets --all-features -- -D warnings
+          cargo clippy --lib --tests --all-targets --no-default-features --features manager-cacache,url-ada -- -D warnings
 
   docs:
     name: Build docs

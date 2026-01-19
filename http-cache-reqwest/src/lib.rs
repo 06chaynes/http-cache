@@ -287,7 +287,8 @@ use http::{
     Extensions, HeaderValue, Method,
 };
 use http_cache::{
-    BoxError, HitOrMiss, Middleware, Result, XCACHE, XCACHELOOKUP,
+    url_parse, BoxError, HitOrMiss, Middleware, Result, Url, XCACHE,
+    XCACHELOOKUP,
 };
 use http_cache_semantics::CachePolicy;
 use reqwest::{Request, Response, ResponseBuilderExt};
@@ -300,7 +301,6 @@ fn to_middleware_error<E: std::error::Error + Send + Sync + 'static>(
     // Convert to anyhow::Error which is what reqwest-middleware expects
     Error::Middleware(anyhow::Error::new(error))
 }
-use url::Url;
 
 pub use http_cache::{
     CacheManager, CacheMode, CacheOptions, HttpCache, HttpCacheMetadata,
@@ -433,7 +433,8 @@ impl Middleware for ReqwestMiddleware<'_> {
         Ok(http_req.into_parts().0)
     }
     fn url(&self) -> Result<Url> {
-        Ok(self.req.url().clone())
+        // Re-parse the URL through our helper for url/ada-url compatibility
+        url_parse(self.req.url().as_str())
     }
     fn method(&self) -> Result<String> {
         Ok(self.req.method().as_ref().to_string())
@@ -447,7 +448,8 @@ impl Middleware for ReqwestMiddleware<'_> {
             .await
             .map_err(BoxError::from)?;
         let headers = res.headers().into();
-        let url = res.url().clone();
+        // Re-parse the URL through our helper for url/ada-url compatibility
+        let url = url_parse(res.url().as_str())?;
         let status = res.status().into();
         let version = res.version();
         let body: Vec<u8> = res.bytes().await.map_err(BoxError::from)?.to_vec();
@@ -465,9 +467,12 @@ impl Middleware for ReqwestMiddleware<'_> {
 // Converts an [`HttpResponse`] to a reqwest [`Response`]
 fn convert_response(response: HttpResponse) -> Result<Response> {
     let metadata = response.metadata.clone();
+    // reqwest always uses url::Url internally, so we need to re-parse when using ada-url
+    let reqwest_url =
+        ::url::Url::parse(response.url.as_str()).map_err(BoxError::from)?;
     let mut ret_res = http::Response::builder()
         .status(response.status)
-        .url(response.url)
+        .url(reqwest_url)
         .version(response.version.into())
         .body(response.body)?;
     for header in response.headers {

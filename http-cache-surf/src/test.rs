@@ -5,7 +5,6 @@ use http_types::{Method, Request};
 use std::str::FromStr;
 use std::sync::Arc;
 use surf::Client;
-use url::Url;
 use wiremock::{matchers::method, Mock, MockServer, ResponseTemplate};
 
 #[cfg(feature = "manager-moka")]
@@ -122,7 +121,7 @@ mod with_moka {
         let _mock_guard = mock_server.register_as_scoped(m).await;
         let url = format!("{}/", &mock_server.uri());
         let manager = MokaManager::default();
-        let req = Request::new(Method::Get, Url::parse(&url)?);
+        let req = Request::new(Method::Get, url_parse(&url)?);
 
         // Construct Surf client with cache defaults
         let client = Client::new().with(Cache(HttpCache {
@@ -138,7 +137,7 @@ mod with_moka {
 
         // Try to load cached object
         let data =
-            manager.get(&format!("{}:{}", GET, &Url::parse(&url)?)).await?;
+            manager.get(&format!("{}:{}", GET, &url_parse(&url)?)).await?;
         assert!(data.is_some());
 
         // Hot pass to make sure the expect response was returned
@@ -156,7 +155,7 @@ mod with_moka {
         let _mock_guard = mock_server.register_as_scoped(m).await;
         let url = format!("{}/", &mock_server.uri());
         let manager = MokaManager::default();
-        let req = Request::new(Method::Get, Url::parse(&url)?);
+        let req = Request::new(Method::Get, url_parse(&url)?);
 
         // Construct Surf client with cache options override
         let client = Client::new().with(Cache(HttpCache {
@@ -179,7 +178,7 @@ mod with_moka {
 
         // Try to load cached object
         let data =
-            manager.get(&format!("{}:{}", GET, &Url::parse(&url)?)).await?;
+            manager.get(&format!("{}:{}", GET, &url_parse(&url)?)).await?;
         assert!(data.is_some());
 
         // Hot pass to make sure the expect response was returned
@@ -195,7 +194,7 @@ mod with_moka {
         let _mock_guard = mock_server.register_as_scoped(m).await;
         let url = format!("{}/", &mock_server.uri());
         let manager = MokaManager::default();
-        let req = Request::new(Method::Get, Url::parse(&url)?);
+        let req = Request::new(Method::Get, url_parse(&url)?);
 
         // Construct Surf client with cache defaults
         let client = Client::new().with(Cache(HttpCache {
@@ -211,7 +210,7 @@ mod with_moka {
 
         // Try to load cached object
         let data =
-            manager.get(&format!("{}:{}", GET, &Url::parse(&url)?)).await?;
+            manager.get(&format!("{}:{}", GET, &url_parse(&url)?)).await?;
         assert!(data.is_some());
 
         // Hot pass to make sure the expect response was returned
@@ -236,7 +235,7 @@ mod with_moka {
         let _mock_guard = mock_server.register_as_scoped(m).await;
         let url = format!("{}/", &mock_server.uri());
         let manager = MokaManager::default();
-        let req = Request::new(Method::Get, Url::parse(&url)?);
+        let req = Request::new(Method::Get, url_parse(&url)?);
 
         // Construct Surf client with cache defaults
         let client = Client::new().with(Cache(HttpCache {
@@ -252,7 +251,7 @@ mod with_moka {
 
         // Try to load cached object
         let data =
-            manager.get(&format!("{}:{}", GET, &Url::parse(&url)?)).await?;
+            manager.get(&format!("{}:{}", GET, &url_parse(&url)?)).await?;
         assert!(data.is_some());
 
         // Hot pass to make sure the expect response was returned
@@ -271,7 +270,7 @@ mod with_moka {
         let _mock_guard = mock_server.register_as_scoped(m).await;
         let url = format!("{}/", &mock_server.uri());
         let manager = MokaManager::default();
-        let req = Request::new(Method::Get, Url::parse(&url)?);
+        let req = Request::new(Method::Get, url_parse(&url)?);
 
         // Construct Surf client with cache defaults
         let client = Client::new().with(Cache(HttpCache {
@@ -285,7 +284,7 @@ mod with_moka {
 
         // Try to load cached object
         let data =
-            manager.get(&format!("{}:{}", GET, &Url::parse(&url)?)).await?;
+            manager.get(&format!("{}:{}", GET, &url_parse(&url)?)).await?;
         assert!(data.is_none());
 
         // To verify our endpoint receives the request rather than a cache hit
@@ -302,7 +301,7 @@ mod with_moka {
         let _mock_guard = mock_server.register_as_scoped(m).await;
         let url = format!("{}/", &mock_server.uri());
         let manager = MokaManager::default();
-        let req = Request::new(Method::Get, Url::parse(&url)?);
+        let req = Request::new(Method::Get, url_parse(&url)?);
 
         // Construct Surf client with cache defaults
         let client = Client::new().with(Cache(HttpCache {
@@ -318,7 +317,7 @@ mod with_moka {
 
         // Try to load cached object
         let data =
-            manager.get(&format!("{}:{}", GET, &Url::parse(&url)?)).await?;
+            manager.get(&format!("{}:{}", GET, &url_parse(&url)?)).await?;
         assert!(data.is_some());
 
         // To verify our endpoint receives the request rather than a cache hit
@@ -335,7 +334,7 @@ mod with_moka {
         let _mock_guard = mock_server.register_as_scoped(m).await;
         let url = format!("{}/", &mock_server.uri());
         let manager = MokaManager::default();
-        let req = Request::new(Method::Get, Url::parse(&url)?);
+        let req = Request::new(Method::Get, url_parse(&url)?);
 
         // Construct Surf client with cache defaults
         let client = Client::new().with(Cache(HttpCache {
@@ -351,7 +350,7 @@ mod with_moka {
 
         // Try to load cached object
         let data =
-            manager.get(&format!("{}:{}", GET, &Url::parse(&url)?)).await?;
+            manager.get(&format!("{}:{}", GET, &url_parse(&url)?)).await?;
         assert!(data.is_some());
 
         // Should result in a cache hit and no remote request
@@ -368,7 +367,7 @@ mod with_moka {
         let _mock_guard = mock_server.register_as_scoped(m).await;
         let url = format!("{}/", &mock_server.uri());
         let manager = MokaManager::default();
-        let req = Request::new(Method::Get, Url::parse(&url)?);
+        let req = Request::new(Method::Get, url_parse(&url)?);
 
         // Construct Surf client with cache defaults
         let client = Client::new().with(Cache(HttpCache {
@@ -384,7 +383,7 @@ mod with_moka {
 
         // Try to load cached object
         let data =
-            manager.get(&format!("{}:{}", GET, &Url::parse(&url)?)).await?;
+            manager.get(&format!("{}:{}", GET, &url_parse(&url)?)).await?;
         assert!(data.is_some());
 
         // Should result in a cache hit and no remote request
@@ -405,8 +404,8 @@ mod with_moka {
         let _mock_guard_post = mock_server.register_as_scoped(m_post).await;
         let url = format!("{}/", &mock_server.uri());
         let manager = MokaManager::default();
-        let req_get = Request::new(Method::Get, Url::parse(&url)?);
-        let req_post = Request::new(Method::Post, Url::parse(&url)?);
+        let req_get = Request::new(Method::Get, url_parse(&url)?);
+        let req_post = Request::new(Method::Post, url_parse(&url)?);
 
         // Construct Surf client with cache defaults
         let client = Client::new().with(Cache(HttpCache {
@@ -422,14 +421,14 @@ mod with_moka {
 
         // Try to load cached object
         let data =
-            manager.get(&format!("{}:{}", GET, &Url::parse(&url)?)).await?;
+            manager.get(&format!("{}:{}", GET, &url_parse(&url)?)).await?;
         assert!(data.is_some());
 
         // Post request to make sure the cache object at the same resource was deleted
         client.send(req_post).await?;
 
         let data =
-            manager.get(&format!("{}:{}", GET, &Url::parse(&url)?)).await?;
+            manager.get(&format!("{}:{}", GET, &url_parse(&url)?)).await?;
         assert!(data.is_none());
 
         Ok(())
@@ -445,7 +444,7 @@ mod with_moka {
         let mock_guard = mock_server.register_as_scoped(m).await;
         let url = format!("{}/", &mock_server.uri());
         let manager = MokaManager::default();
-        let req = Request::new(Method::Get, Url::parse(&url)?);
+        let req = Request::new(Method::Get, url_parse(&url)?);
 
         // Construct Surf client with cache defaults
         let client = Client::new().with(Cache(HttpCache {
@@ -465,7 +464,7 @@ mod with_moka {
 
         // Try to load cached object
         let data =
-            manager.get(&format!("{}:{}", GET, &Url::parse(&url)?)).await?;
+            manager.get(&format!("{}:{}", GET, &url_parse(&url)?)).await?;
         assert!(data.is_some());
 
         // Hot pass to make sure revalidation request was sent
@@ -484,7 +483,7 @@ mod with_moka {
         let mock_guard = mock_server.register_as_scoped(m).await;
         let url = format!("{}/", &mock_server.uri());
         let manager = MokaManager::default();
-        let req = Request::new(Method::Get, Url::parse(&url)?);
+        let req = Request::new(Method::Get, url_parse(&url)?);
 
         // Construct Surf client with cache defaults
         let client = Client::new().with(Cache(HttpCache {
@@ -504,7 +503,7 @@ mod with_moka {
 
         // Try to load cached object
         let data =
-            manager.get(&format!("{}:{}", GET, &Url::parse(&url)?)).await?;
+            manager.get(&format!("{}:{}", GET, &url_parse(&url)?)).await?;
         assert!(data.is_some());
 
         // Hot pass to make sure revalidation request was sent
@@ -525,7 +524,7 @@ mod with_moka {
         let mock_guard = mock_server.register_as_scoped(m).await;
         let url = format!("{}/", &mock_server.uri());
         let manager = MokaManager::default();
-        let req = Request::new(Method::Get, Url::parse(&url)?);
+        let req = Request::new(Method::Get, url_parse(&url)?);
 
         // Construct Surf client with cache defaults
         let client = Client::new().with(Cache(HttpCache {
@@ -545,7 +544,7 @@ mod with_moka {
 
         // Try to load cached object
         let data =
-            manager.get(&format!("{}:{}", GET, &Url::parse(&url)?)).await?;
+            manager.get(&format!("{}:{}", GET, &url_parse(&url)?)).await?;
         assert!(data.is_some());
 
         // Hot pass to make sure revalidation request was sent
@@ -586,7 +585,7 @@ mod with_moka {
 
         // Try to load cached object
         let data =
-            manager.get(&format!("{}:{}", GET, &Url::parse(&url)?)).await?;
+            manager.get(&format!("{}:{}", GET, &url_parse(&url)?)).await?;
         assert!(data.is_some());
 
         // Another pass to make sure request is made to the endpoint
@@ -662,7 +661,7 @@ mod with_moka {
 
         // Try to load cached object
         let data =
-            manager.get(&format!("{}:{}", GET, &Url::parse(&url)?)).await?;
+            manager.get(&format!("{}:{}", GET, &url_parse(&url)?)).await?;
         assert!(data.is_some());
 
         let url = format!("{}/", &mock_server.uri());
@@ -671,7 +670,7 @@ mod with_moka {
 
         // Check no cache object was created
         let data =
-            manager.get(&format!("{}:{}", GET, &Url::parse(&url)?)).await?;
+            manager.get(&format!("{}:{}", GET, &url_parse(&url)?)).await?;
         assert!(data.is_none());
 
         Ok(())
@@ -700,7 +699,7 @@ mod with_moka {
 
         // Try to load cached object
         let data =
-            manager.get(&format!("{}:{}", GET, &Url::parse(&url)?)).await?;
+            manager.get(&format!("{}:{}", GET, &url_parse(&url)?)).await?;
         assert!(data.is_some());
 
         // Make sure the cache status headers aren't present in the response
@@ -750,7 +749,7 @@ mod with_moka {
 
         // Try to load cached object
         let data =
-            manager.get(&format!("{}:{}", GET, &Url::parse(&url)?)).await?;
+            manager.get(&format!("{}:{}", GET, &url_parse(&url)?)).await?;
         assert!(data.is_some());
 
         // To verify our endpoint receives the request rather than a cache hit
@@ -758,7 +757,7 @@ mod with_moka {
 
         // Check cache object was busted
         let data =
-            manager.get(&format!("{}:{}", GET, &Url::parse(&url)?)).await?;
+            manager.get(&format!("{}:{}", GET, &url_parse(&url)?)).await?;
         assert!(data.is_none());
 
         Ok(())
@@ -775,7 +774,7 @@ mod with_moka {
             let _mock_guard = mock_server.register_as_scoped(m).await;
             let url = format!("{}/", &mock_server.uri());
             let manager = MokaManager::default();
-            let req = Request::new(Method::Get, Url::parse(&url)?);
+            let req = Request::new(Method::Get, url_parse(&url)?);
 
             // Construct Surf client with cache defaults
             let client = Client::new().with(Cache(HttpCache {
@@ -791,7 +790,7 @@ mod with_moka {
 
             // Try to load cached object
             let data =
-                manager.get(&format!("{}:{}", GET, &Url::parse(&url)?)).await?;
+                manager.get(&format!("{}:{}", GET, &url_parse(&url)?)).await?;
             assert!(data.is_none());
             Ok(())
         }
@@ -803,7 +802,7 @@ mod with_moka {
             let _mock_guard = mock_server.register_as_scoped(m).await;
             let url = format!("{}/", &mock_server.uri());
             let manager = MokaManager::default();
-            let req = Request::new(Method::Get, Url::parse(&url)?);
+            let req = Request::new(Method::Get, url_parse(&url)?);
 
             // Construct Surf client with cache defaults
             let client = Client::new().with(Cache(HttpCache {
@@ -819,7 +818,7 @@ mod with_moka {
 
             // Try to load cached object
             let data =
-                manager.get(&format!("{}:{}", GET, &Url::parse(&url)?)).await?;
+                manager.get(&format!("{}:{}", GET, &url_parse(&url)?)).await?;
             assert!(data.is_some());
 
             // Construct Surf client with cache defaults
@@ -860,7 +859,7 @@ mod with_moka {
         let _mock_guard = mock_server.register_as_scoped(m).await;
         let url = format!("{}/", &mock_server.uri());
         let manager = MokaManager::default();
-        let req = Request::new(Method::Head, Url::parse(&url)?);
+        let req = Request::new(Method::Head, url_parse(&url)?);
 
         // Construct Surf client with cache defaults
         let client = Client::new().with(Cache(HttpCache {
@@ -912,23 +911,23 @@ mod with_moka {
         }));
 
         // First, cache a GET response
-        let get_req = Request::new(Method::Get, Url::parse(&url)?);
+        let get_req = Request::new(Method::Get, url_parse(&url)?);
         client.send(get_req).await?;
 
         // Verify it's cached
-        let data = manager.get(&format!("GET:{}", &Url::parse(&url)?)).await?;
+        let data = manager.get(&format!("GET:{}", &url_parse(&url)?)).await?;
         assert!(data.is_some());
 
         drop(mock_guard_get);
         let _mock_guard_put = mock_server.register_as_scoped(m_put).await;
 
         // PUT request should invalidate the cached GET response
-        let put_req = Request::new(Method::Put, Url::parse(&url)?);
+        let put_req = Request::new(Method::Put, url_parse(&url)?);
         let put_res = client.send(put_req).await?;
         assert_eq!(put_res.status(), 204);
 
         // Verify cache was invalidated
-        let data = manager.get(&format!("GET:{}", &Url::parse(&url)?)).await?;
+        let data = manager.get(&format!("GET:{}", &url_parse(&url)?)).await?;
         assert!(data.is_none());
 
         Ok(())
@@ -961,11 +960,11 @@ mod with_moka {
         }));
 
         // Cache a GET response
-        let get_req = Request::new(Method::Get, Url::parse(&url)?);
+        let get_req = Request::new(Method::Get, url_parse(&url)?);
         client.send(get_req).await?;
 
         // Verify it's cached
-        let data = manager.get(&format!("GET:{}", &Url::parse(&url)?)).await?;
+        let data = manager.get(&format!("GET:{}", &url_parse(&url)?)).await?;
         assert!(data.is_some());
 
         drop(mock_guard_get);
@@ -973,12 +972,12 @@ mod with_moka {
 
         // PATCH request should invalidate cache
         let patch_req =
-            Request::new(Method::from_str("PATCH")?, Url::parse(&url)?);
+            Request::new(Method::from_str("PATCH")?, url_parse(&url)?);
         let patch_res = client.send(patch_req).await?;
         assert_eq!(patch_res.status(), 200);
 
         // Verify cache was invalidated
-        let data = manager.get(&format!("GET:{}", &Url::parse(&url)?)).await?;
+        let data = manager.get(&format!("GET:{}", &url_parse(&url)?)).await?;
         assert!(data.is_none());
 
         Ok(())
@@ -1011,23 +1010,23 @@ mod with_moka {
         }));
 
         // Cache a GET response
-        let get_req = Request::new(Method::Get, Url::parse(&url)?);
+        let get_req = Request::new(Method::Get, url_parse(&url)?);
         client.send(get_req).await?;
 
         // Verify it's cached
-        let data = manager.get(&format!("GET:{}", &Url::parse(&url)?)).await?;
+        let data = manager.get(&format!("GET:{}", &url_parse(&url)?)).await?;
         assert!(data.is_some());
 
         drop(mock_guard_get);
         let _mock_guard_delete = mock_server.register_as_scoped(m_delete).await;
 
         // DELETE request should invalidate cache
-        let delete_req = Request::new(Method::Delete, Url::parse(&url)?);
+        let delete_req = Request::new(Method::Delete, url_parse(&url)?);
         let delete_res = client.send(delete_req).await?;
         assert_eq!(delete_res.status(), 204);
 
         // Verify cache was invalidated
-        let data = manager.get(&format!("GET:{}", &Url::parse(&url)?)).await?;
+        let data = manager.get(&format!("GET:{}", &url_parse(&url)?)).await?;
         assert!(data.is_none());
 
         Ok(())
@@ -1054,19 +1053,17 @@ mod with_moka {
         }));
 
         // First OPTIONS request
-        let req1 =
-            Request::new(Method::from_str("OPTIONS")?, Url::parse(&url)?);
+        let req1 = Request::new(Method::from_str("OPTIONS")?, url_parse(&url)?);
         let res1 = client.send(req1).await?;
         assert_eq!(res1.status(), 200);
 
         // Verify it's not cached
         let data =
-            manager.get(&format!("OPTIONS:{}", &Url::parse(&url)?)).await?;
+            manager.get(&format!("OPTIONS:{}", &url_parse(&url)?)).await?;
         assert!(data.is_none());
 
         // Second OPTIONS request should hit the server again
-        let req2 =
-            Request::new(Method::from_str("OPTIONS")?, Url::parse(&url)?);
+        let req2 = Request::new(Method::from_str("OPTIONS")?, url_parse(&url)?);
         let res2 = client.send(req2).await?;
         assert_eq!(res2.status(), 200);
 
@@ -1132,13 +1129,13 @@ mod with_moka {
             }));
 
             // First request (cache miss) - should trigger rate limiting
-            let req1 = Request::new(Method::Get, Url::parse(&url)?);
+            let req1 = Request::new(Method::Get, url_parse(&url)?);
             let res1 = client.send(req1).await?;
             assert_eq!(res1.header(XCACHELOOKUP).unwrap(), MISS);
             assert_eq!(res1.header(XCACHE).unwrap(), MISS);
 
             // Second request (cache hit) - should NOT trigger rate limiting
-            let req2 = Request::new(Method::Get, Url::parse(&url)?);
+            let req2 = Request::new(Method::Get, url_parse(&url)?);
             let res2 = client.send(req2).await?;
             assert_eq!(res2.header(XCACHELOOKUP).unwrap(), HIT);
             assert_eq!(res2.header(XCACHE).unwrap(), HIT);
@@ -1178,11 +1175,11 @@ mod with_moka {
             let start = Instant::now();
 
             // Two requests that will both be cache misses
-            let req1 = Request::new(Method::Get, Url::parse(&url)?);
+            let req1 = Request::new(Method::Get, url_parse(&url)?);
             let res1 = client.send(req1).await?;
             assert_eq!(res1.header(XCACHE).unwrap(), MISS);
 
-            let req2 = Request::new(Method::Get, Url::parse(&url)?);
+            let req2 = Request::new(Method::Get, url_parse(&url)?);
             let res2 = client.send(req2).await?;
             assert_eq!(res2.header(XCACHE).unwrap(), MISS);
 
@@ -1227,7 +1224,7 @@ mod with_moka {
             }));
 
             // Request should succeed and be rate limited
-            let req = Request::new(Method::Get, Url::parse(&url)?);
+            let req = Request::new(Method::Get, url_parse(&url)?);
             let res = client.send(req).await?;
             assert_eq!(res.header(XCACHE).unwrap(), MISS);
             assert_eq!(res.status(), 200);
@@ -1264,7 +1261,7 @@ mod with_moka {
             }));
 
             // Request should succeed and be rate limited
-            let req = Request::new(Method::Get, Url::parse(&url)?);
+            let req = Request::new(Method::Get, url_parse(&url)?);
             let res = client.send(req).await?;
             assert_eq!(res.header(XCACHE).unwrap(), MISS);
             assert_eq!(res.status(), 200);
