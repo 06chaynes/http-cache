@@ -31,6 +31,8 @@
 //! The core types for building HTTP caches:
 //!
 //! ```rust
+//! # #[cfg(feature = "manager-cacache")]
+//! # fn main() {
 //! use http_cache::{CACacheManager, HttpCache, CacheMode, HttpCacheOptions};
 //!
 //! // Create a cache manager with disk storage
@@ -42,6 +44,9 @@
 //!     manager,
 //!     options: HttpCacheOptions::default(),
 //! };
+//! # }
+//! # #[cfg(not(feature = "manager-cacache"))]
+//! # fn main() {}
 //! ```
 //!
 //! ## Cache Modes
@@ -49,6 +54,8 @@
 //! Different cache modes provide different behaviors:
 //!
 //! ```rust
+//! # #[cfg(feature = "manager-cacache")]
+//! # fn main() {
 //! use http_cache::{CacheMode, HttpCache, CACacheManager, HttpCacheOptions};
 //!
 //! let manager = CACacheManager::new("./cache".into(), true);
@@ -73,6 +80,9 @@
 //!     manager,
 //!     options: HttpCacheOptions::default(),
 //! };
+//! # }
+//! # #[cfg(not(feature = "manager-cacache"))]
+//! # fn main() {}
 //! ```
 //!
 //! ## Custom Cache Keys
@@ -80,6 +90,8 @@
 //! You can customize how cache keys are generated:
 //!
 //! ```rust
+//! # #[cfg(feature = "manager-cacache")]
+//! # fn main() {
 //! use http_cache::{HttpCacheOptions, CACacheManager, HttpCache, CacheMode};
 //! use std::sync::Arc;
 //! use http::request::Parts;
@@ -99,6 +111,9 @@
 //!     manager,
 //!     options,
 //! };
+//! # }
+//! # #[cfg(not(feature = "manager-cacache"))]
+//! # fn main() {}
 //! ```
 //!
 //! ## Maximum TTL Control
@@ -106,6 +121,8 @@
 //! Set a maximum time-to-live for cached responses, particularly useful with `CacheMode::IgnoreRules`:
 //!
 //! ```rust
+//! # #[cfg(feature = "manager-cacache")]
+//! # fn main() {
 //! use http_cache::{HttpCacheOptions, CACacheManager, HttpCache, CacheMode};
 //! use std::time::Duration;
 //!
@@ -122,6 +139,9 @@
 //!     manager,
 //!     options,
 //! };
+//! # }
+//! # #[cfg(not(feature = "manager-cacache"))]
+//! # fn main() {}
 //! ```
 //!
 //! ## Response-Based Cache Mode Override
@@ -131,6 +151,8 @@
 //! error responses like rate limits:
 //!
 //! ```rust
+//! # #[cfg(feature = "manager-cacache")]
+//! # fn main() {
 //! use http_cache::{HttpCacheOptions, CACacheManager, HttpCache, CacheMode};
 //! use std::sync::Arc;
 //!
@@ -141,7 +163,7 @@
 //!         match response.status {
 //!             // Force cache successful responses even if headers say not to cache
 //!             200..=299 => Some(CacheMode::ForceCache),
-//!             // Never cache rate-limited responses  
+//!             // Never cache rate-limited responses
 //!             429 => Some(CacheMode::NoStore),
 //!             // Use default behavior for everything else
 //!             _ => None,
@@ -155,6 +177,9 @@
 //!     manager,
 //!     options,
 //! };
+//! # }
+//! # #[cfg(not(feature = "manager-cacache"))]
+//! # fn main() {}
 //! ```
 //!
 //! ## Content-Type Based Caching
@@ -163,6 +188,8 @@
 //! This is useful when you only want to cache certain types of content:
 //!
 //! ```rust
+//! # #[cfg(feature = "manager-cacache")]
+//! # fn main() {
 //! use http_cache::{HttpCacheOptions, CACacheManager, HttpCache, CacheMode};
 //! use std::sync::Arc;
 //!
@@ -198,6 +225,9 @@
 //!     manager,
 //!     options,
 //! };
+//! # }
+//! # #[cfg(not(feature = "manager-cacache"))]
+//! # fn main() {}
 //! ```
 //!
 //! ## Streaming Support
@@ -1188,6 +1218,8 @@ pub struct CacheAnalysis {
 /// # Examples
 ///
 /// ```rust
+/// # #[cfg(feature = "manager-cacache")]
+/// # fn main() {
 /// use http_cache::{CacheMode, HttpCache, CACacheManager, HttpCacheOptions};
 ///
 /// let manager = CACacheManager::new("./cache".into(), true);
@@ -1210,6 +1242,9 @@ pub struct CacheAnalysis {
 ///     manager,
 ///     options: HttpCacheOptions::default(),
 /// };
+/// # }
+/// # #[cfg(not(feature = "manager-cacache"))]
+/// # fn main() {}
 /// ```
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub enum CacheMode {
