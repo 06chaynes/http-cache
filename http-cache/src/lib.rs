@@ -228,22 +228,30 @@
 //!
 //! ## Features
 //!
-//! The following features are available. By default `manager-cacache` and `cacache-smol` are enabled.
+//! The following features are available. By default `manager-cacache` is enabled.
 //!
 //! - `manager-cacache` (default): enable [cacache](https://github.com/zkat/cacache-rs),
-//! a disk cache, backend manager.
-//! - `cacache-smol` (default): enable [smol](https://github.com/smol-rs/smol) runtime support for cacache.
+//! a disk cache, backend manager. Uses tokio runtime.
+//! - `manager-moka` (disabled): enable [moka](https://github.com/moka-rs/moka),
+//! an in-memory cache, backend manager.
+//! - `manager-foyer` (disabled): enable [foyer](https://github.com/foyer-rs/foyer),
+//! a hybrid in-memory + disk cache, backend manager. Uses tokio runtime.
 //! - `http-headers-compat` (disabled): enable backwards compatibility for deserializing cached
 //! responses from older versions that used single-value headers. Enable this if you need to read
 //! cache entries created by older versions of http-cache.
-//! - `cacache-tokio` (disabled): enable [tokio](https://github.com/tokio-rs/tokio) runtime support for cacache.
-//! - `manager-moka` (disabled): enable [moka](https://github.com/moka-rs/moka),
-//! an in-memory cache, backend manager.
 //! - `streaming` (disabled): enable the `StreamingManager` for streaming cache support.
 //! - `streaming-tokio` (disabled): enable streaming with tokio runtime support.
 //! - `streaming-smol` (disabled): enable streaming with smol runtime support.
 //! - `with-http-types` (disabled): enable [http-types](https://github.com/http-rs/http-types)
 //! type conversion support
+//!
+//! ### Legacy bincode features (deprecated)
+//!
+//! These features are deprecated due to [RUSTSEC-2025-0141](https://rustsec.org/advisories/RUSTSEC-2025-0141)
+//! and will be removed in the next major version:
+//!
+//! - `manager-cacache-bincode`: cacache with bincode serialization
+//! - `manager-moka-bincode`: moka with bincode serialization
 //!
 //! **Note**: Only `StreamingManager` (via the `streaming` feature) provides streaming support.
 //! Other managers will buffer response bodies in memory even when used with `StreamingManager`.
@@ -296,6 +304,9 @@ pub use managers::streaming_cache::StreamingManager;
 
 #[cfg(feature = "manager-moka")]
 pub use managers::moka::MokaManager;
+
+#[cfg(feature = "manager-foyer")]
+pub use managers::foyer::FoyerManager;
 
 #[cfg(feature = "rate-limiting")]
 pub use rate_limiting::{

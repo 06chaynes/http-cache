@@ -1,9 +1,10 @@
 # Changelog
 
-## [1.0.0-alpha.4] - 2026-01-18
+## [1.0.0-alpha.4] - 2026-01-19
 
 ### Changed
 
+- Default serialization format changed from bincode to postcard (cache data incompatible with previous versions)
 - Updated `http-cache` dependency to 1.0.0-alpha.4
 
 ## [1.0.0-alpha.3] - 2026-01-18

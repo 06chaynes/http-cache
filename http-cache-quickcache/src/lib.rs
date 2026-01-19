@@ -211,7 +211,7 @@ impl CacheManager for QuickManager {
         cache_key: &str,
     ) -> Result<Option<(HttpResponse, CachePolicy)>> {
         let store: Store = match self.cache.get(cache_key) {
-            Some(d) => bincode::deserialize(&d)?,
+            Some(d) => postcard::from_bytes(&d)?,
             None => return Ok(None),
         };
         Ok(Some((store.response, store.policy)))
@@ -224,7 +224,7 @@ impl CacheManager for QuickManager {
         policy: CachePolicy,
     ) -> Result<HttpResponse> {
         let data = Store { response: response.clone(), policy };
-        let bytes = bincode::serialize(&data)?;
+        let bytes = postcard::to_allocvec(&data)?;
         self.cache.insert(cache_key, Arc::new(bytes));
         Ok(response)
     }

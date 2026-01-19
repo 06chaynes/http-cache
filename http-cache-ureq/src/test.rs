@@ -1,7 +1,5 @@
 use crate::{BadRequest, CachedAgent, HttpCacheError};
 use http_cache::{CacheKey, *};
-use macro_rules_attribute::apply;
-use smol_macros::test;
 use std::{sync::Arc, time::Duration};
 use tempfile::TempDir;
 use wiremock::{
@@ -40,7 +38,7 @@ fn test_errors() {
     assert_eq!(ureq_err.to_string(), "Cache error: test".to_string());
 }
 
-#[apply(test!)]
+#[tokio::test]
 async fn default_mode() {
     let temp_dir = TempDir::new().unwrap();
     let manager = CACacheManager::new(temp_dir.path().into(), true);
@@ -64,7 +62,7 @@ async fn default_mode() {
     assert_eq!(res.header("x-cache"), Some(HIT));
 }
 
-#[apply(test!)]
+#[tokio::test]
 async fn default_mode_with_options() {
     let temp_dir = TempDir::new().unwrap();
     let manager = CACacheManager::new(temp_dir.path().into(), true);
@@ -91,7 +89,7 @@ async fn default_mode_with_options() {
     assert_eq!(res.status(), 200);
 }
 
-#[apply(test!)]
+#[tokio::test]
 async fn default_mode_no_cache_response() {
     let temp_dir = TempDir::new().unwrap();
     let manager = CACacheManager::new(temp_dir.path().into(), true);
@@ -115,7 +113,7 @@ async fn default_mode_no_cache_response() {
     assert_eq!(res.header("x-cache"), Some(MISS));
 }
 
-#[apply(test!)]
+#[tokio::test]
 async fn removes_warning() {
     let temp_dir = TempDir::new().unwrap();
     let manager = CACacheManager::new(temp_dir.path().into(), true);
@@ -147,7 +145,7 @@ async fn removes_warning() {
     assert!(res.header("warning").is_none());
 }
 
-#[apply(test!)]
+#[tokio::test]
 async fn no_store_mode() {
     let temp_dir = TempDir::new().unwrap();
     let manager = CACacheManager::new(temp_dir.path().into(), true);
@@ -168,7 +166,7 @@ async fn no_store_mode() {
     assert_eq!(res.header("x-cache"), Some(MISS));
 }
 
-#[apply(test!)]
+#[tokio::test]
 async fn no_cache_mode() {
     let temp_dir = TempDir::new().unwrap();
     let manager = CACacheManager::new(temp_dir.path().into(), true);
@@ -191,7 +189,7 @@ async fn no_cache_mode() {
     assert_eq!(res.header("x-cache"), Some(MISS));
 }
 
-#[apply(test!)]
+#[tokio::test]
 async fn force_cache_mode() {
     let temp_dir = TempDir::new().unwrap();
     let manager = CACacheManager::new(temp_dir.path().into(), true);
@@ -214,7 +212,7 @@ async fn force_cache_mode() {
     assert_eq!(res.header("x-cache"), Some(HIT));
 }
 
-#[apply(test!)]
+#[tokio::test]
 async fn ignore_rules_mode() {
     let temp_dir = TempDir::new().unwrap();
     let manager = CACacheManager::new(temp_dir.path().into(), true);
@@ -237,7 +235,7 @@ async fn ignore_rules_mode() {
     assert_eq!(res.header("x-cache"), Some(HIT));
 }
 
-#[apply(test!)]
+#[tokio::test]
 async fn reload_mode() {
     let temp_dir = TempDir::new().unwrap();
     let manager = CACacheManager::new(temp_dir.path().into(), true);
@@ -263,7 +261,7 @@ async fn reload_mode() {
     agent.get(&url).call().await.unwrap();
 }
 
-#[apply(test!)]
+#[tokio::test]
 async fn custom_cache_key() {
     let temp_dir = TempDir::new().unwrap();
     let manager = CACacheManager::new(temp_dir.path().into(), true);
@@ -287,7 +285,7 @@ async fn custom_cache_key() {
     assert!(data.is_some());
 }
 
-#[apply(test!)]
+#[tokio::test]
 async fn no_status_headers() {
     let temp_dir = TempDir::new().unwrap();
     let manager = CACacheManager::new(temp_dir.path().into(), true);
@@ -311,7 +309,7 @@ async fn no_status_headers() {
     assert!(res.header("x-cache").is_none());
 }
 
-#[apply(test!)]
+#[tokio::test]
 async fn cache_bust() {
     let temp_dir = TempDir::new().unwrap();
     let manager = CACacheManager::new(temp_dir.path().into(), true);
@@ -351,7 +349,7 @@ async fn cache_bust() {
     assert!(data.is_none());
 }
 
-#[apply(test!)]
+#[tokio::test]
 async fn only_if_cached_mode_miss() {
     let temp_dir = TempDir::new().unwrap();
     let manager = CACacheManager::new(temp_dir.path().into(), true);
@@ -371,7 +369,7 @@ async fn only_if_cached_mode_miss() {
     assert!(data.is_none());
 }
 
-#[apply(test!)]
+#[tokio::test]
 async fn only_if_cached_mode_hit() {
     let temp_dir = TempDir::new().unwrap();
     let manager = CACacheManager::new(temp_dir.path().into(), true);
@@ -401,7 +399,7 @@ async fn only_if_cached_mode_hit() {
 }
 
 // Invalidation tests for POST, PUT, PATCH, DELETE, OPTIONS
-#[apply(test!)]
+#[tokio::test]
 async fn post_request_invalidates_cache() {
     let temp_dir = TempDir::new().unwrap();
     let manager = CACacheManager::new(temp_dir.path().into(), true);
@@ -426,7 +424,7 @@ async fn post_request_invalidates_cache() {
     assert!(data.is_none());
 }
 
-#[apply(test!)]
+#[tokio::test]
 async fn put_request_invalidates_cache() {
     let temp_dir = TempDir::new().unwrap();
     let manager = CACacheManager::new(temp_dir.path().into(), true);
@@ -451,7 +449,7 @@ async fn put_request_invalidates_cache() {
     assert!(data.is_none());
 }
 
-#[apply(test!)]
+#[tokio::test]
 async fn patch_request_invalidates_cache() {
     let temp_dir = TempDir::new().unwrap();
     let manager = CACacheManager::new(temp_dir.path().into(), true);
@@ -476,7 +474,7 @@ async fn patch_request_invalidates_cache() {
     assert!(data.is_none());
 }
 
-#[apply(test!)]
+#[tokio::test]
 async fn delete_request_invalidates_cache() {
     let temp_dir = TempDir::new().unwrap();
     let manager = CACacheManager::new(temp_dir.path().into(), true);
@@ -501,7 +499,7 @@ async fn delete_request_invalidates_cache() {
     assert!(data.is_none());
 }
 
-#[apply(test!)]
+#[tokio::test]
 async fn options_request_not_cached() {
     let temp_dir = TempDir::new().unwrap();
     let manager = CACacheManager::new(temp_dir.path().into(), true);
@@ -529,7 +527,7 @@ async fn options_request_not_cached() {
 }
 
 // Revalidation tests
-#[apply(test!)]
+#[tokio::test]
 async fn revalidation_304() {
     let temp_dir = TempDir::new().unwrap();
     let manager = CACacheManager::new(temp_dir.path().into(), true);
@@ -562,7 +560,7 @@ async fn revalidation_304() {
     assert_eq!(res.as_bytes(), TEST_BODY);
 }
 
-#[apply(test!)]
+#[tokio::test]
 async fn revalidation_200() {
     let temp_dir = TempDir::new().unwrap();
     let manager = CACacheManager::new(temp_dir.path().into(), true);
@@ -591,7 +589,7 @@ async fn revalidation_200() {
     assert_eq!(res.as_bytes(), b"updated");
 }
 
-#[apply(test!)]
+#[tokio::test]
 async fn revalidation_500() {
     let temp_dir = TempDir::new().unwrap();
     let manager = CACacheManager::new(temp_dir.path().into(), true);
@@ -623,7 +621,7 @@ async fn revalidation_500() {
     assert_eq!(res.as_bytes(), TEST_BODY);
 }
 
-#[apply(test!)]
+#[tokio::test]
 async fn custom_cache_mode_fn() {
     let temp_dir = TempDir::new().unwrap();
     let manager = CACacheManager::new(temp_dir.path().into(), true);
@@ -659,7 +657,7 @@ async fn custom_cache_mode_fn() {
     assert!(data2.is_none());
 }
 
-#[apply(test!)]
+#[tokio::test]
 async fn delete_after_non_get_head_method_request() {
     let temp_dir = TempDir::new().unwrap();
     let manager = CACacheManager::new(temp_dir.path().into(), true);
@@ -694,7 +692,7 @@ async fn delete_after_non_get_head_method_request() {
 }
 
 #[cfg(feature = "json")]
-#[apply(test!)]
+#[tokio::test]
 async fn json_request_and_response() {
     let temp_dir = TempDir::new().unwrap();
     let manager = CACacheManager::new(temp_dir.path().into(), true);
@@ -726,7 +724,7 @@ async fn json_request_and_response() {
     assert_eq!(response_json["data"], serde_json::json!([1, 2, 3]));
 }
 
-#[apply(test!)]
+#[tokio::test]
 async fn head_request_caching() {
     let temp_dir = TempDir::new().unwrap();
     let manager = CACacheManager::new(temp_dir.path().into(), true);
@@ -761,7 +759,7 @@ async fn head_request_caching() {
     assert_eq!(res2.header("x-cache"), Some(HIT));
 }
 
-#[apply(test!)]
+#[tokio::test]
 async fn max_ttl_override() {
     let temp_dir = TempDir::new().unwrap();
     let manager = CACacheManager::new(temp_dir.path().into(), true);
@@ -800,7 +798,7 @@ async fn max_ttl_override() {
     assert_eq!(res2.header("x-cache"), Some(HIT));
 }
 
-#[apply(test!)]
+#[tokio::test]
 async fn max_ttl_with_ignore_rules() {
     let temp_dir = TempDir::new().unwrap();
     let manager = CACacheManager::new(temp_dir.path().into(), true);
@@ -839,7 +837,7 @@ async fn max_ttl_with_ignore_rules() {
     assert_eq!(res2.header("x-cache"), Some(HIT));
 }
 
-#[apply(test!)]
+#[tokio::test]
 async fn max_ttl_no_override_when_shorter() {
     let temp_dir = TempDir::new().unwrap();
     let manager = CACacheManager::new(temp_dir.path().into(), true);
@@ -878,7 +876,7 @@ async fn max_ttl_no_override_when_shorter() {
     assert_eq!(res2.header("x-cache"), Some(HIT));
 }
 
-#[apply(test!)]
+#[tokio::test]
 async fn content_type_based_caching() {
     let temp_dir = TempDir::new().unwrap();
     let manager = CACacheManager::new(temp_dir.path().into(), true);

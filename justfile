@@ -4,16 +4,14 @@
 
 # Run tests on all crates with proper feature combinations using nextest
 @test:
-    echo "----------\nCore library (smol):\n"
-    cd http-cache && cargo nextest run --no-default-features --features manager-cacache,cacache-smol,with-http-types,manager-moka,streaming-smol,http-headers-compat
-    echo "\n----------\nCore library (tokio):\n"
-    cd http-cache && cargo nextest run --no-default-features --features manager-cacache,cacache-tokio,with-http-types,manager-moka,streaming-tokio,http-headers-compat
-    echo "\n----------\nCore library (smol + rate-limiting):\n"
-    cd http-cache && cargo nextest run --no-default-features --features manager-cacache,cacache-smol,with-http-types,manager-moka,streaming-smol,rate-limiting,http-headers-compat
-    echo "\n----------\nCore library (tokio + rate-limiting):\n"
-    cd http-cache && cargo nextest run --no-default-features --features manager-cacache,cacache-tokio,with-http-types,manager-moka,streaming-tokio,rate-limiting,http-headers-compat
-    echo "\n----------\nCore library (smol, no http-headers-compat):\n"
-    cd http-cache && cargo nextest run --no-default-features --features manager-cacache,cacache-smol,with-http-types,manager-moka,streaming-smol
+    echo "----------\nCore library (default features):\n"
+    cd http-cache && cargo nextest run --no-default-features --features manager-cacache,with-http-types,manager-moka,streaming-tokio,http-headers-compat
+    echo "\n----------\nCore library (with rate-limiting):\n"
+    cd http-cache && cargo nextest run --no-default-features --features manager-cacache,with-http-types,manager-moka,streaming-tokio,rate-limiting,http-headers-compat
+    echo "\n----------\nCore library (with foyer):\n"
+    cd http-cache && cargo nextest run --no-default-features --features manager-foyer,with-http-types,streaming-tokio,http-headers-compat
+    echo "\n----------\nCore library (no http-headers-compat):\n"
+    cd http-cache && cargo nextest run --no-default-features --features manager-cacache,with-http-types,manager-moka,streaming-tokio
     echo "\n----------\nReqwest middleware:\n"
     cd http-cache-reqwest && cargo nextest run --all-features
     echo "\n----------\nSurf middleware:\n"
@@ -30,14 +28,12 @@
 
 # Run doctests on all crates with proper feature combinations
 @doctest:
-    echo "----------\nCore library (smol):\n"
-    cd http-cache && cargo test --doc --no-default-features --features manager-cacache,cacache-smol,with-http-types,manager-moka,streaming-smol,http-headers-compat
-    echo "\n----------\nCore library (tokio):\n"
-    cd http-cache && cargo test --doc --no-default-features --features manager-cacache,cacache-tokio,with-http-types,manager-moka,streaming-tokio,http-headers-compat
-    echo "\n----------\nCore library (smol + rate-limiting):\n"
-    cd http-cache && cargo test --doc --no-default-features --features manager-cacache,cacache-smol,with-http-types,manager-moka,streaming-smol,rate-limiting,http-headers-compat
-    echo "\n----------\nCore library (tokio + rate-limiting):\n"
-    cd http-cache && cargo test --doc --no-default-features --features manager-cacache,cacache-tokio,with-http-types,manager-moka,streaming-tokio,rate-limiting,http-headers-compat
+    echo "----------\nCore library (default features):\n"
+    cd http-cache && cargo test --doc --no-default-features --features manager-cacache,with-http-types,manager-moka,streaming-tokio,http-headers-compat
+    echo "\n----------\nCore library (with rate-limiting):\n"
+    cd http-cache && cargo test --doc --no-default-features --features manager-cacache,with-http-types,manager-moka,streaming-tokio,rate-limiting,http-headers-compat
+    echo "\n----------\nCore library (with foyer):\n"
+    cd http-cache && cargo test --doc --no-default-features --features manager-foyer,with-http-types,streaming-tokio,http-headers-compat
     echo "\n----------\nReqwest middleware:\n"
     cd http-cache-reqwest && cargo test --doc --all-features
     echo "\n----------\nSurf middleware:\n"
@@ -53,16 +49,14 @@
     cd http-cache-quickcache && cargo test --doc --all-features
 
 @check:
-    echo "----------\nCore library (smol):\n"
-    cd http-cache && cargo check --no-default-features --features manager-cacache,cacache-smol,with-http-types,manager-moka,streaming-smol,http-headers-compat
-    echo "\n----------\nCore library (tokio):\n"
-    cd http-cache && cargo check --no-default-features --features manager-cacache,cacache-tokio,with-http-types,manager-moka,streaming-tokio,http-headers-compat
-    echo "\n----------\nCore library (smol + rate-limiting):\n"
-    cd http-cache && cargo check --no-default-features --features manager-cacache,cacache-smol,with-http-types,manager-moka,streaming-smol,rate-limiting,http-headers-compat
-    echo "\n----------\nCore library (tokio + rate-limiting):\n"
-    cd http-cache && cargo check --no-default-features --features manager-cacache,cacache-tokio,with-http-types,manager-moka,streaming-tokio,rate-limiting,http-headers-compat
-    echo "\n----------\nCore library (smol, no http-headers-compat):\n"
-    cd http-cache && cargo check --no-default-features --features manager-cacache,cacache-smol,with-http-types,manager-moka,streaming-smol
+    echo "----------\nCore library (default features):\n"
+    cd http-cache && cargo check --no-default-features --features manager-cacache,with-http-types,manager-moka,streaming-tokio,http-headers-compat
+    echo "\n----------\nCore library (with rate-limiting):\n"
+    cd http-cache && cargo check --no-default-features --features manager-cacache,with-http-types,manager-moka,streaming-tokio,rate-limiting,http-headers-compat
+    echo "\n----------\nCore library (with foyer):\n"
+    cd http-cache && cargo check --no-default-features --features manager-foyer,with-http-types,streaming-tokio,http-headers-compat
+    echo "\n----------\nCore library (no http-headers-compat):\n"
+    cd http-cache && cargo check --no-default-features --features manager-cacache,with-http-types,manager-moka,streaming-tokio
     echo "\n----------\nReqwest middleware:\n"
     cd http-cache-reqwest && cargo check --all-features
     echo "\n----------\nSurf middleware:\n"
@@ -80,26 +74,22 @@
 
 # Run benchmarks with `cargo bench`
 @bench:
-    echo "----------\nCore library (smol):\n"
-    cd http-cache && cargo bench --no-default-features --features manager-cacache,cacache-smol,with-http-types,manager-moka
-    echo "\n----------\nCore library (tokio):\n"
-    cd http-cache && cargo bench --no-default-features --features manager-cacache,cacache-tokio,with-http-types,manager-moka
+    echo "----------\nCore library:\n"
+    cd http-cache && cargo bench --no-default-features --features manager-cacache,with-http-types,manager-moka
     echo "\n----------\nTower middleware:\n"
     cd http-cache-tower && cargo bench --all-features
 
 # Run benchmarks with `cargo criterion`
 @criterion:
-    echo "----------\nCore library (smol):\n"
-    cd http-cache && cargo criterion --no-default-features --features manager-cacache,cacache-smol,with-http-types,manager-moka
-    echo "\n----------\nCore library (tokio):\n"
-    cd http-cache && cargo criterion --no-default-features --features manager-cacache,cacache-tokio,with-http-types,manager-moka
+    echo "----------\nCore library:\n"
+    cd http-cache && cargo criterion --no-default-features --features manager-cacache,with-http-types,manager-moka
     echo "\n----------\nTower middleware:\n"
     cd http-cache-tower && cargo criterion --all-features
 
 # Run memory profiling example to compare streaming vs traditional caching
 memory-profile:
-    cd http-cache-tower && cargo run --release --example streaming_memory_profile --features streaming
-    cd http-cache-reqwest && cargo run --release --example streaming_memory_profile --features streaming
+    cd http-cache-tower && cargo run --release --example tower_streaming_memory_profile --features streaming
+    cd http-cache-reqwest && cargo run --release --example reqwest_streaming_memory_profile --features streaming
 
 # Run examples
 @examples:
@@ -129,16 +119,14 @@ changelog TAG:
 
 # Lint all crates with clippy and check formatting
 @lint:
-    echo "----------\nCore library (smol):\n"
-    cd http-cache && cargo clippy --lib --tests --all-targets --no-default-features --features manager-cacache,cacache-smol,with-http-types,manager-moka,streaming-smol,http-headers-compat -- -D warnings
-    echo "\n----------\nCore library (tokio):\n"
-    cd http-cache && cargo clippy --lib --tests --all-targets --no-default-features --features manager-cacache,cacache-tokio,with-http-types,manager-moka,streaming-tokio,http-headers-compat -- -D warnings
-    echo "\n----------\nCore library (smol + rate-limiting):\n"
-    cd http-cache && cargo clippy --lib --tests --all-targets --no-default-features --features manager-cacache,cacache-smol,with-http-types,manager-moka,streaming-smol,rate-limiting,http-headers-compat -- -D warnings
-    echo "\n----------\nCore library (tokio + rate-limiting):\n"
-    cd http-cache && cargo clippy --lib --tests --all-targets --no-default-features --features manager-cacache,cacache-tokio,with-http-types,manager-moka,streaming-tokio,rate-limiting,http-headers-compat -- -D warnings
-    echo "\n----------\nCore library (smol, no http-headers-compat):\n"
-    cd http-cache && cargo clippy --lib --tests --all-targets --no-default-features --features manager-cacache,cacache-smol,with-http-types,manager-moka,streaming-smol -- -D warnings
+    echo "----------\nCore library (default features):\n"
+    cd http-cache && cargo clippy --lib --tests --all-targets --no-default-features --features manager-cacache,with-http-types,manager-moka,streaming-tokio,http-headers-compat -- -D warnings
+    echo "\n----------\nCore library (with rate-limiting):\n"
+    cd http-cache && cargo clippy --lib --tests --all-targets --no-default-features --features manager-cacache,with-http-types,manager-moka,streaming-tokio,rate-limiting,http-headers-compat -- -D warnings
+    echo "\n----------\nCore library (with foyer):\n"
+    cd http-cache && cargo clippy --lib --tests --all-targets --no-default-features --features manager-foyer,with-http-types,streaming-tokio,http-headers-compat -- -D warnings
+    echo "\n----------\nCore library (no http-headers-compat):\n"
+    cd http-cache && cargo clippy --lib --tests --all-targets --no-default-features --features manager-cacache,with-http-types,manager-moka,streaming-tokio -- -D warnings
     echo "\n----------\nReqwest middleware:\n"
     cd http-cache-reqwest && cargo clippy --lib --tests --all-targets --all-features -- -D warnings
     echo "\n----------\nSurf middleware:\n"

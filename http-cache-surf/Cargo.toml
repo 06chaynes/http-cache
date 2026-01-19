@@ -43,8 +43,9 @@ required-features = ["manager-cacache"]
 
 [features]
 default = ["manager-cacache"]
-manager-cacache = ["http-cache/manager-cacache", "http-cache/cacache-smol"]
+manager-cacache = ["http-cache/manager-cacache"]
 manager-moka = ["http-cache/manager-moka"]
+manager-foyer = ["http-cache/manager-foyer"]
 rate-limiting = ["http-cache/rate-limiting"]
 
 [package.metadata.docs.rs]

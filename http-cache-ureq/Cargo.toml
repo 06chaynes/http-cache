@@ -1,6 +1,6 @@
 [package]
 name = "http-cache-ureq"
-version = "1.0.0-alpha.3"
+version = "1.0.0-alpha.4"
 description = "http-cache middleware implementation for ureq"
 authors = ["Christian Haynes <06chaynes@gmail.com>", "Kat Marchán <kzm@zkat.tech>"]
 repository = "https://github.com/06chaynes/http-cache"
@@ -44,8 +44,9 @@ required-features = ["manager-cacache"]
 
 [features]
 default = ["manager-cacache"]
-manager-cacache = ["http-cache/manager-cacache", "http-cache/cacache-smol"]
+manager-cacache = ["http-cache/manager-cacache"]
 manager-moka = ["http-cache/manager-moka"]
+manager-foyer = ["http-cache/manager-foyer"]
 json = ["dep:serde_json", "ureq/json"]
 rate-limiting = ["http-cache/rate-limiting"]
 

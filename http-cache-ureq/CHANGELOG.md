@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.0.0-alpha.4] - 2026-01-19
+
+### Added
+
+- `manager-foyer` feature flag for `FoyerManager` support
+
+### Changed
+
+- Updated `http-cache` dependency to 1.0.0-alpha.4
+
 ## [1.0.0-alpha.3] - 2026-01-18
 
 ### Fixed

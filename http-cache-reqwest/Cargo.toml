@@ -48,7 +48,7 @@ futures = "0.3.31"
 futures-util = "0.3.31"
 
 [[example]]
-name = "streaming_memory_profile"
+name = "reqwest_streaming_memory_profile"
 required-features = ["streaming"]
 
 [[example]]
@@ -61,8 +61,9 @@ required-features = ["streaming"]
 
 [features]
 default = ["manager-cacache"]
-manager-cacache = ["http-cache/manager-cacache", "http-cache/cacache-tokio"]
+manager-cacache = ["http-cache/manager-cacache"]
 manager-moka = ["http-cache/manager-moka"]
+manager-foyer = ["http-cache/manager-foyer"]
 streaming = ["http-cache/streaming-tokio", "reqwest/stream", "futures-util"]
 rate-limiting = ["http-cache/rate-limiting"]
 

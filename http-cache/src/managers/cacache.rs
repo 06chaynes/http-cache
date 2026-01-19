@@ -50,7 +50,16 @@ impl CacheManager for CACacheManager {
         cache_key: &str,
     ) -> Result<Option<(HttpResponse, CachePolicy)>> {
         let store: Store = match cacache::read(&self.path, cache_key).await {
-            Ok(d) => bincode::deserialize(&d)?,
+            Ok(d) => {
+                #[cfg(feature = "postcard")]
+                {
+                    postcard::from_bytes(&d)?
+                }
+                #[cfg(all(feature = "bincode", not(feature = "postcard")))]
+                {
+                    bincode::deserialize(&d)?
+                }
+            }
             Err(_e) => {
                 return Ok(None);
             }
@@ -65,6 +74,9 @@ impl CacheManager for CACacheManager {
         policy: CachePolicy,
     ) -> Result<HttpResponse> {
         let data = Store { response, policy };
+        #[cfg(feature = "postcard")]
+        let bytes = postcard::to_allocvec(&data)?;
+        #[cfg(all(feature = "bincode", not(feature = "postcard")))]
         let bytes = bincode::serialize(&data)?;
         cacache::write(&self.path, cache_key, bytes).await?;
         Ok(data.response)

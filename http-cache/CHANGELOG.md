@@ -1,16 +1,23 @@
 # Changelog
 
-## [1.0.0-alpha.4] - 2026-01-18
+## [1.0.0-alpha.4] - 2026-01-19
 
 ### Added
 
 - `empty_body` method to `StreamingCacheManager` trait for creating empty body responses
 - `get_ref_count` method to `ContentRefCounter` for non-mutating reference count checks
+- `FoyerManager` cache backend using foyer for hybrid in-memory and disk caching
+- `manager-foyer` feature flag for enabling `FoyerManager`
+- `manager-cacache-bincode` and `manager-moka-bincode` feature flags for legacy bincode serialization
 
 ### Changed
 
 - `StreamingManager` now wraps `ContentRefCounter` in `Arc` to ensure all clones share the same state
 - Atomic operations in streaming cache now use proper memory ordering (`Acquire`/`Release`/`AcqRel`) instead of `Relaxed`
+- Default serialization format changed from bincode to postcard (cache data incompatible with previous versions)
+- Removed `cacache-smol` and `cacache-tokio` features in favor of tokio-only runtime
+- `cacache` dependency now uses `tokio-runtime` by default
+- Removed async-std from dependency tree
 
 ### Fixed
 

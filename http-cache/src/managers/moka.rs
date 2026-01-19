@@ -53,7 +53,16 @@ impl CacheManager for MokaManager {
         cache_key: &str,
     ) -> Result<Option<(HttpResponse, CachePolicy)>> {
         let store: Store = match self.cache.get(cache_key).await {
-            Some(d) => bincode::deserialize(&d)?,
+            Some(d) => {
+                #[cfg(feature = "postcard")]
+                {
+                    postcard::from_bytes(&d)?
+                }
+                #[cfg(all(feature = "bincode", not(feature = "postcard")))]
+                {
+                    bincode::deserialize(&d)?
+                }
+            }
             None => return Ok(None),
         };
         Ok(Some((store.response, store.policy)))
@@ -66,6 +75,9 @@ impl CacheManager for MokaManager {
         policy: CachePolicy,
     ) -> Result<HttpResponse> {
         let data = Store { response, policy };
+        #[cfg(feature = "postcard")]
+        let bytes = postcard::to_allocvec(&data)?;
+        #[cfg(all(feature = "bincode", not(feature = "postcard")))]
         let bytes = bincode::serialize(&data)?;
         self.cache.insert(cache_key, Arc::new(bytes)).await;
         self.cache.run_pending_tasks().await;

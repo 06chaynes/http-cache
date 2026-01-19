@@ -11,9 +11,6 @@ use wiremock::{matchers::method, Mock, MockServer, ResponseTemplate};
 #[cfg(feature = "manager-moka")]
 use crate::MokaManager;
 
-use macro_rules_attribute::apply;
-use smol_macros::test;
-
 pub(crate) fn build_mock(
     cache_control_val: &str,
     body: &[u8],
@@ -43,7 +40,7 @@ const HIT: &str = "HIT";
 
 const MISS: &str = "MISS";
 
-#[apply(test!)]
+#[tokio::test]
 async fn test_non_cloneable_request_graceful_fallback() -> Result<()> {
     // Test graceful handling of requests that cannot be cloned
     // This simulates the multipart form / streaming body scenario
@@ -118,7 +115,7 @@ fn test_errors() -> Result<()> {
 mod with_moka {
     use super::*;
 
-    #[apply(test!)]
+    #[tokio::test]
     async fn default_mode() -> Result<()> {
         let mock_server = MockServer::start().await;
         let m = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 1);
@@ -152,7 +149,7 @@ mod with_moka {
         Ok(())
     }
 
-    #[apply(test!)]
+    #[tokio::test]
     async fn default_mode_with_options() -> Result<()> {
         let mock_server = MockServer::start().await;
         let m = build_mock(CACHEABLE_PRIVATE, TEST_BODY, 200, 1);
@@ -191,7 +188,7 @@ mod with_moka {
         Ok(())
     }
 
-    #[apply(test!)]
+    #[tokio::test]
     async fn default_mode_no_cache_response() -> Result<()> {
         let mock_server = MockServer::start().await;
         let m = build_mock("no-cache", TEST_BODY, 200, 2);
@@ -225,7 +222,7 @@ mod with_moka {
         Ok(())
     }
 
-    #[apply(test!)]
+    #[tokio::test]
     async fn removes_warning() -> Result<()> {
         let mock_server = MockServer::start().await;
         let m = Mock::given(method(GET))
@@ -267,7 +264,7 @@ mod with_moka {
         Ok(())
     }
 
-    #[apply(test!)]
+    #[tokio::test]
     async fn no_store_mode() -> Result<()> {
         let mock_server = MockServer::start().await;
         let m = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 2);
@@ -298,7 +295,7 @@ mod with_moka {
         Ok(())
     }
 
-    #[apply(test!)]
+    #[tokio::test]
     async fn no_cache_mode() -> Result<()> {
         let mock_server = MockServer::start().await;
         let m = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 2);
@@ -331,7 +328,7 @@ mod with_moka {
         Ok(())
     }
 
-    #[apply(test!)]
+    #[tokio::test]
     async fn force_cache_mode() -> Result<()> {
         let mock_server = MockServer::start().await;
         let m = build_mock("max-age=0, public", TEST_BODY, 200, 1);
@@ -364,7 +361,7 @@ mod with_moka {
         Ok(())
     }
 
-    #[apply(test!)]
+    #[tokio::test]
     async fn ignore_rules_mode() -> Result<()> {
         let mock_server = MockServer::start().await;
         let m = build_mock("no-store, max-age=0, public", TEST_BODY, 200, 1);
@@ -397,7 +394,7 @@ mod with_moka {
         Ok(())
     }
 
-    #[apply(test!)]
+    #[tokio::test]
     async fn delete_after_non_get_head_method_request() -> Result<()> {
         let mock_server = MockServer::start().await;
         let m_get = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 1);
@@ -438,7 +435,7 @@ mod with_moka {
         Ok(())
     }
 
-    #[apply(test!)]
+    #[tokio::test]
     async fn revalidation_304() -> Result<()> {
         let mock_server = MockServer::start().await;
         let m = build_mock(MUST_REVALIDATE, TEST_BODY, 200, 1);
@@ -479,7 +476,7 @@ mod with_moka {
         Ok(())
     }
 
-    #[apply(test!)]
+    #[tokio::test]
     async fn revalidation_200() -> Result<()> {
         let mock_server = MockServer::start().await;
         let m = build_mock(MUST_REVALIDATE, TEST_BODY, 200, 1);
@@ -518,7 +515,7 @@ mod with_moka {
         Ok(())
     }
 
-    #[apply(test!)]
+    #[tokio::test]
     async fn revalidation_500() -> Result<()> {
         let mock_server = MockServer::start().await;
         let m = build_mock(MUST_REVALIDATE, TEST_BODY, 200, 1);
@@ -560,7 +557,7 @@ mod with_moka {
         Ok(())
     }
 
-    #[apply(test!)]
+    #[tokio::test]
     async fn reload_mode() -> Result<()> {
         let mock_server = MockServer::start().await;
         let m = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 2);
@@ -598,7 +595,7 @@ mod with_moka {
         Ok(())
     }
 
-    #[apply(test!)]
+    #[tokio::test]
     async fn custom_cache_key() -> Result<()> {
         let mock_server = MockServer::start().await;
         let m = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 1);
@@ -633,7 +630,7 @@ mod with_moka {
         Ok(())
     }
 
-    #[apply(test!)]
+    #[tokio::test]
     async fn custom_cache_mode_fn() -> Result<()> {
         let mock_server = MockServer::start().await;
         let m = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 2);
@@ -680,7 +677,7 @@ mod with_moka {
         Ok(())
     }
 
-    #[apply(test!)]
+    #[tokio::test]
     async fn no_status_headers() -> Result<()> {
         let mock_server = MockServer::start().await;
         let m = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 1);
@@ -713,7 +710,7 @@ mod with_moka {
         Ok(())
     }
 
-    #[apply(test!)]
+    #[tokio::test]
     async fn cache_bust() -> Result<()> {
         let mock_server = MockServer::start().await;
         let m = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 2);
@@ -771,7 +768,7 @@ mod with_moka {
     mod only_if_cached_mode {
         use super::*;
 
-        #[apply(test!)]
+        #[tokio::test]
         async fn miss() -> Result<()> {
             let mock_server = MockServer::start().await;
             let m = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 0);
@@ -799,7 +796,7 @@ mod with_moka {
             Ok(())
         }
 
-        #[apply(test!)]
+        #[tokio::test]
         async fn hit() -> Result<()> {
             let mock_server = MockServer::start().await;
             let m = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 1);
@@ -849,7 +846,7 @@ mod with_moka {
     // Other HTTP methods (PUT, PATCH, DELETE, OPTIONS) work correctly.
 
     /*
-    #[apply(test!)]
+    #[tokio::test]
     async fn head_request_caching() -> Result<()> {
         let mock_server = MockServer::start().await;
         let m = Mock::given(method("HEAD"))
@@ -886,7 +883,7 @@ mod with_moka {
     }
     */
 
-    #[apply(test!)]
+    #[tokio::test]
     async fn put_request_invalidates_cache() -> Result<()> {
         let mock_server = MockServer::start().await;
 
@@ -937,7 +934,7 @@ mod with_moka {
         Ok(())
     }
 
-    #[apply(test!)]
+    #[tokio::test]
     async fn patch_request_invalidates_cache() -> Result<()> {
         let mock_server = MockServer::start().await;
 
@@ -987,7 +984,7 @@ mod with_moka {
         Ok(())
     }
 
-    #[apply(test!)]
+    #[tokio::test]
     async fn delete_request_invalidates_cache() -> Result<()> {
         let mock_server = MockServer::start().await;
 
@@ -1036,7 +1033,7 @@ mod with_moka {
         Ok(())
     }
 
-    #[apply(test!)]
+    #[tokio::test]
     async fn options_request_not_cached() -> Result<()> {
         let mock_server = MockServer::start().await;
         let m = Mock::given(method("OPTIONS"))
@@ -1116,7 +1113,7 @@ mod with_moka {
             }
         }
 
-        #[apply(test!)]
+        #[tokio::test]
         async fn cache_hit_bypasses_rate_limiting() -> Result<()> {
             let mock_server = MockServer::start().await;
             let m = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 1);
@@ -1153,7 +1150,7 @@ mod with_moka {
             Ok(())
         }
 
-        #[apply(test!)]
+        #[tokio::test]
         async fn cache_miss_applies_rate_limiting() -> Result<()> {
             let mock_server = MockServer::start().await;
             let m = Mock::given(method(GET))
@@ -1201,7 +1198,7 @@ mod with_moka {
             Ok(())
         }
 
-        #[apply(test!)]
+        #[tokio::test]
         async fn domain_rate_limiter_integration() -> Result<()> {
             let mock_server = MockServer::start().await;
             let m = Mock::given(method(GET))
@@ -1238,7 +1235,7 @@ mod with_moka {
             Ok(())
         }
 
-        #[apply(test!)]
+        #[tokio::test]
         async fn direct_rate_limiter_integration() -> Result<()> {
             let mock_server = MockServer::start().await;
             let m = Mock::given(method(GET))

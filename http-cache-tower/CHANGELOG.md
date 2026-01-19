@@ -1,6 +1,10 @@
 # Changelog
 
-## [1.0.0-alpha.4] - 2026-01-18
+## [1.0.0-alpha.4] - 2026-01-19
+
+### Added
+
+- `manager-foyer` feature flag for `FoyerManager` support
 
 ### Fixed
 
