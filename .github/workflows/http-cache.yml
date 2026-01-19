@@ -75,7 +75,7 @@ jobs:
           RUSTFLAGS: --cfg docsrs
           RUSTDOCFLAGS: --cfg docsrs -Dwarnings
       - run: |
-          cargo doc --no-deps --document-private-items
+          cargo doc --no-deps --document-private-items --no-default-features --features manager-cacache,with-http-types,manager-moka,streaming-tokio,http-headers-compat
           cargo test --doc --no-default-features --features manager-cacache,with-http-types,manager-moka,streaming-tokio,http-headers-compat
           cargo test --doc --no-default-features --features manager-cacache,with-http-types,manager-moka,streaming-tokio,rate-limiting,http-headers-compat
           cargo test --doc --no-default-features --features manager-foyer,with-http-types,streaming-tokio,http-headers-compat
