@@ -31,13 +31,14 @@ cargo add http-cache-reqwest
 use reqwest::Client;
 use reqwest_middleware::{ClientBuilder, Result};
 use http_cache_reqwest::{Cache, CacheMode, CACacheManager, HttpCache, HttpCacheOptions};
+use std::path::PathBuf;
 
 #[tokio::main]
 async fn main() -> Result<()> {
     let client = ClientBuilder::new(Client::new())
         .with(Cache(HttpCache {
           mode: CacheMode::Default,
-          manager: CACacheManager::default(),
+          manager: CACacheManager::new(PathBuf::from("./cache"), false),
           options: HttpCacheOptions::default(),
         }))
         .build();
@@ -61,14 +62,15 @@ use reqwest_middleware::ClientBuilder;
 use http_cache_reqwest::{StreamingCache, CacheMode};
 
 #[cfg(feature = "streaming")]
-use http_cache::StreamingCacheManager;
+use http_cache::StreamingManager;
+use std::path::PathBuf;
 
 #[cfg(feature = "streaming")]
 #[tokio::main]
 async fn main() -> reqwest_middleware::Result<()> {
     let client = ClientBuilder::new(Client::new())
         .with(StreamingCache::new(
-            StreamingCacheManager::new("./cache".into()),
+            StreamingManager::new(PathBuf::from("./cache")),
             CacheMode::Default,
         ))
         .build();
@@ -101,7 +103,10 @@ The following features are available. By default `manager-cacache` is enabled.
 
 - `manager-cacache` (default): enable [cacache](https://github.com/zkat/cacache-rs), a high-performance disk cache, backend manager.
 - `manager-moka` (disabled): enable [moka](https://github.com/moka-rs/moka), a high-performance in-memory cache, backend manager.
+- `manager-foyer` (disabled): enable [foyer](https://github.com/foyer-rs/foyer), a hybrid in-memory + disk cache, backend manager.
 - `streaming` (disabled): enable streaming cache support with efficient memory usage. Provides `StreamingCache` middleware that can handle large responses without buffering them entirely in memory, while maintaining full HTTP caching compliance. Requires cache managers that implement `StreamingCacheManager`.
+- `rate-limiting` (disabled): enable cache-aware rate limiting functionality.
+- `url-ada` (disabled): enable ada-url for URL parsing.
 
 ## Documentation
 

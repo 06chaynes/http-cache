@@ -12,7 +12,7 @@ The [`Middleware`](https://docs.rs/http-cache/latest/http_cache/trait.Middleware
 - `policy`: returns a [`CachePolicy`](https://docs.rs/http-cache-semantics/latest/http_cache_semantics/struct.CachePolicy.html) with default options for the given `HttpResponse`
 - `policy_with_options`: returns a [`CachePolicy`](https://docs.rs/http-cache-semantics/latest/http_cache_semantics/struct.CachePolicy.html) with the provided [`CacheOptions`](https://docs.rs/http-cache-semantics/latest/http_cache_semantics/struct.CacheOptions.html) for the given `HttpResponse`
 - `update_headers`: updates the request headers with the provided [`http::request::Parts`](https://docs.rs/http/latest/http/request/struct.Parts.html)
-- `force_no_cache`: overrides the `Cache-Control` header to 'no-cache' derective
+- `force_no_cache`: overrides the `Cache-Control` header to 'no-cache' directive
 - `parts`: returns the [`http::request::Parts`](https://docs.rs/http/latest/http/request/struct.Parts.html) from the request
 - `url`: returns the requested [`Url`](https://docs.rs/url/latest/url/struct.Url.html)
 - `method`: returns the method of the request as a `String`
@@ -36,7 +36,7 @@ The `update_headers` method is used to update the request headers with the provi
 
 ### The `force_no_cache` method
 
-The `force_no_cache` method is used to override the `Cache-Control` header to 'no-cache' derective. This is used to allow caching but force revalidation before resuse.
+The `force_no_cache` method is used to override the `Cache-Control` header to 'no-cache' directive. This is used to allow caching but force revalidation before reuse.
 
 ### The `parts` method
 
@@ -135,7 +135,7 @@ fn update_headers(&mut self, parts: &Parts) -> Result<()> {
 }
 ```
 
-The `force_no_cache` method is used to override the `Cache-Control` header in the request to 'no-cache' derective. This is used to allow caching but force revalidation before resuse.
+The `force_no_cache` method is used to override the `Cache-Control` header in the request to 'no-cache' directive. This is used to allow caching but force revalidation before reuse.
 
 ```rust
 fn force_no_cache(&mut self) -> Result<()> {

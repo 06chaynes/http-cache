@@ -68,7 +68,7 @@ let cache = HttpCache {
 ```rust
 // Respect server headers but limit cache duration to 1 hour maximum
 let options = HttpCacheOptions {
-    max_ttl: Some(Duration::from_hours(1)),
+    max_ttl: Some(Duration::from_secs(3600)),
     ..Default::default()
 };
 let cache = HttpCache {
@@ -360,7 +360,7 @@ let options = HttpCacheOptions {
     })),
     
     // Global cache duration limit
-    max_ttl: Some(Duration::from_hours(24)),
+    max_ttl: Some(Duration::from_secs(86400)),
     
     // Enable cache status headers for debugging
     cache_status_headers: true,

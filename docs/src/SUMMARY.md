@@ -16,5 +16,6 @@
 - [Backend Cache Manager Implementations](./managers/managers.md)
   - [cacache](./managers/cacache.md)
   - [moka](./managers/moka.md)
+  - [foyer](./managers/foyer.md)
   - [quick_cache](./managers/quick-cache.md)
   - [streaming_cache](./managers/streaming_cache.md)

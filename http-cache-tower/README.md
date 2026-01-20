@@ -30,7 +30,10 @@ The following features are available. By default `manager-cacache` is enabled.
 
 - `manager-cacache` (default): enable [cacache](https://github.com/zkat/cacache-rs), a high-performance disk cache, backend manager.
 - `manager-moka` (disabled): enable [moka](https://github.com/moka-rs/moka), a high-performance in-memory cache, backend manager.
+- `manager-foyer` (disabled): enable [foyer](https://github.com/foyer-rs/foyer), a hybrid in-memory + disk cache, backend manager.
 - `streaming` (disabled): enable streaming cache support for memory-efficient handling of large responses using `StreamingManager`.
+- `rate-limiting` (disabled): enable cache-aware rate limiting functionality.
+- `url-ada` (disabled): enable ada-url for URL parsing.
 
 ## Example
 
@@ -145,10 +148,11 @@ use http_cache::CACacheManager;
 use hyper_util::client::legacy::Client;
 use hyper_util::rt::TokioExecutor;
 use tower::{ServiceBuilder, ServiceExt};
+use std::path::PathBuf;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let cache_manager = CACacheManager::default();
+    let cache_manager = CACacheManager::new(PathBuf::from("./cache"), false);
     let cache_layer = HttpCacheLayer::new(cache_manager);
 
     let client = Client::builder(TokioExecutor::new()).build_http();

@@ -6,9 +6,12 @@ Since ureq is a synchronous HTTP client, this implementation uses the [smol](htt
 
 ## Features
 
-- `json` - Enables JSON request/response support via `send_json()` and `into_json()` methods (requires `serde_json`)
-- `manager-cacache` - Enable [cacache](https://docs.rs/cacache/) cache manager (default)
-- `manager-moka` - Enable [moka](https://docs.rs/moka/) cache manager
+- `manager-cacache` (default): Enable [cacache](https://docs.rs/cacache/) cache manager.
+- `manager-moka`: Enable [moka](https://docs.rs/moka/) cache manager.
+- `manager-foyer`: Enable [foyer](https://github.com/foyer-rs/foyer) hybrid in-memory + disk cache manager.
+- `json`: Enables JSON request/response support via `send_json()` and `into_json()` methods (requires `serde_json`).
+- `rate-limiting`: Enable cache-aware rate limiting functionality.
+- `url-ada`: Enable ada-url for URL parsing.
 
 ## Basic Usage
 
@@ -16,7 +19,7 @@ Add the dependency to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-http-cache-ureq = "1.0.0-alpha.1"
+http-cache-ureq = "1.0"
 ```
 
 Use the `CachedAgent` builder to create a cached HTTP client:
@@ -54,7 +57,7 @@ Enable the `json` feature to send and parse JSON data:
 
 ```toml
 [dependencies]
-http-cache-ureq = { version = "1.0.0-alpha.1", features = ["json"] }
+http-cache-ureq = { version = "1.0", features = ["json"] }
 ```
 
 ```rust
@@ -141,7 +144,7 @@ Use the Moka in-memory cache:
 
 ```toml
 [dependencies]
-http-cache-ureq = { version = "1.0.0-alpha.1", features = ["manager-moka"] }
+http-cache-ureq = { version = "1.0", features = ["manager-moka"] }
 ```
 
 ```rust

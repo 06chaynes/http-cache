@@ -32,14 +32,15 @@ cargo add http-cache
 
 ## Features
 
-The following features are available. By default `manager-cacache` and `cacache-smol` are enabled.
+The following features are available. By default `manager-cacache` is enabled.
 
 - `manager-cacache` (default): enable [cacache](https://github.com/zkat/cacache-rs), a high-performance disk cache, backend manager.
-- `cacache-smol` (default): enable [smol](https://github.com/smol-rs/smol) runtime support for cacache.
-- `cacache-tokio` (disabled): enable [tokio](https://github.com/tokio-rs/tokio) runtime support for cacache.
 - `manager-moka` (disabled): enable [moka](https://github.com/moka-rs/moka), a high-performance in-memory cache, backend manager.
+- `manager-foyer` (disabled): enable [foyer](https://github.com/foyer-rs/foyer), a hybrid in-memory + disk cache, backend manager.
 - `streaming-tokio` (disabled): enable streaming cache support with [tokio](https://github.com/tokio-rs/tokio) runtime.
 - `streaming-smol` (disabled): enable streaming cache support with [smol](https://github.com/smol-rs/smol) runtime.
+- `rate-limiting` (disabled): enable rate limiting functionality with [governor](https://github.com/boinkor-net/governor).
+- `url-ada` (disabled): enable [ada-url](https://github.com/nickelc/ada-url) for URL parsing.
 - `with-http-types` (disabled): enable [http-types](https://github.com/http-rs/http-types) type conversion support
 
 ## Documentation

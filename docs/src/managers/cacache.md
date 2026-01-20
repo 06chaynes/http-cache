@@ -26,16 +26,22 @@ cargo add http-cache-tower
 
 ## Working with the manager directly
 
-First construct your manager instance. This example will use the default cache directory.
+First construct your manager instance. You need to specify the cache directory and whether cache entries should be fully removed from disk.
 
 ```rust
-let manager = CACacheManager::default();
+use std::path::PathBuf;
+
+let manager = CACacheManager::new(PathBuf::from("./my-cache"), false);
 ```
 
-You can also specify the cache directory and if you want the cache entries to be removed fully from disk.
+The second argument (`remove_fully`) controls whether cached entries are completely removed from disk when deleted:
 
 ```rust
-let manager = CACacheManager::new("./my-cache".into(), true);
+// Keep cache metadata on delete (faster, uses more disk space)
+let manager = CACacheManager::new(PathBuf::from("./my-cache"), false);
+
+// Fully remove entries from disk on delete (slower, saves disk space)
+let manager = CACacheManager::new(PathBuf::from("./my-cache"), true);
 ```
 
 You can attempt to retrieve a record from the cache using the `get` method. This method accepts a `&str` as the cache key and returns an `Result<Option<(HttpResponse, CachePolicy)>, BoxError>`.

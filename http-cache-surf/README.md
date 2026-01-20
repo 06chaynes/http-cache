@@ -29,6 +29,7 @@ cargo add http-cache-surf
 
 ```rust
 use http_cache_surf::{Cache, CacheMode, CACacheManager, HttpCache, HttpCacheOptions};
+use std::path::PathBuf;
 
 #[async_std::main]
 async fn main() -> surf::Result<()> {
@@ -36,7 +37,7 @@ async fn main() -> surf::Result<()> {
     surf::client()
         .with(Cache(HttpCache {
           mode: CacheMode::Default,
-          manager: CACacheManager::default(),
+          manager: CACacheManager::new(PathBuf::from("./cache"), false),
           options: HttpCacheOptions::default(),
         }))
         .send(req)
@@ -51,6 +52,7 @@ The following features are available. By default `manager-cacache` is enabled.
 
 - `manager-cacache` (default): enable [cacache](https://github.com/zkat/cacache-rs), a high-performance disk cache, backend manager.
 - `manager-moka` (disabled): enable [moka](https://github.com/moka-rs/moka), a high-performance in-memory cache, backend manager.
+- `manager-foyer` (disabled): enable [foyer](https://github.com/foyer-rs/foyer), a hybrid in-memory + disk cache, backend manager.
 
 ## Documentation
 

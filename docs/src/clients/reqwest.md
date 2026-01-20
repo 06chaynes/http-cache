@@ -12,11 +12,14 @@ cargo add http-cache-reqwest
 
 - `manager-cacache`: (default) Enables the [`CACacheManager`](https://docs.rs/http-cache/latest/http_cache/struct.CACacheManager.html) backend cache manager.
 - `manager-moka`: Enables the [`MokaManager`](https://docs.rs/http-cache/latest/http_cache/struct.MokaManager.html) backend cache manager.
+- `manager-foyer`: Enables the [`FoyerManager`](https://docs.rs/http-cache/latest/http_cache/struct.FoyerManager.html) backend cache manager.
 - `streaming`: Enables streaming cache support for memory-efficient handling of large response bodies.
+- `rate-limiting`: Enables cache-aware rate limiting functionality.
+- `url-ada`: Enables ada-url for URL parsing.
 
 ## Usage
 
-In the following example we will construct our client using the builder provided by [`reqwest_middleware`](https://github.com/TrueLayer/reqwest-middleware) with our cache struct from [`http-cache-reqwest`](https://github.com/06chaynes/http-cache/tree/latest/http-cache-reqwest). This example will use the default mode, default cacache manager, and default http cache options.
+In the following example we will construct our client using the builder provided by [`reqwest_middleware`](https://github.com/TrueLayer/reqwest-middleware) with our cache struct from [`http-cache-reqwest`](https://github.com/06chaynes/http-cache/tree/main/http-cache-reqwest). This example will use the default mode, default cacache manager, and default http cache options.
 
 After constructing our client, we will make a request to the [MDN Caching Docs](https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching) which should result in an object stored in cache on disk.
 
@@ -24,13 +27,14 @@ After constructing our client, we will make a request to the [MDN Caching Docs](
 use reqwest::Client;
 use reqwest_middleware::{ClientBuilder, Result};
 use http_cache_reqwest::{Cache, CacheMode, CACacheManager, HttpCache, HttpCacheOptions};
+use std::path::PathBuf;
 
 #[tokio::main]
 async fn main() -> Result<()> {
     let client = ClientBuilder::new(Client::new())
         .with(Cache(HttpCache {
           mode: CacheMode::Default,
-          manager: CACacheManager::default(),
+          manager: CACacheManager::new(PathBuf::from("./cache"), false),
           options: HttpCacheOptions::default(),
         }))
         .build();
@@ -57,7 +61,7 @@ http-cache-reqwest = { version = "1.0", features = ["streaming"] }
 
 ```rust
 use http_cache::StreamingManager;
-use http_cache_reqwest::StreamingCache;
+use http_cache_reqwest::{StreamingCache, CacheMode};
 use reqwest::Client;
 use reqwest_middleware::ClientBuilder;
 use std::path::PathBuf;
@@ -66,9 +70,9 @@ use futures_util::StreamExt;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Create streaming cache manager
-    let cache_manager = StreamingManager::new(PathBuf::from("./cache"), true);
-    let streaming_cache = StreamingCache::new(cache_manager);
-    
+    let cache_manager = StreamingManager::new(PathBuf::from("./cache"));
+    let streaming_cache = StreamingCache::new(cache_manager, CacheMode::Default);
+
     // Build client with streaming cache
     let client = ClientBuilder::new(Client::new())
         .with(streaming_cache)
@@ -117,13 +121,14 @@ This ensures that your application continues to work seamlessly even when using 
 use reqwest::Client;
 use reqwest_middleware::ClientBuilder;
 use http_cache_reqwest::{Cache, CacheMode, CACacheManager, HttpCache, HttpCacheOptions};
+use std::path::PathBuf;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let client = ClientBuilder::new(Client::new())
         .with(Cache(HttpCache {
             mode: CacheMode::Default,
-            manager: CACacheManager::default(),
+            manager: CACacheManager::new(PathBuf::from("./cache"), false),
             options: HttpCacheOptions::default(),
         }))
         .build();
@@ -152,13 +157,14 @@ use reqwest_middleware::ClientBuilder;
 use http_cache_reqwest::{Cache, CacheMode, CACacheManager, HttpCache, HttpCacheOptions};
 use futures_util::stream;
 use bytes::Bytes;
+use std::path::PathBuf;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let client = ClientBuilder::new(Client::new())
         .with(Cache(HttpCache {
             mode: CacheMode::Default,
-            manager: CACacheManager::default(),
+            manager: CACacheManager::new(PathBuf::from("./cache"), false),
             options: HttpCacheOptions::default(),
         }))
         .build();

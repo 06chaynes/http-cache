@@ -21,7 +21,7 @@ http-cache = { version = "1.0", features = ["streaming", "streaming-smol"] }
 ## Basic Usage
 
 ```rust
-use http_cache::{StreamingManager, StreamingBody, HttpStreamingCache};
+use http_cache::StreamingManager;
 use std::path::PathBuf;
 
 #[tokio::main]
@@ -29,10 +29,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create a file-based streaming cache manager
     let cache_dir = PathBuf::from("./streaming-cache");
     let manager = StreamingManager::new(cache_dir);
-    
-    // Use with streaming cache
-    let cache = HttpStreamingCache::new(manager);
-    
+
+    // Use with http-cache-tower's HttpCacheStreamingLayer
+    // or http-cache-reqwest's StreamingCache
+
     Ok(())
 }
 ```
@@ -42,7 +42,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 The streaming cache manager works with Tower's `HttpCacheStreamingLayer`:
 
 ```rust
-use http_cache::{StreamingManager, HttpCacheStreamingLayer};
+use http_cache::StreamingManager;
+use http_cache_tower::HttpCacheStreamingLayer;
 use tower::{Service, ServiceExt};
 use http::{Request, Response, StatusCode};
 use http_body_util::Full;
@@ -135,6 +136,7 @@ let cached_response = manager.put(
     response,
     policy,
     url,
+    None, // optional metadata
 ).await?;
 
 println!("Cached response without loading into memory!");

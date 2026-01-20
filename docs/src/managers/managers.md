@@ -10,7 +10,11 @@ The following backend cache manager implementations are provided by this crate:
 
 [`moka`](https://github.com/moka-rs/moka) is a fast, concurrent cache library inspired by the Caffeine library for Java. Provides in-memory caching with traditional buffering.
 
-## [quick_cache](./quick_cache.md)
+## [foyer](./foyer.md)
+
+[`foyer`](https://github.com/foyer-rs/foyer) is a hybrid in-memory + disk cache that provides configurable eviction strategies (w-TinyLFU, S3-FIFO, SIEVE), optional disk storage, request deduplication, and Tokio-native async operations.
+
+## [quick_cache](./quick-cache.md)
 
 [`quick_cache`](https://github.com/arthurprs/quick-cache) is a lightweight and high performance concurrent cache optimized for low cache overhead. Provides traditional buffered caching operations.
 

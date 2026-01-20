@@ -106,7 +106,7 @@ Server-side caches implement **shared cache** semantics as defined in RFC 7234:
 - Responses with `Cache-Control: no-store` (sensitive)
 - Responses with `Cache-Control: no-cache` (requires revalidation)
 - Non-2xx status codes (errors)
-- Responses with `Authorization` header (unless explicitly allowed)
+- Requests with `Authorization` header (unless response explicitly allows via `public`, `s-maxage`, or `must-revalidate`)
 
 ### Must Cache Correctly
 

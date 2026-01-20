@@ -102,7 +102,9 @@ pub struct CacheMetadata {
 }
 ```
 
-This struct derives [serde](https://github.com/serde-rs/serde) Deserialize and Serialize to ease the serialization and deserialization with JSON for the streaming metadata, and [bincode](https://github.com/bincode-org/bincode) for the traditional Store struct.
+This struct derives [serde](https://github.com/serde-rs/serde) Deserialize and Serialize to ease the serialization and deserialization with JSON for the streaming metadata, and [postcard](https://github.com/jamesmunns/postcard) for the traditional Store struct.
+
+**Important:** The `bincode` serialization format has been deprecated due to RUSTSEC-2025-0141 (bincode is unmaintained). New implementations should use `postcard` instead. The library still supports bincode through legacy feature flags (`manager-cacache-bincode`, `manager-moka-bincode`) for backward compatibility, but these will be removed in the next major version.
 
 ### Part Two: Implementing the traditional `CacheManager` trait
 
@@ -126,7 +128,7 @@ impl CacheManager for CACacheManager {
         cache_key: &str,
     ) -> Result<Option<(HttpResponse, CachePolicy)>> {
         let store: Store = match cacache::read(&self.path, cache_key).await {
-            Ok(d) => bincode::deserialize(&d)?,
+            Ok(d) => postcard::from_bytes(&d)?,
             Err(_e) => {
                 return Ok(None);
             }
@@ -141,7 +143,7 @@ impl CacheManager for CACacheManager {
         policy: CachePolicy,
     ) -> Result<HttpResponse> {
         let data = Store { response, policy };
-        let bytes = bincode::serialize(&data)?;
+        let bytes = postcard::to_allocvec(&data)?;
         cacache::write(&self.path, cache_key, bytes).await?;
         Ok(data.response)
     }
@@ -273,6 +275,7 @@ async fn put<B>(
     response: Response<B>,
     policy: CachePolicy,
     _request_url: Url,
+    _metadata: Option<Vec<u8>>,
 ) -> Result<Response<Self::Body>>
 where
     B: http_body::Body + Send + 'static,

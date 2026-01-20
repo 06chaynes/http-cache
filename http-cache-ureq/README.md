@@ -29,18 +29,19 @@ cargo add http-cache-ureq
 
 ```rust
 use http_cache_ureq::{CACacheManager, CachedAgent};
+use std::path::PathBuf;
 
 #[smol_macros::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let client = CachedAgent::builder()
-        .cache_manager(CACacheManager::default())
+        .cache_manager(CACacheManager::new(PathBuf::from("./cache"), false))
         .build()?;
-        
+
     let response = client
         .get("https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching")
         .call()
         .await?;
-        
+
     println!("Status: {}", response.status());
     Ok(())
 }
@@ -52,10 +53,11 @@ The `CachedAgent` wraps ureq's functionality while providing transparent HTTP ca
 
 ```rust
 use http_cache_ureq::{CACacheManager, CachedAgent};
+use std::path::PathBuf;
 
 // Create a cached agent with default settings
 let client = CachedAgent::builder()
-    .cache_manager(CACacheManager::default())
+    .cache_manager(CACacheManager::new(PathBuf::from("./cache"), false))
     .build()?;
 
 // Use it just like a regular ureq agent
@@ -68,8 +70,10 @@ The following features are available. By default `manager-cacache` is enabled.
 
 - `manager-cacache` (default): enable [cacache](https://github.com/zkat/cacache-rs), a high-performance disk cache, backend manager.
 - `manager-moka` (disabled): enable [moka](https://github.com/moka-rs/moka), a high-performance in-memory cache, backend manager.
+- `manager-foyer` (disabled): enable [foyer](https://github.com/foyer-rs/foyer), a hybrid in-memory + disk cache, backend manager.
 - `json` (disabled): enable JSON support via ureq's json feature.
-- `rate-limiting` (disabled): enable rate limiting functionality.
+- `rate-limiting` (disabled): enable cache-aware rate limiting functionality.
+- `url-ada` (disabled): enable ada-url for URL parsing.
 
 ## Documentation
 

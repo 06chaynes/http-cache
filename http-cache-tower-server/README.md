@@ -41,6 +41,7 @@ By default, `manager-cacache` is enabled.
 
 - `manager-cacache` (default): Enable [cacache](https://github.com/zkat/cacache-rs) disk-based cache backend
 - `manager-moka`: Enable [moka](https://github.com/moka-rs/moka) in-memory cache backend
+- `manager-foyer`: Enable [foyer](https://github.com/foyer-rs/foyer) hybrid in-memory + disk cache backend
 
 ## Quick Start
 
@@ -50,6 +51,7 @@ By default, `manager-cacache` is enabled.
 use axum::{Router, routing::get, response::IntoResponse};
 use http_cache_tower_server::ServerCacheLayer;
 use http_cache::CACacheManager;
+use std::path::PathBuf;
 
 async fn expensive_handler() -> impl IntoResponse {
     // Simulate expensive operation
@@ -65,7 +67,7 @@ async fn expensive_handler() -> impl IntoResponse {
 #[tokio::main]
 async fn main() {
     // Create cache manager
-    let manager = CACacheManager::new("./cache", false);
+    let manager = CACacheManager::new(PathBuf::from("./cache"), false);
 
     // Create router with cache layer
     let app = Router::new()
@@ -396,7 +398,7 @@ cargo run --example axum_basic --features manager-cacache
 
 ## Minimum Supported Rust Version (MSRV)
 
-1.82.0
+1.85.0
 
 ## Contributing
 

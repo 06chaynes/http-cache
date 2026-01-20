@@ -12,7 +12,10 @@ cargo add http-cache-tower
 
 - `manager-cacache`: (default) Enables the [`CACacheManager`](https://docs.rs/http-cache/latest/http_cache/struct.CACacheManager.html) backend cache manager.
 - `manager-moka`: Enables the [`MokaManager`](https://docs.rs/http-cache/latest/http_cache/struct.MokaManager.html) backend cache manager.
+- `manager-foyer`: Enables the [`FoyerManager`](https://docs.rs/http-cache/latest/http_cache/struct.FoyerManager.html) backend cache manager.
 - `streaming`: Enables streaming cache support for memory-efficient handling of large response bodies.
+- `rate-limiting`: Enables cache-aware rate limiting functionality.
+- `url-ada`: Enables ada-url for URL parsing.
 
 ## Basic Usage
 
@@ -115,10 +118,11 @@ use http_cache::CACacheManager;
 use hyper_util::client::legacy::Client;
 use hyper_util::rt::TokioExecutor;
 use tower::{ServiceBuilder, ServiceExt};
+use std::path::PathBuf;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let cache_manager = CACacheManager::default();
+    let cache_manager = CACacheManager::new(PathBuf::from("./cache"), false);
     let cache_layer = HttpCacheLayer::new(cache_manager);
 
     let client = Client::builder(TokioExecutor::new()).build_http();
