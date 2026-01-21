@@ -436,7 +436,10 @@ pub use error::{
     HttpCacheError, HttpCacheResult, Result, StreamingError,
 };
 
-#[cfg(feature = "manager-cacache")]
+#[cfg(any(
+    feature = "manager-cacache",
+    feature = "manager-cacache-bincode"
+))]
 pub use managers::cacache::CACacheManager;
 
 #[cfg(feature = "streaming")]

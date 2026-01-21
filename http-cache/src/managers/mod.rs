@@ -1,4 +1,4 @@
-#[cfg(feature = "manager-cacache")]
+#[cfg(any(feature = "manager-cacache", feature = "manager-cacache-bincode"))]
 pub mod cacache;
 
 #[cfg(feature = "manager-foyer")]
