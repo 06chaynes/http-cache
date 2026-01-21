@@ -275,6 +275,22 @@
 //! - `with-http-types` (disabled): enable [http-types](https://github.com/http-rs/http-types)
 //! type conversion support
 //!
+//! ### URL Implementation Features
+//!
+//! Exactly one URL implementation must be enabled. These features are **mutually exclusive**:
+//!
+//! - `url-standard` (default): uses the [url](https://github.com/servo/rust-url) crate.
+//!   Note: This brings in the `idna` crate which has a Unicode license.
+//! - `url-ada` (disabled): uses [ada-url](https://github.com/nickelc/ada-url) for WHATWG-compliant
+//!   URL parsing without the Unicode/IDNA license dependency.
+//!
+//! If you need to avoid the Unicode license, use `url-ada`:
+//!
+//! ```toml
+//! [dependencies]
+//! http-cache = { version = "1.0", default-features = false, features = ["manager-cacache", "url-ada"] }
+//! ```
+//!
 //! ### Legacy bincode features (deprecated)
 //!
 //! These features are deprecated due to [RUSTSEC-2025-0141](https://rustsec.org/advisories/RUSTSEC-2025-0141)
@@ -294,6 +310,14 @@
 //! - [`http-cache-reqwest`](https://docs.rs/http-cache-reqwest) for reqwest client middleware
 //! - [`http-cache-surf`](https://docs.rs/http-cache-surf) for surf client middleware  
 //! - [`http-cache-tower`](https://docs.rs/http-cache-tower) for tower service middleware
+
+// URL feature validation - exactly one URL implementation must be enabled
+#[cfg(all(feature = "url-standard", feature = "url-ada"))]
+compile_error!("features `url-standard` and `url-ada` are mutually exclusive");
+
+#[cfg(not(any(feature = "url-standard", feature = "url-ada")))]
+compile_error!("either feature `url-standard` or `url-ada` must be enabled");
+
 mod body;
 mod error;
 mod managers;

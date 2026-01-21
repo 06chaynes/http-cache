@@ -5,83 +5,83 @@
 # Run tests on all crates with proper feature combinations using nextest
 @test:
     echo "----------\nCore library (default features):\n"
-    cd http-cache && cargo nextest run --no-default-features --features manager-cacache,with-http-types,manager-moka,streaming-tokio,http-headers-compat
+    cd http-cache && cargo nextest run --no-default-features --features manager-cacache,with-http-types,manager-moka,streaming-tokio,http-headers-compat,url-standard
     echo "\n----------\nCore library (with rate-limiting):\n"
-    cd http-cache && cargo nextest run --no-default-features --features manager-cacache,with-http-types,manager-moka,streaming-tokio,rate-limiting,http-headers-compat
+    cd http-cache && cargo nextest run --no-default-features --features manager-cacache,with-http-types,manager-moka,streaming-tokio,rate-limiting,http-headers-compat,url-standard
     echo "\n----------\nCore library (with foyer):\n"
-    cd http-cache && cargo nextest run --no-default-features --features manager-foyer,with-http-types,streaming-tokio,http-headers-compat
+    cd http-cache && cargo nextest run --no-default-features --features manager-foyer,with-http-types,streaming-tokio,http-headers-compat,url-standard
     echo "\n----------\nCore library (no http-headers-compat):\n"
-    cd http-cache && cargo nextest run --no-default-features --features manager-cacache,with-http-types,manager-moka,streaming-tokio
+    cd http-cache && cargo nextest run --no-default-features --features manager-cacache,with-http-types,manager-moka,streaming-tokio,url-standard
     echo "\n----------\nCore library (with url-ada):\n"
     cd http-cache && cargo nextest run --no-default-features --features manager-cacache,with-http-types,manager-moka,streaming-tokio,url-ada
     echo "\n----------\nReqwest middleware:\n"
-    cd http-cache-reqwest && cargo nextest run --all-features
+    cd http-cache-reqwest && cargo nextest run --no-default-features --features manager-cacache,manager-moka,manager-foyer,streaming,rate-limiting,http-headers-compat,url-standard
     echo "\n----------\nReqwest middleware (with url-ada):\n"
     cd http-cache-reqwest && cargo nextest run --no-default-features --features manager-cacache,url-ada
     echo "\n----------\nSurf middleware:\n"
-    cd http-cache-surf && cargo nextest run --all-features
+    cd http-cache-surf && cargo nextest run --no-default-features --features manager-cacache,manager-moka,manager-foyer,rate-limiting,http-headers-compat,url-standard
     echo "\n----------\nUreq middleware:\n"
-    cd http-cache-ureq && cargo nextest run --no-default-features --features manager-cacache
-    cd http-cache-ureq && cargo nextest run --all-features
+    cd http-cache-ureq && cargo nextest run --no-default-features --features manager-cacache,url-standard
+    cd http-cache-ureq && cargo nextest run --no-default-features --features manager-cacache,manager-moka,manager-foyer,json,rate-limiting,http-headers-compat,url-standard
     echo "\n----------\nUreq middleware (with url-ada):\n"
     cd http-cache-ureq && cargo nextest run --no-default-features --features manager-cacache,url-ada
     echo "\n----------\nTower middleware:\n"
-    cd http-cache-tower && cargo nextest run --all-features
+    cd http-cache-tower && cargo nextest run --no-default-features --features manager-cacache,manager-moka,manager-foyer,streaming,rate-limiting,http-headers-compat,url-standard
     echo "\n----------\nTower server middleware:\n"
-    cd http-cache-tower-server && cargo nextest run --all-features
+    cd http-cache-tower-server && cargo nextest run --no-default-features --features manager-cacache,manager-moka,manager-foyer,http-headers-compat,streaming,rate-limiting,url-standard
     echo "\n----------\nQuickcache middleware:\n"
-    cd http-cache-quickcache && cargo nextest run --all-features
+    cd http-cache-quickcache && cargo nextest run --no-default-features --features http-headers-compat,url-standard
 
 # Run doctests on all crates with proper feature combinations
 @doctest:
     echo "----------\nCore library (default features):\n"
-    cd http-cache && cargo test --doc --no-default-features --features manager-cacache,with-http-types,manager-moka,streaming-tokio,http-headers-compat
+    cd http-cache && cargo test --doc --no-default-features --features manager-cacache,with-http-types,manager-moka,streaming-tokio,http-headers-compat,url-standard
     echo "\n----------\nCore library (with rate-limiting):\n"
-    cd http-cache && cargo test --doc --no-default-features --features manager-cacache,with-http-types,manager-moka,streaming-tokio,rate-limiting,http-headers-compat
+    cd http-cache && cargo test --doc --no-default-features --features manager-cacache,with-http-types,manager-moka,streaming-tokio,rate-limiting,http-headers-compat,url-standard
     echo "\n----------\nCore library (with foyer):\n"
-    cd http-cache && cargo test --doc --no-default-features --features manager-foyer,with-http-types,streaming-tokio,http-headers-compat
+    cd http-cache && cargo test --doc --no-default-features --features manager-foyer,with-http-types,streaming-tokio,http-headers-compat,url-standard
     echo "\n----------\nReqwest middleware:\n"
-    cd http-cache-reqwest && cargo test --doc --all-features
+    cd http-cache-reqwest && cargo test --doc --no-default-features --features manager-cacache,manager-moka,manager-foyer,streaming,rate-limiting,http-headers-compat,url-standard
     echo "\n----------\nSurf middleware:\n"
-    cd http-cache-surf && cargo test --doc --all-features
+    cd http-cache-surf && cargo test --doc --no-default-features --features manager-cacache,manager-moka,manager-foyer,rate-limiting,http-headers-compat,url-standard
     echo "\n----------\nUreq middleware:\n"
-    cd http-cache-ureq && cargo test --doc --no-default-features --features manager-cacache
-    cd http-cache-ureq && cargo test --doc --all-features
+    cd http-cache-ureq && cargo test --doc --no-default-features --features manager-cacache,url-standard
+    cd http-cache-ureq && cargo test --doc --no-default-features --features manager-cacache,manager-moka,manager-foyer,json,rate-limiting,http-headers-compat,url-standard
     echo "\n----------\nTower middleware:\n"
-    cd http-cache-tower && cargo test --doc --all-features
+    cd http-cache-tower && cargo test --doc --no-default-features --features manager-cacache,manager-moka,manager-foyer,streaming,rate-limiting,http-headers-compat,url-standard
     echo "\n----------\nTower server middleware:\n"
-    cd http-cache-tower-server && cargo test --doc --all-features
+    cd http-cache-tower-server && cargo test --doc --no-default-features --features manager-cacache,manager-moka,manager-foyer,http-headers-compat,streaming,rate-limiting,url-standard
     echo "\n----------\nQuickcache middleware:\n"
-    cd http-cache-quickcache && cargo test --doc --all-features
+    cd http-cache-quickcache && cargo test --doc --no-default-features --features http-headers-compat,url-standard
 
 @check:
     echo "----------\nCore library (default features):\n"
-    cd http-cache && cargo check --no-default-features --features manager-cacache,with-http-types,manager-moka,streaming-tokio,http-headers-compat
+    cd http-cache && cargo check --no-default-features --features manager-cacache,with-http-types,manager-moka,streaming-tokio,http-headers-compat,url-standard
     echo "\n----------\nCore library (with rate-limiting):\n"
-    cd http-cache && cargo check --no-default-features --features manager-cacache,with-http-types,manager-moka,streaming-tokio,rate-limiting,http-headers-compat
+    cd http-cache && cargo check --no-default-features --features manager-cacache,with-http-types,manager-moka,streaming-tokio,rate-limiting,http-headers-compat,url-standard
     echo "\n----------\nCore library (with foyer):\n"
-    cd http-cache && cargo check --no-default-features --features manager-foyer,with-http-types,streaming-tokio,http-headers-compat
+    cd http-cache && cargo check --no-default-features --features manager-foyer,with-http-types,streaming-tokio,http-headers-compat,url-standard
     echo "\n----------\nCore library (no http-headers-compat):\n"
-    cd http-cache && cargo check --no-default-features --features manager-cacache,with-http-types,manager-moka,streaming-tokio
+    cd http-cache && cargo check --no-default-features --features manager-cacache,with-http-types,manager-moka,streaming-tokio,url-standard
     echo "\n----------\nCore library (with url-ada):\n"
     cd http-cache && cargo check --no-default-features --features manager-cacache,with-http-types,manager-moka,streaming-tokio,url-ada
     echo "\n----------\nReqwest middleware:\n"
-    cd http-cache-reqwest && cargo check --all-features
+    cd http-cache-reqwest && cargo check --no-default-features --features manager-cacache,manager-moka,manager-foyer,streaming,rate-limiting,http-headers-compat,url-standard
     echo "\n----------\nReqwest middleware (with url-ada):\n"
     cd http-cache-reqwest && cargo check --no-default-features --features manager-cacache,url-ada
     echo "\n----------\nSurf middleware:\n"
-    cd http-cache-surf && cargo check --all-features
+    cd http-cache-surf && cargo check --no-default-features --features manager-cacache,manager-moka,manager-foyer,rate-limiting,http-headers-compat,url-standard
     echo "\n----------\nUreq middleware:\n"
-    cd http-cache-ureq && cargo check --no-default-features --features manager-cacache
-    cd http-cache-ureq && cargo check --all-features
+    cd http-cache-ureq && cargo check --no-default-features --features manager-cacache,url-standard
+    cd http-cache-ureq && cargo check --no-default-features --features manager-cacache,manager-moka,manager-foyer,json,rate-limiting,http-headers-compat,url-standard
     echo "\n----------\nUreq middleware (with url-ada):\n"
     cd http-cache-ureq && cargo check --no-default-features --features manager-cacache,url-ada
     echo "\n----------\nTower middleware:\n"
-    cd http-cache-tower && cargo check --all-features
+    cd http-cache-tower && cargo check --no-default-features --features manager-cacache,manager-moka,manager-foyer,streaming,rate-limiting,http-headers-compat,url-standard
     echo "\n----------\nTower server middleware:\n"
-    cd http-cache-tower-server && cargo check --all-features
+    cd http-cache-tower-server && cargo check --no-default-features --features manager-cacache,manager-moka,manager-foyer,http-headers-compat,streaming,rate-limiting,url-standard
     echo "\n----------\nQuickcache middleware:\n"
-    cd http-cache-quickcache && cargo check --all-features
+    cd http-cache-quickcache && cargo check --no-default-features --features http-headers-compat,url-standard
 
 
 # Run benchmarks with `cargo bench`
@@ -132,31 +132,31 @@ changelog TAG:
 # Lint all crates with clippy and check formatting
 @lint:
     echo "----------\nCore library (default features):\n"
-    cd http-cache && cargo clippy --lib --tests --all-targets --no-default-features --features manager-cacache,with-http-types,manager-moka,streaming-tokio,http-headers-compat -- -D warnings
+    cd http-cache && cargo clippy --lib --tests --all-targets --no-default-features --features manager-cacache,with-http-types,manager-moka,streaming-tokio,http-headers-compat,url-standard -- -D warnings
     echo "\n----------\nCore library (with rate-limiting):\n"
-    cd http-cache && cargo clippy --lib --tests --all-targets --no-default-features --features manager-cacache,with-http-types,manager-moka,streaming-tokio,rate-limiting,http-headers-compat -- -D warnings
+    cd http-cache && cargo clippy --lib --tests --all-targets --no-default-features --features manager-cacache,with-http-types,manager-moka,streaming-tokio,rate-limiting,http-headers-compat,url-standard -- -D warnings
     echo "\n----------\nCore library (with foyer):\n"
-    cd http-cache && cargo clippy --lib --tests --all-targets --no-default-features --features manager-foyer,with-http-types,streaming-tokio,http-headers-compat -- -D warnings
+    cd http-cache && cargo clippy --lib --tests --all-targets --no-default-features --features manager-foyer,with-http-types,streaming-tokio,http-headers-compat,url-standard -- -D warnings
     echo "\n----------\nCore library (no http-headers-compat):\n"
-    cd http-cache && cargo clippy --lib --tests --all-targets --no-default-features --features manager-cacache,with-http-types,manager-moka,streaming-tokio -- -D warnings
+    cd http-cache && cargo clippy --lib --tests --all-targets --no-default-features --features manager-cacache,with-http-types,manager-moka,streaming-tokio,url-standard -- -D warnings
     echo "\n----------\nCore library (with url-ada):\n"
     cd http-cache && cargo clippy --lib --tests --all-targets --no-default-features --features manager-cacache,with-http-types,manager-moka,streaming-tokio,url-ada -- -D warnings
     echo "\n----------\nReqwest middleware:\n"
-    cd http-cache-reqwest && cargo clippy --lib --tests --all-targets --all-features -- -D warnings
+    cd http-cache-reqwest && cargo clippy --lib --tests --all-targets --no-default-features --features manager-cacache,manager-moka,manager-foyer,streaming,rate-limiting,http-headers-compat,url-standard -- -D warnings
     echo "\n----------\nReqwest middleware (with url-ada):\n"
     cd http-cache-reqwest && cargo clippy --lib --tests --all-targets --no-default-features --features manager-cacache,url-ada -- -D warnings
     echo "\n----------\nSurf middleware:\n"
-    cd http-cache-surf && cargo clippy --lib --tests --all-targets --all-features -- -D warnings
+    cd http-cache-surf && cargo clippy --lib --tests --all-targets --no-default-features --features manager-cacache,manager-moka,manager-foyer,rate-limiting,http-headers-compat,url-standard -- -D warnings
     echo "\n----------\nUreq middleware:\n"
-    cd http-cache-ureq && cargo clippy --lib --tests --all-targets --all-features -- -D warnings
+    cd http-cache-ureq && cargo clippy --lib --tests --all-targets --no-default-features --features manager-cacache,manager-moka,manager-foyer,json,rate-limiting,http-headers-compat,url-standard -- -D warnings
     echo "\n----------\nUreq middleware (with url-ada):\n"
     cd http-cache-ureq && cargo clippy --lib --tests --all-targets --no-default-features --features manager-cacache,url-ada -- -D warnings
     echo "\n----------\nTower middleware:\n"
-    cd http-cache-tower && cargo clippy --lib --tests --all-targets --all-features -- -D warnings
+    cd http-cache-tower && cargo clippy --lib --tests --all-targets --no-default-features --features manager-cacache,manager-moka,manager-foyer,streaming,rate-limiting,http-headers-compat,url-standard -- -D warnings
     echo "\n----------\nTower server middleware:\n"
-    cd http-cache-tower-server && cargo clippy --lib --tests --all-targets --all-features -- -D warnings
+    cd http-cache-tower-server && cargo clippy --lib --tests --all-targets --no-default-features --features manager-cacache,manager-moka,manager-foyer,http-headers-compat,streaming,rate-limiting,url-standard -- -D warnings
     echo "\n----------\nQuickcache middleware:\n"
-    cd http-cache-quickcache && cargo clippy --lib --tests --all-targets --all-features -- -D warnings
+    cd http-cache-quickcache && cargo clippy --lib --tests --all-targets --no-default-features --features http-headers-compat,url-standard -- -D warnings
     echo "\n----------\nFormatting check:\n"
     cargo fmt -- --check
 

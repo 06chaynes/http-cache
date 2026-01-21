@@ -21,7 +21,6 @@ http = "1.2.0"
 http-cache-semantics = "2.1.0"
 http-types = "2.12.0"
 surf = { version = "2.3.2", default-features = false }
-url = { version = "2.5.4", features = ["serde"] }
 
 [dependencies.http-cache]
 path = "../http-cache"
@@ -42,11 +41,13 @@ name = "surf_basic"
 required-features = ["manager-cacache"]
 
 [features]
-default = ["manager-cacache"]
+default = ["manager-cacache", "url-standard"]
 manager-cacache = ["http-cache/manager-cacache"]
 manager-moka = ["http-cache/manager-moka"]
 manager-foyer = ["http-cache/manager-foyer"]
 rate-limiting = ["http-cache/rate-limiting"]
+url-standard = ["http-cache/url-standard"]
+url-ada = ["http-cache/url-ada"]
 http-headers-compat = ["http-cache/http-headers-compat"]
 manager-cacache-bincode = ["http-cache/manager-cacache-bincode"]
 manager-moka-bincode = ["http-cache/manager-moka-bincode"]

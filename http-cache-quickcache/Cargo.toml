@@ -20,7 +20,6 @@ async-trait = "0.1.85"
 postcard = { version = "1.1", default-features = false, features = ["alloc"] }
 http-cache-semantics = "2.1.0"
 serde = { version = "1.0.217", features = ["derive"] }
-url = { version = "2.5.4", features = ["serde"] }
 quick_cache = "0.6.9"
 http = "1.2.0"
 
@@ -46,12 +45,15 @@ tower = "0.5.1"
 tower-http = { version = "0.6.2", features = ["trace"] }
 tower-service = "0.3.3"
 hyper = "1.5.1"
+url = { version = "2.5.4", features = ["serde"] }
 
 [dev-dependencies.http-cache-reqwest]
 path = "../http-cache-reqwest"
 
 [features]
-default = []
+default = ["url-standard"]
+url-standard = ["http-cache/url-standard"]
+url-ada = ["http-cache/url-ada"]
 http-headers-compat = ["http-cache/http-headers-compat"]
 
 [package.metadata.docs.rs]

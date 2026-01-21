@@ -41,7 +41,7 @@ lru = { version = "0.16.0", optional = true }
 dashmap = { version = "6.1.0", optional = true }
 smol = { version = "2.0.2", optional = true }
 tokio = { version = "1.44.0", features = ["fs", "io-util", "sync"], optional = true }
-url = { version = "2.5.4", features = ["serde"] }
+url = { version = "2.5.4", features = ["serde"], optional = true }
 ada-url = { version = "3", features = ["serde"], optional = true }
 cfg-if = { version = "1.0", optional = true }
 governor = { version = "0.10.1", optional = true }
@@ -57,8 +57,9 @@ macro_rules_attribute = "0.2.0"
 smol-macros = "0.1.1"
 
 [features]
-default = ["manager-cacache"]
+default = ["manager-cacache", "url-standard"]
 http-headers-compat = []
+url-standard = ["dep:url"]
 url-ada = ["dep:ada-url"]
 manager-cacache = ["cacache", "postcard", "tokio"]
 manager-moka = ["moka", "postcard"]

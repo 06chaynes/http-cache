@@ -42,8 +42,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - run: |
-          cargo test --all-targets --no-default-features --features manager-cacache
-          cargo test --all-targets --all-features
+          cargo test --all-targets --no-default-features --features manager-cacache,url-standard
+          cargo test --all-targets --no-default-features --features manager-cacache,manager-moka,manager-foyer,json,rate-limiting,http-headers-compat,url-standard
           cargo test --all-targets --no-default-features --features manager-cacache,url-ada
 
   clippy:
@@ -56,8 +56,8 @@ jobs:
         with:
           components: "clippy"
       - run: |
-          cargo clippy --lib --tests --all-targets --no-default-features --features manager-cacache -- -D warnings
-          cargo clippy --lib --tests --all-targets --all-features -- -D warnings
+          cargo clippy --lib --tests --all-targets --no-default-features --features manager-cacache,url-standard -- -D warnings
+          cargo clippy --lib --tests --all-targets --no-default-features --features manager-cacache,manager-moka,manager-foyer,json,rate-limiting,http-headers-compat,url-standard -- -D warnings
           cargo clippy --lib --tests --all-targets --no-default-features --features manager-cacache,url-ada -- -D warnings
 
   docs:
@@ -70,5 +70,5 @@ jobs:
         env:
           RUSTDOCFLAGS: --cfg docsrs -Dwarnings
       - run: |
-          cargo doc --no-deps --document-private-items
-          cargo test --doc --all-features
+          cargo doc --no-deps --document-private-items --no-default-features --features manager-cacache,manager-moka,manager-foyer,json,rate-limiting,http-headers-compat,url-standard
+          cargo test --doc --no-default-features --features manager-cacache,manager-moka,manager-foyer,json,rate-limiting,http-headers-compat,url-standard

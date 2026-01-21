@@ -271,6 +271,7 @@ impl From<http::status::InvalidStatusCode> for HttpCacheError {
     }
 }
 
+#[cfg(feature = "url-standard")]
 impl From<url::ParseError> for HttpCacheError {
     fn from(error: url::ParseError) -> Self {
         Self::Http(Box::new(error))
