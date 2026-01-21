@@ -1811,22 +1811,48 @@ mod streaming_tests {
                 .map(|v| v.to_str().unwrap())
                 .collect();
 
-            // Verify we got all 6 Vary headers, not just one
-            assert_eq!(
-                vary_values.len(),
-                6,
-                "Expected 6 Vary headers, got {}: {:?}",
-                vary_values.len(),
-                vary_values
-            );
+            // With http-headers-compat, headers are stored in legacy format where
+            // multiple values get joined with ", ". Without compat, we preserve
+            // separate header entries.
+            #[cfg(feature = "http-headers-compat")]
+            {
+                // In compat mode, all values are joined into one header
+                assert_eq!(
+                    vary_values.len(),
+                    1,
+                    "Expected 1 joined Vary header in compat mode, got {}: {:?}",
+                    vary_values.len(),
+                    vary_values
+                );
+                // The single value should contain all the original values
+                let joined = vary_values[0];
+                assert!(joined.contains("Prefer"));
+                assert!(joined.contains("Accept"));
+                assert!(joined.contains("Range"));
+                assert!(joined.contains("Accept-Encoding"));
+                assert!(joined.contains("Accept-Language"));
+                assert!(joined.contains("Accept-Datetime"));
+            }
 
-            // Verify all expected values are present
-            assert!(vary_values.contains(&"Prefer"));
-            assert!(vary_values.contains(&"Accept"));
-            assert!(vary_values.contains(&"Range"));
-            assert!(vary_values.contains(&"Accept-Encoding"));
-            assert!(vary_values.contains(&"Accept-Language"));
-            assert!(vary_values.contains(&"Accept-Datetime"));
+            #[cfg(not(feature = "http-headers-compat"))]
+            {
+                // Without compat, we preserve all 6 separate Vary headers
+                assert_eq!(
+                    vary_values.len(),
+                    6,
+                    "Expected 6 Vary headers, got {}: {:?}",
+                    vary_values.len(),
+                    vary_values
+                );
+
+                // Verify all expected values are present
+                assert!(vary_values.contains(&"Prefer"));
+                assert!(vary_values.contains(&"Accept"));
+                assert!(vary_values.contains(&"Range"));
+                assert!(vary_values.contains(&"Accept-Encoding"));
+                assert!(vary_values.contains(&"Accept-Language"));
+                assert!(vary_values.contains(&"Accept-Datetime"));
+            }
         }
 
         Ok(())

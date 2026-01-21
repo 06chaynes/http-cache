@@ -52,6 +52,7 @@ path = "../http-cache-reqwest"
 
 [features]
 default = []
+http-headers-compat = ["http-cache/http-headers-compat"]
 
 [package.metadata.docs.rs]
 all-features = true

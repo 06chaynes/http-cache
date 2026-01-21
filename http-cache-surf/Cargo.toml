@@ -47,6 +47,9 @@ manager-cacache = ["http-cache/manager-cacache"]
 manager-moka = ["http-cache/manager-moka"]
 manager-foyer = ["http-cache/manager-foyer"]
 rate-limiting = ["http-cache/rate-limiting"]
+http-headers-compat = ["http-cache/http-headers-compat"]
+manager-cacache-bincode = ["http-cache/manager-cacache-bincode"]
+manager-moka-bincode = ["http-cache/manager-moka-bincode"]
 
 [package.metadata.docs.rs]
 all-features = true

@@ -50,6 +50,9 @@ manager-foyer = ["http-cache/manager-foyer"]
 json = ["dep:serde_json", "ureq/json"]
 rate-limiting = ["http-cache/rate-limiting"]
 url-ada = ["http-cache/url-ada"]
+http-headers-compat = ["http-cache/http-headers-compat"]
+manager-cacache-bincode = ["http-cache/manager-cacache-bincode"]
+manager-moka-bincode = ["http-cache/manager-moka-bincode"]
 
 [package.metadata.docs.rs]
 all-features = true

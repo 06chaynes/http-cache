@@ -588,7 +588,8 @@ pub enum HttpHeaders {
     Legacy(HashMap<String, String>),
 }
 
-// Serialize as enum (needed for bincode to match deserialization)
+// Serialize directly as the inner HashMap (no enum variant wrapper)
+// This ensures compatibility: serialized data is just the raw HashMap
 impl Serialize for HttpHeaders {
     fn serialize<S>(
         &self,
@@ -597,50 +598,50 @@ impl Serialize for HttpHeaders {
     where
         S: Serializer,
     {
-        // Serialize the enum properly with variant tags
-        // This matches how RawHttpHeaders deserializes
-        match self {
-            HttpHeaders::Modern(modern) => serializer
-                .serialize_newtype_variant("HttpHeaders", 0, "Modern", modern),
-            #[cfg(feature = "http-headers-compat")]
-            HttpHeaders::Legacy(legacy) => serializer
-                .serialize_newtype_variant("HttpHeaders", 1, "Legacy", legacy),
-        }
-    }
-}
-
-// Deserialize: Need to handle enum variant properly for bincode
-impl<'de> Deserialize<'de> for HttpHeaders {
-    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        // Bincode serializes enums with a variant index
-        // We need to deserialize it properly as an enum
         #[cfg(feature = "http-headers-compat")]
         {
-            #[derive(Deserialize)]
-            enum RawHttpHeaders {
-                Modern(HashMap<String, Vec<String>>),
-                Legacy(HashMap<String, String>),
-            }
-
-            match RawHttpHeaders::deserialize(deserializer)? {
-                RawHttpHeaders::Modern(m) => Ok(HttpHeaders::Modern(m)),
-                RawHttpHeaders::Legacy(l) => Ok(HttpHeaders::Legacy(l)),
+            // Always serialize as Legacy format when compat is enabled
+            match self {
+                HttpHeaders::Modern(modern) => {
+                    // Convert Modern to Legacy format by joining values
+                    let legacy: HashMap<String, String> = modern
+                        .iter()
+                        .map(|(k, v)| (k.clone(), v.join(", ")))
+                        .collect();
+                    legacy.serialize(serializer)
+                }
+                HttpHeaders::Legacy(legacy) => legacy.serialize(serializer),
             }
         }
 
         #[cfg(not(feature = "http-headers-compat"))]
         {
-            #[derive(Deserialize)]
-            enum RawHttpHeaders {
-                Modern(HashMap<String, Vec<String>>),
+            match self {
+                HttpHeaders::Modern(modern) => modern.serialize(serializer),
             }
+        }
+    }
+}
 
-            match RawHttpHeaders::deserialize(deserializer)? {
-                RawHttpHeaders::Modern(m) => Ok(HttpHeaders::Modern(m)),
-            }
+// Deserialize directly as HashMap based on feature flag
+// With http-headers-compat: reads HashMap<String, String> (legacy alpha.2 format)
+// Without http-headers-compat: reads HashMap<String, Vec<String>> (modern format)
+impl<'de> Deserialize<'de> for HttpHeaders {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[cfg(feature = "http-headers-compat")]
+        {
+            let legacy = HashMap::<String, String>::deserialize(deserializer)?;
+            Ok(HttpHeaders::Legacy(legacy))
+        }
+
+        #[cfg(not(feature = "http-headers-compat"))]
+        {
+            let modern =
+                HashMap::<String, Vec<String>>::deserialize(deserializer)?;
+            Ok(HttpHeaders::Modern(modern))
         }
     }
 }
@@ -873,6 +874,7 @@ pub struct HttpResponse {
     /// HTTP response version
     pub version: HttpVersion,
     /// Metadata
+    #[serde(default)]
     pub metadata: Option<Vec<u8>>,
 }
 
