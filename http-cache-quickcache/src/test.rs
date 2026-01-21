@@ -6,7 +6,6 @@ use http_cache_reqwest::Cache;
 use http_cache_semantics::CachePolicy;
 use reqwest::Client;
 use reqwest_middleware::ClientBuilder;
-use url::Url;
 use wiremock::{matchers::method, Mock, MockServer, ResponseTemplate};
 
 use macro_rules_attribute::apply;
@@ -40,7 +39,7 @@ async fn quickcache() -> Result<()> {
         format!("{:?}", QuickManager::default()),
         "QuickManager { cache: \"Cache<String, Arc<Vec<u8>>>\", .. }",
     );
-    let url = Url::parse("http://example.com")?;
+    let url = url_parse("http://example.com")?;
     let manager = Arc::new(QuickManager::default());
     let http_res = HttpResponse {
         body: TEST_BODY.to_vec(),
@@ -93,7 +92,7 @@ async fn default_mode() -> Result<()> {
 
     // Try to load cached object
     let data =
-        CacheManager::get(&manager, &format!("{}:{}", GET, &Url::parse(&url)?))
+        CacheManager::get(&manager, &format!("{}:{}", GET, &url_parse(&url)?))
             .await?;
     assert!(data.is_some());
 
@@ -139,7 +138,7 @@ async fn default_mode_with_options() -> Result<()> {
     // Try to load cached object
     let data = http_cache::CacheManager::get(
         &manager,
-        &format!("{}:{}", GET, &Url::parse(&url)?),
+        &format!("{}:{}", GET, &url_parse(&url)?),
     )
     .await?;
     assert!(data.is_some());
@@ -169,7 +168,7 @@ async fn no_cache_mode() -> Result<()> {
     // Try to load cached object
     let data = http_cache::CacheManager::get(
         &manager,
-        &format!("{}:{}", GET, &Url::parse(&url)?),
+        &format!("{}:{}", GET, &url_parse(&url)?),
     )
     .await?;
     assert!(data.is_some());
@@ -211,7 +210,7 @@ async fn head_request_caching() -> Result<()> {
     // Try to load cached object - should use HEAD method in cache key
     let data = http_cache::CacheManager::get(
         &manager,
-        &format!("HEAD:{}", &Url::parse(&url)?),
+        &format!("HEAD:{}", &url_parse(&url)?),
     )
     .await?;
     assert!(data.is_some());
@@ -258,7 +257,7 @@ async fn put_request_invalidates_cache() -> Result<()> {
     // Verify it's cached
     let data = http_cache::CacheManager::get(
         &manager,
-        &format!("GET:{}", &Url::parse(&url)?),
+        &format!("GET:{}", &url_parse(&url)?),
     )
     .await?;
     assert!(data.is_some());
@@ -273,7 +272,7 @@ async fn put_request_invalidates_cache() -> Result<()> {
     // Verify cache was invalidated
     let data = http_cache::CacheManager::get(
         &manager,
-        &format!("GET:{}", &Url::parse(&url)?),
+        &format!("GET:{}", &url_parse(&url)?),
     )
     .await?;
     assert!(data.is_none());
@@ -315,7 +314,7 @@ async fn patch_request_invalidates_cache() -> Result<()> {
     // Verify it's cached
     let data = http_cache::CacheManager::get(
         &manager,
-        &format!("GET:{}", &Url::parse(&url)?),
+        &format!("GET:{}", &url_parse(&url)?),
     )
     .await?;
     assert!(data.is_some());
@@ -330,7 +329,7 @@ async fn patch_request_invalidates_cache() -> Result<()> {
     // Verify cache was invalidated
     let data = http_cache::CacheManager::get(
         &manager,
-        &format!("GET:{}", &Url::parse(&url)?),
+        &format!("GET:{}", &url_parse(&url)?),
     )
     .await?;
     assert!(data.is_none());
@@ -372,7 +371,7 @@ async fn delete_request_invalidates_cache() -> Result<()> {
     // Verify it's cached
     let data = http_cache::CacheManager::get(
         &manager,
-        &format!("GET:{}", &Url::parse(&url)?),
+        &format!("GET:{}", &url_parse(&url)?),
     )
     .await?;
     assert!(data.is_some());
@@ -387,7 +386,7 @@ async fn delete_request_invalidates_cache() -> Result<()> {
     // Verify cache was invalidated
     let data = http_cache::CacheManager::get(
         &manager,
-        &format!("GET:{}", &Url::parse(&url)?),
+        &format!("GET:{}", &url_parse(&url)?),
     )
     .await?;
     assert!(data.is_none());
@@ -425,7 +424,7 @@ async fn options_request_not_cached() -> Result<()> {
     // Verify it's not cached
     let data = http_cache::CacheManager::get(
         &manager,
-        &format!("OPTIONS:{}", &Url::parse(&url)?),
+        &format!("OPTIONS:{}", &url_parse(&url)?),
     )
     .await?;
     assert!(data.is_none());

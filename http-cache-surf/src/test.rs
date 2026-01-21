@@ -1,43 +1,8 @@
 use crate::{BadRequest, Cache, HttpCacheError};
 
 use http_cache::*;
-use http_types::{Method, Request};
-use std::str::FromStr;
-use std::sync::Arc;
 use surf::Client;
 use wiremock::{matchers::method, Mock, MockServer, ResponseTemplate};
-
-#[cfg(feature = "manager-moka")]
-use crate::MokaManager;
-
-pub(crate) fn build_mock(
-    cache_control_val: &str,
-    body: &[u8],
-    status: u16,
-    expect: u64,
-) -> Mock {
-    Mock::given(method(GET))
-        .respond_with(
-            ResponseTemplate::new(status)
-                .insert_header("cache-control", cache_control_val)
-                .set_body_bytes(body),
-        )
-        .expect(expect)
-}
-
-const GET: &str = "GET";
-
-const TEST_BODY: &[u8] = b"test";
-
-const CACHEABLE_PUBLIC: &str = "max-age=86400, public";
-
-const CACHEABLE_PRIVATE: &str = "max-age=86400, private";
-
-const MUST_REVALIDATE: &str = "public, must-revalidate";
-
-const HIT: &str = "HIT";
-
-const MISS: &str = "MISS";
 
 #[tokio::test]
 async fn test_non_cloneable_request_graceful_fallback() -> Result<()> {
@@ -113,6 +78,33 @@ fn test_errors() -> Result<()> {
 #[cfg(feature = "manager-moka")]
 mod with_moka {
     use super::*;
+    use crate::MokaManager;
+    use http_types::{Method, Request};
+    use std::str::FromStr;
+    use std::sync::Arc;
+
+    pub(crate) fn build_mock(
+        cache_control_val: &str,
+        body: &[u8],
+        status: u16,
+        expect: u64,
+    ) -> Mock {
+        Mock::given(method(GET))
+            .respond_with(
+                ResponseTemplate::new(status)
+                    .insert_header("cache-control", cache_control_val)
+                    .set_body_bytes(body),
+            )
+            .expect(expect)
+    }
+
+    const GET: &str = "GET";
+    const TEST_BODY: &[u8] = b"test";
+    const CACHEABLE_PUBLIC: &str = "max-age=86400, public";
+    const CACHEABLE_PRIVATE: &str = "max-age=86400, private";
+    const MUST_REVALIDATE: &str = "public, must-revalidate";
+    const HIT: &str = "HIT";
+    const MISS: &str = "MISS";
 
     #[tokio::test]
     async fn default_mode() -> Result<()> {

@@ -147,6 +147,8 @@ changelog TAG:
     cd http-cache-reqwest && cargo clippy --lib --tests --all-targets --no-default-features --features manager-cacache,url-ada -- -D warnings
     echo "\n----------\nSurf middleware:\n"
     cd http-cache-surf && cargo clippy --lib --tests --all-targets --no-default-features --features manager-cacache,manager-moka,manager-foyer,rate-limiting,http-headers-compat,url-standard -- -D warnings
+    echo "\n----------\nSurf middleware (with url-ada):\n"
+    cd http-cache-surf && cargo clippy --lib --tests --all-targets --no-default-features --features manager-cacache,url-ada -- -D warnings
     echo "\n----------\nUreq middleware:\n"
     cd http-cache-ureq && cargo clippy --lib --tests --all-targets --no-default-features --features manager-cacache,manager-moka,manager-foyer,json,rate-limiting,http-headers-compat,url-standard -- -D warnings
     echo "\n----------\nUreq middleware (with url-ada):\n"
@@ -157,6 +159,8 @@ changelog TAG:
     cd http-cache-tower-server && cargo clippy --lib --tests --all-targets --no-default-features --features manager-cacache,manager-moka,manager-foyer,http-headers-compat,streaming,rate-limiting,url-standard -- -D warnings
     echo "\n----------\nQuickcache middleware:\n"
     cd http-cache-quickcache && cargo clippy --lib --tests --all-targets --no-default-features --features http-headers-compat,url-standard -- -D warnings
+    echo "\n----------\nQuickcache middleware (with url-ada):\n"
+    cd http-cache-quickcache && cargo clippy --lib --tests --all-targets --no-default-features --features http-headers-compat,url-ada -- -D warnings
     echo "\n----------\nFormatting check:\n"
     cargo fmt -- --check
 

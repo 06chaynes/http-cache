@@ -49,11 +49,13 @@ url = { version = "2.5.4", features = ["serde"] }
 
 [dev-dependencies.http-cache-reqwest]
 path = "../http-cache-reqwest"
+default-features = false
+features = ["manager-cacache"]
 
 [features]
 default = ["url-standard"]
-url-standard = ["http-cache/url-standard"]
-url-ada = ["http-cache/url-ada"]
+url-standard = ["http-cache/url-standard", "http-cache-reqwest/url-standard"]
+url-ada = ["http-cache/url-ada", "http-cache-reqwest/url-ada"]
 http-headers-compat = ["http-cache/http-headers-compat"]
 
 [package.metadata.docs.rs]
