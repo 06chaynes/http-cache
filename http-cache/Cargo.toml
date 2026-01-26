@@ -20,7 +20,7 @@ async-trait = "0.1.85"
 bincode = { version = "1.3.3", optional = true }
 bytes = "1.8.0"
 cacache = { version = "13.1.0", default-features = false, features = ["tokio-runtime", "mmap"], optional = true }
-foyer = { version = "0.12", optional = true }
+foyer = { version = "0.22", optional = true }
 futures = "0.3.31"
 futures-util = { version = "0.3.31", optional = true }
 hex = "0.4.3"
