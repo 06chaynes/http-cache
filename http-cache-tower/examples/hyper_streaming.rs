@@ -71,9 +71,9 @@ impl Service<Request<Full<Bytes>>> for StreamingMockService {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let cache_dir = tempfile::tempdir().unwrap();
-    let streaming_manager =
-        StreamingManager::new(cache_dir.path().to_path_buf());
+    let streaming_manager = StreamingManager::with_temp_dir(1000)
+        .await
+        .expect("Failed to create streaming manager");
 
     // Create the streaming cache layer with cache status headers enabled
     let options =

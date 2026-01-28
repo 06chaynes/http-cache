@@ -109,12 +109,10 @@ async fn measure_cache_hit_memory_usage(
     payload_size: usize,
     is_streaming: bool,
 ) -> (usize, usize, usize) {
-    // Create a temporary directory for the cache
-    let temp_dir = tempfile::tempdir().unwrap();
-
     if is_streaming {
-        let file_cache_manager =
-            StreamingManager::new(temp_dir.path().to_path_buf());
+        let file_cache_manager = StreamingManager::with_temp_dir(1000)
+            .await
+            .expect("Failed to create streaming manager");
         let streaming_layer = HttpCacheStreamingLayer::new(file_cache_manager);
         let service = LargeResponseService::new(payload_size);
         let cached_service = streaming_layer.layer(service);
@@ -168,6 +166,7 @@ async fn measure_cache_hit_memory_usage(
             peak_after_consumption - initial_memory,
         )
     } else {
+        let temp_dir = tempfile::tempdir().unwrap();
         let cache_manager =
             CACacheManager::new(temp_dir.path().to_path_buf(), false);
         let cache_layer = HttpCacheLayer::new(cache_manager);

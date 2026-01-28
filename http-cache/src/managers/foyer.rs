@@ -18,18 +18,17 @@ use serde::{Deserialize, Serialize};
 ///
 /// ```rust,ignore
 /// use http_cache::FoyerManager;
-/// use foyer::{HybridCacheBuilder, Engine};
+/// use foyer::HybridCacheBuilder;
 /// use std::path::PathBuf;
 ///
 /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 /// // Build a hybrid cache with memory and disk storage
 /// let cache = HybridCacheBuilder::new()
 ///     .memory(64)
-///     .storage(Engine::Large)
-///     .with_device_options(
-///         foyer::DirectFsDeviceOptionsBuilder::new(PathBuf::from("./cache"))
+///     .storage()
+///     .with_device_config(
+///         foyer::DirectFsDeviceOptions::new(PathBuf::from("./cache"))
 ///             .with_capacity(256 * 1024 * 1024)
-///             .build()
 ///     )
 ///     .build()
 ///     .await?;
@@ -77,7 +76,7 @@ impl FoyerManager {
     pub async fn in_memory(capacity: usize) -> Result<Self> {
         let cache: HybridCache<String, Vec<u8>> = HybridCacheBuilder::new()
             .memory(capacity)
-            .storage(foyer::Engine::Large) // required to call build()
+            .storage()  // noop storage = memory-only mode
             .build()
             .await
             .map_err(|e| crate::HttpCacheError::cache(e.to_string()))?;

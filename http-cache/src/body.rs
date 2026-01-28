@@ -3,62 +3,69 @@
 //! This module provides the [`StreamingBody`] type which allows HTTP cache middleware
 //! to handle both cached (buffered) responses and streaming responses from upstream
 //! servers without requiring full buffering of large responses.
-//! This implementation provides efficient streaming capabilities for HTTP caching.
+//!
+//! # Variants
+//!
+//! - **Buffered**: Contains cached response data that can be sent immediately
+//! - **Streaming**: Wraps an upstream body for streaming responses
+//! - **File**: Streams from a cacache Reader in 64KB chunks (only with `streaming` feature)
+//!
+//! # Example
+//!
+//! ```rust
+//! use http_cache::StreamingBody;
+//! use bytes::Bytes;
+//! use http_body_util::Full;
+//!
+//! // Cached response - sent immediately from memory
+//! let cached: StreamingBody<Full<Bytes>> = StreamingBody::buffered(Bytes::from("Hello!"));
+//!
+//! // Streaming response - passed through from upstream
+//! let upstream = Full::new(Bytes::from("From upstream"));
+//! let streaming: StreamingBody<Full<Bytes>> = StreamingBody::streaming(upstream);
+//! ```
 
+// Note: pin_project_lite does not support doc comments on enum variant fields,
+// so we allow missing_docs for the generated enum variants and fields.
+// The module-level and enum-level documentation provides full coverage.
 #![allow(missing_docs)]
 
 use std::{
+    fmt,
     pin::Pin,
     task::{Context, Poll},
 };
 
 use bytes::Bytes;
+#[cfg(feature = "streaming")]
+use bytes::BytesMut;
 use http_body::{Body, Frame};
 use pin_project_lite::pin_project;
 
 use crate::error::StreamingError;
 
+/// Default buffer size for streaming from disk (64KB).
+///
+/// This size is optimized for modern SSDs and NVMe drives, reducing syscall
+/// overhead while maintaining reasonable memory usage.
+#[cfg(feature = "streaming")]
+const STREAM_BUFFER_SIZE: usize = 64 * 1024;
+
+// When streaming feature is enabled, include the File variant
 #[cfg(feature = "streaming")]
 pin_project! {
-    /// A body type that can represent either buffered data from cache, streaming body from upstream,
-    /// or streaming from a file for file-based caching.
+    /// A body type that can represent either buffered data from cache or streaming body from upstream.
     ///
     /// This enum allows the HTTP cache middleware to efficiently handle:
     /// - Cached responses (buffered data)
     /// - Cache misses (streaming from upstream)
-    /// - File-based cached responses (streaming from disk)
+    /// - Disk-cached responses (streaming from file)
     ///
     /// # Variants
     ///
-    /// - [`Buffered`](StreamingBody::Buffered): Contains cached response data that can be sent immediately
-    /// - [`Streaming`](StreamingBody::Streaming): Wraps an upstream body for streaming responses
-    /// - [`File`](StreamingBody::File): Streams directly from a file for zero-copy caching
-    ///
-    /// # Example
-    ///
-    /// ```rust
-    /// use http_cache::StreamingBody;
-    /// use bytes::Bytes;
-    /// use http_body_util::Full;
-    ///
-    /// // Cached response - sent immediately from memory
-    /// let cached: StreamingBody<Full<Bytes>> = StreamingBody::buffered(Bytes::from("Hello from cache!"));
-    ///
-    /// // Streaming response - passed through from upstream
-    /// # struct MyBody;
-    /// # impl http_body::Body for MyBody {
-    /// #     type Data = bytes::Bytes;
-    /// #     type Error = Box<dyn std::error::Error + Send + Sync>;
-    /// #     fn poll_frame(
-    /// #         self: std::pin::Pin<&mut Self>,
-    /// #         _: &mut std::task::Context<'_>
-    /// #     ) -> std::task::Poll<Option<Result<http_body::Frame<Self::Data>, Self::Error>>> {
-    /// #         std::task::Poll::Ready(None)
-    /// #     }
-    /// # }
-    /// let upstream_body = MyBody;
-    /// let streaming = StreamingBody::streaming(upstream_body);
-    /// ```
+    /// - **Buffered**: Contains cached response data that can be sent immediately
+    /// - **Streaming**: Wraps an upstream body for streaming responses
+    /// - **File**: Streams from a cacache Reader in 64KB chunks (only with `streaming` feature)
     #[project = StreamingBodyProj]
     pub enum StreamingBody<B> {
         Buffered {
@@ -70,13 +77,15 @@ pin_project! {
         },
         File {
             #[pin]
-            file: crate::runtime::File,
-            buf: Vec<u8>,
-            finished: bool,
+            reader: cacache::Reader,
+            buffer: BytesMut,
+            done: bool,
+            size: Option<u64>,
         },
     }
 }
 
+// When streaming feature is disabled, no File variant
 #[cfg(not(feature = "streaming"))]
 pin_project! {
     /// A body type that can represent either buffered data from cache or streaming body from upstream.
@@ -87,34 +96,8 @@ pin_project! {
     ///
     /// # Variants
     ///
-    /// - [`Buffered`](StreamingBody::Buffered): Contains cached response data that can be sent immediately
-    /// - [`Streaming`](StreamingBody::Streaming): Wraps an upstream body for streaming responses
-    ///
-    /// # Example
-    ///
-    /// ```rust
-    /// use http_cache::StreamingBody;
-    /// use bytes::Bytes;
-    /// use http_body_util::Full;
-    ///
-    /// // Cached response - sent immediately from memory
-    /// let cached: StreamingBody<Full<Bytes>> = StreamingBody::buffered(Bytes::from("Hello from cache!"));
-    ///
-    /// // Streaming response - passed through from upstream
-    /// # struct MyBody;
-    /// # impl http_body::Body for MyBody {
-    /// #     type Data = bytes::Bytes;
-    /// #     type Error = Box<dyn std::error::Error + Send + Sync>;
-    /// #     fn poll_frame(
-    /// #         self: std::pin::Pin<&mut Self>,
-    /// #         _: &mut std::task::Context<'_>
-    /// #     ) -> std::task::Poll<Option<Result<http_body::Frame<Self::Data>, Self::Error>>> {
-    /// #         std::task::Poll::Ready(None)
-    /// #     }
-    /// # }
-    /// let upstream_body = MyBody;
-    /// let streaming = StreamingBody::streaming(upstream_body);
-    /// ```
+    /// - **Buffered**: Contains cached response data that can be sent immediately
+    /// - **Streaming**: Wraps an upstream body for streaming responses
     #[project = StreamingBodyProj]
     pub enum StreamingBody<B> {
         Buffered {
@@ -128,23 +111,59 @@ pin_project! {
 }
 
 impl<B> StreamingBody<B> {
-    /// Create a new buffered body from bytes
+    /// Create a new buffered body from bytes.
+    ///
+    /// The bytes are consumed on the first poll and sent as a single frame.
+    #[must_use]
     pub fn buffered(data: Bytes) -> Self {
         Self::Buffered { data: Some(data) }
     }
 
-    /// Create a new streaming body from an upstream body
+    /// Create a new streaming body from an upstream body.
+    ///
+    /// The upstream body is passed through without additional buffering.
+    #[must_use]
     pub fn streaming(body: B) -> Self {
         Self::Streaming { inner: body }
     }
 
-    /// Create a new file-based streaming body
+    /// Create a new file-streaming body from a cacache Reader.
+    ///
+    /// This allows streaming large cached responses from disk without
+    /// loading the entire body into memory. Data is read in 64KB chunks.
+    ///
+    /// Use [`from_reader_with_size`](Self::from_reader_with_size) if the
+    /// file size is known for accurate size hints.
     #[cfg(feature = "streaming")]
-    pub fn from_file(file: crate::runtime::File) -> Self {
-        Self::File { file, buf: Vec::new(), finished: false }
+    #[must_use]
+    pub fn from_reader(reader: cacache::Reader) -> Self {
+        Self::File {
+            reader,
+            buffer: BytesMut::with_capacity(STREAM_BUFFER_SIZE),
+            done: false,
+            size: None,
+        }
+    }
+
+    /// Create a new file-streaming body from a cacache Reader with known size.
+    ///
+    /// This allows streaming large cached responses from disk without
+    /// loading the entire body into memory. Data is read in 64KB chunks.
+    ///
+    /// The size is used to provide accurate size hints to downstream consumers.
+    #[cfg(feature = "streaming")]
+    #[must_use]
+    pub fn from_reader_with_size(reader: cacache::Reader, size: u64) -> Self {
+        Self::File {
+            reader,
+            buffer: BytesMut::with_capacity(STREAM_BUFFER_SIZE),
+            done: false,
+            size: Some(size),
+        }
     }
 }
 
+#[cfg(feature = "streaming")]
 impl<B> Body for StreamingBody<B>
 where
     B: Body + Unpin,
@@ -178,61 +197,38 @@ where
                     })
                 })
             }
-            #[cfg(feature = "streaming")]
-            StreamingBodyProj::File { file, buf, finished } => {
-                if *finished {
+            StreamingBodyProj::File { reader, buffer, done, .. } => {
+                if *done {
                     return Poll::Ready(None);
                 }
 
-                // Prepare buffer
-                buf.resize(8192, 0);
+                use tokio::io::AsyncRead;
 
-                cfg_if::cfg_if! {
-                    if #[cfg(feature = "streaming-tokio")] {
-                        use tokio::io::AsyncRead;
-                        use crate::runtime::ReadBuf;
+                // Resize buffer to full capacity for reading (this is safe - fills with zeros)
+                buffer.resize(STREAM_BUFFER_SIZE, 0);
 
-                        let mut read_buf = ReadBuf::new(buf);
-                        match file.poll_read(cx, &mut read_buf) {
-                            Poll::Pending => Poll::Pending,
-                            Poll::Ready(Err(e)) => {
-                                *finished = true;
-                                Poll::Ready(Some(Err(StreamingError::new(e))))
-                            }
-                            Poll::Ready(Ok(())) => {
-                                let n = read_buf.filled().len();
-                                if n == 0 {
-                                    // EOF
-                                    *finished = true;
-                                    Poll::Ready(None)
-                                } else {
-                                    let chunk = Bytes::copy_from_slice(&buf[..n]);
-                                    buf.clear();
-                                    Poll::Ready(Some(Ok(Frame::data(chunk))))
-                                }
-                            }
-                        }
-                    } else if #[cfg(feature = "streaming-smol")] {
-                        use futures::io::AsyncRead;
+                let mut read_buf = tokio::io::ReadBuf::new(buffer.as_mut());
 
-                        match file.poll_read(cx, buf) {
-                            Poll::Pending => Poll::Pending,
-                            Poll::Ready(Err(e)) => {
-                                *finished = true;
-                                Poll::Ready(Some(Err(StreamingError::new(e))))
-                            }
-                            Poll::Ready(Ok(0)) => {
-                                // EOF
-                                *finished = true;
-                                Poll::Ready(None)
-                            }
-                            Poll::Ready(Ok(n)) => {
-                                let chunk = Bytes::copy_from_slice(&buf[..n]);
-                                buf.clear();
-                                Poll::Ready(Some(Ok(Frame::data(chunk))))
-                            }
+                match reader.poll_read(cx, &mut read_buf) {
+                    Poll::Ready(Ok(())) => {
+                        let filled_len = read_buf.filled().len();
+                        if filled_len == 0 {
+                            *done = true;
+                            buffer.clear();
+                            Poll::Ready(None)
+                        } else {
+                            // Truncate to actual bytes read and freeze
+                            buffer.truncate(filled_len);
+                            let bytes = buffer.split().freeze();
+                            Poll::Ready(Some(Ok(Frame::data(bytes))))
                         }
                     }
+                    Poll::Ready(Err(e)) => {
+                        *done = true;
+                        buffer.clear();
+                        Poll::Ready(Some(Err(StreamingError::new(Box::new(e)))))
+                    }
+                    Poll::Pending => Poll::Pending,
                 }
             }
         }
@@ -242,8 +238,7 @@ where
         match self {
             StreamingBody::Buffered { data } => data.is_none(),
             StreamingBody::Streaming { inner } => inner.is_end_stream(),
-            #[cfg(feature = "streaming")]
-            StreamingBody::File { finished, .. } => *finished,
+            StreamingBody::File { done, .. } => *done,
         }
     }
 
@@ -258,11 +253,73 @@ where
                 }
             }
             StreamingBody::Streaming { inner } => inner.size_hint(),
-            #[cfg(feature = "streaming")]
-            StreamingBody::File { .. } => {
-                // We don't know the file size in advance without an additional stat call
-                http_body::SizeHint::default()
+            StreamingBody::File { size, .. } => {
+                // Return exact size if known, otherwise unknown
+                if let Some(s) = size {
+                    http_body::SizeHint::with_exact(*s)
+                } else {
+                    http_body::SizeHint::default()
+                }
             }
+        }
+    }
+}
+
+#[cfg(not(feature = "streaming"))]
+impl<B> Body for StreamingBody<B>
+where
+    B: Body + Unpin,
+    B::Error: Into<StreamingError>,
+    B::Data: Into<Bytes>,
+{
+    type Data = Bytes;
+    type Error = StreamingError;
+
+    fn poll_frame(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Option<Result<Frame<Self::Data>, Self::Error>>> {
+        match self.as_mut().project() {
+            StreamingBodyProj::Buffered { data } => {
+                if let Some(bytes) = data.take() {
+                    if bytes.is_empty() {
+                        Poll::Ready(None)
+                    } else {
+                        Poll::Ready(Some(Ok(Frame::data(bytes))))
+                    }
+                } else {
+                    Poll::Ready(None)
+                }
+            }
+            StreamingBodyProj::Streaming { inner } => {
+                inner.poll_frame(cx).map(|opt| {
+                    opt.map(|res| {
+                        res.map(|frame| frame.map_data(Into::into))
+                            .map_err(Into::into)
+                    })
+                })
+            }
+        }
+    }
+
+    fn is_end_stream(&self) -> bool {
+        match self {
+            StreamingBody::Buffered { data } => data.is_none(),
+            StreamingBody::Streaming { inner } => inner.is_end_stream(),
+        }
+    }
+
+    fn size_hint(&self) -> http_body::SizeHint {
+        match self {
+            StreamingBody::Buffered { data } => {
+                if let Some(bytes) = data {
+                    let len = bytes.len() as u64;
+                    http_body::SizeHint::with_exact(len)
+                } else {
+                    http_body::SizeHint::with_exact(0)
+                }
+            }
+            StreamingBody::Streaming { inner } => inner.size_hint(),
         }
     }
 }
@@ -270,6 +327,45 @@ where
 impl<B> From<Bytes> for StreamingBody<B> {
     fn from(bytes: Bytes) -> Self {
         Self::buffered(bytes)
+    }
+}
+
+#[cfg(feature = "streaming")]
+impl<B: fmt::Debug> fmt::Debug for StreamingBody<B> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Buffered { data } => f
+                .debug_struct("StreamingBody::Buffered")
+                .field("has_data", &data.is_some())
+                .field("len", &data.as_ref().map(|b| b.len()))
+                .finish(),
+            Self::Streaming { inner } => f
+                .debug_struct("StreamingBody::Streaming")
+                .field("inner", inner)
+                .finish(),
+            Self::File { done, size, .. } => f
+                .debug_struct("StreamingBody::File")
+                .field("done", done)
+                .field("size", size)
+                .finish_non_exhaustive(),
+        }
+    }
+}
+
+#[cfg(not(feature = "streaming"))]
+impl<B: fmt::Debug> fmt::Debug for StreamingBody<B> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Buffered { data } => f
+                .debug_struct("StreamingBody::Buffered")
+                .field("has_data", &data.is_some())
+                .field("len", &data.as_ref().map(|b| b.len()))
+                .finish(),
+            Self::Streaming { inner } => f
+                .debug_struct("StreamingBody::Streaming")
+                .field("inner", inner)
+                .finish(),
+        }
     }
 }
 
@@ -283,8 +379,6 @@ where
     /// Convert this streaming body into a stream of Bytes.
     ///
     /// This method allows for streaming without collecting the entire body into memory first.
-    /// This is particularly useful for file-based cached responses which can stream
-    /// directly from disk.
     pub fn into_bytes_stream(
         self,
     ) -> impl futures_util::Stream<

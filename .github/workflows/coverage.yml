@@ -24,8 +24,8 @@ jobs:
       - uses: taiki-e/install-action@cargo-llvm-cov
       - run: |
           cargo llvm-cov clean --workspace
-          cargo llvm-cov --no-report --no-default-features --package http-cache --features manager-cacache,with-http-types,manager-moka,streaming-tokio,url-standard
-          cargo llvm-cov --no-report --no-default-features --package http-cache --features manager-foyer,with-http-types,streaming-tokio,url-standard
+          cargo llvm-cov --no-report --no-default-features --package http-cache --features manager-cacache,with-http-types,manager-moka,streaming,url-standard
+          cargo llvm-cov --no-report --no-default-features --package http-cache --features manager-foyer,with-http-types,streaming,url-standard
           cargo llvm-cov --no-report --package http-cache-surf --no-default-features --features manager-cacache,manager-moka,manager-foyer,rate-limiting,http-headers-compat,url-standard
           cargo llvm-cov --no-report --package http-cache-ureq --no-default-features --features manager-cacache,url-standard
           cargo llvm-cov --no-report --package http-cache-ureq --no-default-features --features manager-cacache,manager-moka,manager-foyer,json,rate-limiting,http-headers-compat,url-standard

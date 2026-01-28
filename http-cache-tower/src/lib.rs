@@ -74,12 +74,11 @@
 //! ```rust
 //! use http_cache_tower::HttpCacheStreamingLayer;
 //! use http_cache::StreamingManager;
-//! use std::path::PathBuf;
 //!
 //! # #[tokio::main]
 //! # async fn main() {
 //! // Create streaming cache setup
-//! let streaming_manager = StreamingManager::new("./streaming-cache".into());
+//! let streaming_manager = StreamingManager::with_temp_dir(1000).await.unwrap();
 //! let streaming_layer = HttpCacheStreamingLayer::new(streaming_manager);
 //!
 //! // Use with your service
@@ -410,7 +409,7 @@ where
 ///
 /// # #[tokio::main]
 /// # async fn main() {
-/// let streaming_manager = StreamingManager::new("./cache".into());
+/// let streaming_manager = StreamingManager::with_temp_dir(1000).await.unwrap();
 /// let streaming_layer = HttpCacheStreamingLayer::new(streaming_manager);
 ///
 /// // Use with ServiceBuilder
@@ -449,7 +448,7 @@ where
     ///
     /// # #[tokio::main]
     /// # async fn main() {
-    /// let streaming_manager = StreamingManager::new("./cache".into());
+    /// let streaming_manager = StreamingManager::with_temp_dir(1000).await.unwrap();
     /// let layer = HttpCacheStreamingLayer::new(streaming_manager);
     /// # }
     /// ```
@@ -480,7 +479,7 @@ where
     ///
     /// # #[tokio::main]
     /// # async fn main() {
-    /// let streaming_manager = StreamingManager::new("./cache".into());
+    /// let streaming_manager = StreamingManager::with_temp_dir(1000).await.unwrap();
     ///
     /// let options = HttpCacheOptions {
     ///     cache_key: Some(std::sync::Arc::new(|req: &http::request::Parts| {
@@ -518,7 +517,7 @@ where
     ///
     /// # #[tokio::main]
     /// # async fn main() {
-    /// let streaming_manager = StreamingManager::new("./cache".into());
+    /// let streaming_manager = StreamingManager::with_temp_dir(1000).await.unwrap();
     ///
     /// let cache = HttpStreamingCache {
     ///     mode: CacheMode::ForceCache,

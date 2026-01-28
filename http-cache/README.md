@@ -37,11 +37,10 @@ The following features are available. By default `manager-cacache` and `url-stan
 - `manager-cacache` (default): enable [cacache](https://github.com/zkat/cacache-rs), a high-performance disk cache, backend manager.
 - `manager-moka` (disabled): enable [moka](https://github.com/moka-rs/moka), a high-performance in-memory cache, backend manager.
 - `manager-foyer` (disabled): enable [foyer](https://github.com/foyer-rs/foyer), a hybrid in-memory + disk cache, backend manager.
-- `streaming-tokio` (disabled): enable streaming cache support with [tokio](https://github.com/tokio-rs/tokio) runtime.
-- `streaming-smol` (disabled): enable streaming cache support with [smol](https://github.com/smol-rs/smol) runtime.
+- `streaming` (disabled): enable streaming cache support using [cacache](https://github.com/zkat/cacache-rs) for disk storage with [moka](https://github.com/moka-rs/moka) for metadata tracking and TinyLFU eviction.
 - `rate-limiting` (disabled): enable rate limiting functionality with [governor](https://github.com/boinkor-net/governor).
 - `url-standard` (default): enable [url](https://github.com/servo/rust-url) for URL parsing.
-- `url-ada` (disabled): enable [ada-url](https://github.com/nickelc/ada-url) for WHATWG-compliant URL parsing (avoids Unicode/IDNA license).
+- `url-ada` (disabled): enable [ada-url](https://github.com/ada-url/rust) for WHATWG-compliant URL parsing (avoids Unicode/IDNA license).
 - `with-http-types` (disabled): enable [http-types](https://github.com/http-rs/http-types) type conversion support
 
 ### URL Feature Notes

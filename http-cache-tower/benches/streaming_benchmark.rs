@@ -119,10 +119,10 @@ fn bench_cache_miss_comparison(c: &mut Criterion) {
                         let start = std::time::Instant::now();
 
                         for i in 0..iters {
-                            let temp_dir = tempfile::tempdir().unwrap();
-                            let cache_manager = StreamingManager::new(
-                                temp_dir.path().to_path_buf(),
-                            );
+                            let cache_manager =
+                                StreamingManager::with_temp_dir(1000)
+                                    .await
+                                    .unwrap();
                             let layer =
                                 HttpCacheStreamingLayer::new(cache_manager);
                             let service = TestResponseService::new(size);
@@ -219,12 +219,13 @@ fn bench_cache_hit_comparison(c: &mut Criterion) {
             &size_bytes,
             |b, &size| {
                 let rt = tokio::runtime::Runtime::new().unwrap();
-                let temp_dir = tempfile::tempdir().unwrap();
-                let cache_manager =
-                    StreamingManager::new(temp_dir.path().to_path_buf());
-                let layer = HttpCacheStreamingLayer::new(cache_manager);
-                let service = TestResponseService::new(size);
-                let mut cached_service = layer.layer(service);
+                let mut cached_service = rt.block_on(async {
+                    let cache_manager =
+                        StreamingManager::with_temp_dir(1000).await.unwrap();
+                    let layer = HttpCacheStreamingLayer::new(cache_manager);
+                    let service = TestResponseService::new(size);
+                    layer.layer(service)
+                });
 
                 // Prime the cache
                 rt.block_on(async {
@@ -277,13 +278,13 @@ fn bench_streaming_throughput(c: &mut Criterion) {
             &concurrent,
             |b, &concurrent| {
                 let rt = tokio::runtime::Runtime::new().unwrap();
-                let temp_dir = tempfile::tempdir().unwrap();
-                let cache_manager = StreamingManager::new(
-                    temp_dir.path().to_path_buf(),
-                );
-                let layer = HttpCacheStreamingLayer::new(cache_manager);
-                let service = TestResponseService::new(100 * 1024); // 100KB
-                let mut cached_service = layer.layer(service);
+                let mut cached_service = rt.block_on(async {
+                    let cache_manager =
+                        StreamingManager::with_temp_dir(1000).await.unwrap();
+                    let layer = HttpCacheStreamingLayer::new(cache_manager);
+                    let service = TestResponseService::new(100 * 1024); // 100KB
+                    layer.layer(service)
+                });
 
                 // Prime the cache
                 rt.block_on(async {

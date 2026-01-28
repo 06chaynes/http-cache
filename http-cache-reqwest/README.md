@@ -63,14 +63,14 @@ use http_cache_reqwest::{StreamingCache, CacheMode};
 
 #[cfg(feature = "streaming")]
 use http_cache::StreamingManager;
-use std::path::PathBuf;
 
 #[cfg(feature = "streaming")]
 #[tokio::main]
 async fn main() -> reqwest_middleware::Result<()> {
+    let streaming_manager = StreamingManager::in_memory(1000).await.unwrap();
     let client = ClientBuilder::new(Client::new())
         .with(StreamingCache::new(
-            StreamingManager::new(PathBuf::from("./cache")),
+            streaming_manager,
             CacheMode::Default,
         ))
         .build();

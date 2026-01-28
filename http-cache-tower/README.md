@@ -95,13 +95,12 @@ use http::{Request, Response};
 use http_body_util::Full;
 # #[cfg(feature = "streaming")]
 use bytes::Bytes;
-use std::path::PathBuf;
 
 # #[cfg(feature = "streaming")]
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // StreamingManager provides optimal streaming with no buffering
-    let streaming_manager = StreamingManager::new(PathBuf::from("./cache"));
+    // StreamingManager uses cacache + moka for streaming from disk
+    let streaming_manager = StreamingManager::in_memory(1000).await?;
 
     // Create the streaming cache layer
     let cache_layer = HttpCacheStreamingLayer::new(streaming_manager);

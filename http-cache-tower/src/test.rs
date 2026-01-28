@@ -1089,11 +1089,8 @@ mod tests {
     #[cfg(feature = "streaming")]
     #[tokio::test]
     async fn test_streaming_cache_layer() -> Result<()> {
-        let temp_dir = tempfile::tempdir()?;
-
-        // Create streaming cache setup with StreamingManager for optimal streaming
-        let cache_manager =
-            StreamingManager::new(temp_dir.path().to_path_buf());
+        // Create streaming cache setup with StreamingManager
+        let cache_manager = StreamingManager::with_temp_dir(1000).await?;
         let streaming_layer = HttpCacheStreamingLayer::new(cache_manager);
 
         let test_service = TestService::new(
@@ -1689,9 +1686,7 @@ mod tests {
     async fn test_streaming_cache_large_response() -> Result<()> {
         use http_cache::StreamingManager;
 
-        let temp_dir = tempfile::tempdir()?;
-        let cache_manager =
-            StreamingManager::new(temp_dir.path().to_path_buf());
+        let cache_manager = StreamingManager::with_temp_dir(1000).await?;
         let streaming_layer = HttpCacheStreamingLayer::new(cache_manager);
 
         // Create a large test response (1MB) - using static string
@@ -1738,9 +1733,7 @@ mod tests {
     async fn test_streaming_cache_empty_response() -> Result<()> {
         use http_cache::StreamingManager;
 
-        let temp_dir = tempfile::tempdir()?;
-        let cache_manager =
-            StreamingManager::new(temp_dir.path().to_path_buf());
+        let cache_manager = StreamingManager::with_temp_dir(1000).await?;
         let streaming_layer = HttpCacheStreamingLayer::new(cache_manager);
 
         let empty_service = TestService::new(
@@ -1784,9 +1777,7 @@ mod tests {
     async fn test_streaming_cache_no_cache_mode() -> Result<()> {
         use http_cache::StreamingManager;
 
-        let temp_dir = tempfile::tempdir()?;
-        let cache_manager =
-            StreamingManager::new(temp_dir.path().to_path_buf());
+        let cache_manager = StreamingManager::with_temp_dir(1000).await?;
 
         let cache = http_cache::HttpStreamingCache {
             mode: CacheMode::NoStore,

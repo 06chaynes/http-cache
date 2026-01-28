@@ -1225,20 +1225,16 @@ mod streaming_tests {
     use http_body::Body;
     use http_body_util::{BodyExt, Full};
     use http_cache::StreamingManager;
-    use tempfile::TempDir;
-
     /// Helper function to create a streaming cache manager
-    fn create_streaming_cache_manager() -> StreamingManager {
-        let temp_dir = TempDir::new().expect("Failed to create temp dir");
-        let cache_path = temp_dir.path().to_path_buf();
-        // Keep the temp dir alive by leaking it
-        std::mem::forget(temp_dir);
-        StreamingManager::new(cache_path)
+    async fn create_streaming_cache_manager() -> StreamingManager {
+        StreamingManager::with_temp_dir(1000)
+            .await
+            .expect("Failed to create streaming cache manager")
     }
 
     #[tokio::test]
     async fn test_streaming_cache_basic_operations() -> Result<()> {
-        let manager = create_streaming_cache_manager();
+        let manager = create_streaming_cache_manager().await;
         let cache = HttpStreamingCache {
             mode: CacheMode::Default,
             manager,
@@ -1296,7 +1292,7 @@ mod streaming_tests {
 
     #[tokio::test]
     async fn test_streaming_cache_large_response() -> Result<()> {
-        let manager = create_streaming_cache_manager();
+        let manager = create_streaming_cache_manager().await;
         let cache = HttpStreamingCache {
             mode: CacheMode::Default,
             manager,
@@ -1341,7 +1337,7 @@ mod streaming_tests {
 
     #[tokio::test]
     async fn test_streaming_cache_empty_response() -> Result<()> {
-        let manager = create_streaming_cache_manager();
+        let manager = create_streaming_cache_manager().await;
         let cache = HttpStreamingCache {
             mode: CacheMode::Default,
             manager,
@@ -1382,7 +1378,7 @@ mod streaming_tests {
 
     #[tokio::test]
     async fn test_streaming_cache_no_cache_mode() -> Result<()> {
-        let manager = create_streaming_cache_manager();
+        let manager = create_streaming_cache_manager().await;
         let cache = HttpStreamingCache {
             mode: CacheMode::NoStore,
             manager,
@@ -1515,7 +1511,7 @@ mod streaming_tests {
 
     #[tokio::test]
     async fn streaming_with_different_cache_modes() -> Result<()> {
-        let manager = create_streaming_cache_manager();
+        let manager = create_streaming_cache_manager().await;
 
         // Test with NoCache mode
         let cache_no_cache = HttpStreamingCache {
@@ -1560,7 +1556,7 @@ mod streaming_tests {
 
     #[tokio::test]
     async fn streaming_with_custom_cache_options() -> Result<()> {
-        let manager = create_streaming_cache_manager();
+        let manager = create_streaming_cache_manager().await;
 
         let cache = HttpStreamingCache {
             mode: CacheMode::Default,
@@ -1608,7 +1604,7 @@ mod streaming_tests {
 
     #[tokio::test]
     async fn streaming_error_handling() -> Result<()> {
-        let manager = create_streaming_cache_manager();
+        let manager = create_streaming_cache_manager().await;
         let cache = HttpStreamingCache {
             mode: CacheMode::Default,
             manager,
@@ -1633,7 +1629,7 @@ mod streaming_tests {
     async fn streaming_concurrent_access() -> Result<()> {
         use tokio::task::JoinSet;
 
-        let manager = create_streaming_cache_manager();
+        let manager = create_streaming_cache_manager().await;
         let cache = Arc::new(HttpStreamingCache {
             mode: CacheMode::Default,
             manager,
@@ -1674,7 +1670,7 @@ mod streaming_tests {
 
     #[tokio::test]
     async fn streaming_with_request_extensions() -> Result<()> {
-        let manager = create_streaming_cache_manager();
+        let manager = create_streaming_cache_manager().await;
         let cache = HttpStreamingCache {
             mode: CacheMode::Default,
             manager,
@@ -1703,7 +1699,7 @@ mod streaming_tests {
 
     #[tokio::test]
     async fn streaming_cache_with_vary_headers() -> Result<()> {
-        let manager = create_streaming_cache_manager();
+        let manager = create_streaming_cache_manager().await;
         let cache = HttpStreamingCache {
             mode: CacheMode::Default,
             manager,
@@ -1751,7 +1747,7 @@ mod streaming_tests {
 
     #[tokio::test]
     async fn streaming_cache_with_multiple_vary_headers() -> Result<()> {
-        let manager = create_streaming_cache_manager();
+        let manager = create_streaming_cache_manager().await;
         let cache = HttpStreamingCache {
             mode: CacheMode::Default,
             manager,
@@ -1811,48 +1807,25 @@ mod streaming_tests {
                 .map(|v| v.to_str().unwrap())
                 .collect();
 
-            // With http-headers-compat, headers are stored in legacy format where
-            // multiple values get joined with ", ". Without compat, we preserve
-            // separate header entries.
-            #[cfg(feature = "http-headers-compat")]
-            {
-                // In compat mode, all values are joined into one header
-                assert_eq!(
-                    vary_values.len(),
-                    1,
-                    "Expected 1 joined Vary header in compat mode, got {}: {:?}",
-                    vary_values.len(),
-                    vary_values
-                );
-                // The single value should contain all the original values
-                let joined = vary_values[0];
-                assert!(joined.contains("Prefer"));
-                assert!(joined.contains("Accept"));
-                assert!(joined.contains("Range"));
-                assert!(joined.contains("Accept-Encoding"));
-                assert!(joined.contains("Accept-Language"));
-                assert!(joined.contains("Accept-Datetime"));
-            }
+            // StreamingManager stores metadata directly in moka's in-memory cache
+            // WITHOUT serialization, so http-headers-compat doesn't affect it.
+            // Headers always remain in Modern format with separate values.
+            // (The compat feature only affects disk-serialized caches like CACacheManager)
+            assert_eq!(
+                vary_values.len(),
+                6,
+                "Expected 6 Vary headers, got {}: {:?}",
+                vary_values.len(),
+                vary_values
+            );
 
-            #[cfg(not(feature = "http-headers-compat"))]
-            {
-                // Without compat, we preserve all 6 separate Vary headers
-                assert_eq!(
-                    vary_values.len(),
-                    6,
-                    "Expected 6 Vary headers, got {}: {:?}",
-                    vary_values.len(),
-                    vary_values
-                );
-
-                // Verify all expected values are present
-                assert!(vary_values.contains(&"Prefer"));
-                assert!(vary_values.contains(&"Accept"));
-                assert!(vary_values.contains(&"Range"));
-                assert!(vary_values.contains(&"Accept-Encoding"));
-                assert!(vary_values.contains(&"Accept-Language"));
-                assert!(vary_values.contains(&"Accept-Datetime"));
-            }
+            // Verify all expected values are present
+            assert!(vary_values.contains(&"Prefer"));
+            assert!(vary_values.contains(&"Accept"));
+            assert!(vary_values.contains(&"Range"));
+            assert!(vary_values.contains(&"Accept-Encoding"));
+            assert!(vary_values.contains(&"Accept-Language"));
+            assert!(vary_values.contains(&"Accept-Datetime"));
         }
 
         Ok(())
@@ -1892,7 +1865,7 @@ mod streaming_tests {
             }
         }
 
-        let manager = create_streaming_cache_manager();
+        let manager = create_streaming_cache_manager().await;
         let rate_limiter =
             MockStreamingRateLimiter::new(Duration::from_millis(50));
         let call_counter = rate_limiter.calls.clone();
@@ -1984,7 +1957,7 @@ mod streaming_tests {
             }
         }
 
-        let manager = create_streaming_cache_manager();
+        let manager = create_streaming_cache_manager().await;
         let rate_limiter =
             MockStreamingRateLimiter::new(Duration::from_millis(50));
         let call_counter = rate_limiter.calls.clone();

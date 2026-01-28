@@ -77,9 +77,10 @@
 //! # #[cfg(feature = "streaming")]
 //! #[tokio::main]
 //! async fn main() -> reqwest_middleware::Result<()> {
+//!     let streaming_manager = StreamingManager::with_temp_dir(1000).await.unwrap();
 //!     let client = ClientBuilder::new(Client::new())
 //!         .with(StreamingCache::new(
-//!             StreamingManager::new("./cache".into()),
+//!             streaming_manager,
 //!             CacheMode::Default,
 //!         ))
 //!         .build();
@@ -133,9 +134,10 @@
 //!         ..Default::default()
 //!     };
 //!
+//!     let streaming_manager = StreamingManager::with_temp_dir(1000).await.unwrap();
 //!     let client = ClientBuilder::new(Client::new())
 //!         .with(StreamingCache::with_options(
-//!             StreamingManager::new("./cache".into()),
+//!             streaming_manager,
 //!             CacheMode::Default,
 //!             options,
 //!         ))

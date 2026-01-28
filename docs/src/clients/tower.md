@@ -76,12 +76,11 @@ use tower::{ServiceBuilder, ServiceExt};
 use http::{Request, Response};
 use http_body_util::Full;
 use bytes::Bytes;
-use std::path::PathBuf;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Create a streaming cache manager
-    let streaming_manager = StreamingManager::new(PathBuf::from("./cache"));
+    // Create a streaming cache manager (in-memory with 1000 entry capacity)
+    let streaming_manager = StreamingManager::in_memory(1000).await?;
 
     // Create the streaming cache layer
     let cache_layer = HttpCacheStreamingLayer::new(streaming_manager);

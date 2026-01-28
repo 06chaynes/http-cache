@@ -20,4 +20,4 @@ The following backend cache manager implementations are provided by this crate:
 
 ## [streaming_cache](./streaming_cache.md)
 
-[`StreamingManager`](https://github.com/06chaynes/http-cache/blob/main/http-cache/src/managers/streaming_cache.rs) is a file-based streaming cache manager that does not buffer response bodies in memory. Suitable for handling large responses efficiently.
+[`StreamingManager`](https://github.com/06chaynes/http-cache/blob/main/http-cache/src/managers/streaming_cache.rs) combines cacache for disk storage with moka for metadata tracking and TinyLFU eviction. Streams cached responses from disk in 8KB chunks without buffering entire bodies in memory. Ideal for large responses.

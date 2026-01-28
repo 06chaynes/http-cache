@@ -64,13 +64,12 @@ use http_cache::StreamingManager;
 use http_cache_reqwest::{StreamingCache, CacheMode};
 use reqwest::Client;
 use reqwest_middleware::ClientBuilder;
-use std::path::PathBuf;
 use futures_util::StreamExt;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    // Create streaming cache manager
-    let cache_manager = StreamingManager::new(PathBuf::from("./cache"));
+    // Create streaming cache manager (in-memory with 1000 entry capacity)
+    let cache_manager = StreamingManager::in_memory(1000).await?;
     let streaming_cache = StreamingCache::new(cache_manager, CacheMode::Default);
 
     // Build client with streaming cache

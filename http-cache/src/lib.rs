@@ -237,14 +237,13 @@
 //! ```rust
 //! # #[cfg(feature = "streaming")]
 //! # {
-//! use http_cache::{StreamingBody, HttpStreamingCache, StreamingManager};
+//! use http_cache::StreamingBody;
 //! use bytes::Bytes;
-//! use std::path::PathBuf;
 //! use http_body::Body;
 //! use http_body_util::Full;
 //!
-//! // Create a file-based streaming cache manager
-//! let manager = StreamingManager::new(PathBuf::from("./streaming-cache"));
+//! // StreamingManager uses foyer for high-performance caching
+//! // Create with: StreamingManager::in_memory(1000).await.unwrap()
 //!
 //! // StreamingBody can handle both buffered and streaming scenarios
 //! let body: StreamingBody<Full<Bytes>> = StreamingBody::buffered(Bytes::from("cached content"));
@@ -270,8 +269,7 @@
 //! responses from older versions that used single-value headers. Enable this if you need to read
 //! cache entries created by older versions of http-cache.
 //! - `streaming` (disabled): enable the `StreamingManager` for streaming cache support.
-//! - `streaming-tokio` (disabled): enable streaming with tokio runtime support.
-//! - `streaming-smol` (disabled): enable streaming with smol runtime support.
+//!   Uses foyer as the backend with async-compat for runtime-agnostic operation.
 //! - `with-http-types` (disabled): enable [http-types](https://github.com/http-rs/http-types)
 //! type conversion support
 //!
@@ -281,7 +279,7 @@
 //!
 //! - `url-standard` (default): uses the [url](https://github.com/servo/rust-url) crate.
 //!   Note: This brings in the `idna` crate which has a Unicode license.
-//! - `url-ada` (disabled): uses [ada-url](https://github.com/nickelc/ada-url) for WHATWG-compliant
+//! - `url-ada` (disabled): uses [ada-url](https://github.com/ada-url/rust) for WHATWG-compliant
 //!   URL parsing without the Unicode/IDNA license dependency.
 //!
 //! If you need to avoid the Unicode license, use `url-ada`:
@@ -321,9 +319,6 @@ compile_error!("either feature `url-standard` or `url-ada` must be enabled");
 mod body;
 mod error;
 mod managers;
-
-#[cfg(feature = "streaming")]
-mod runtime;
 
 #[cfg(feature = "rate-limiting")]
 pub mod rate_limiting;

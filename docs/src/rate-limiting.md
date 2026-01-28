@@ -264,8 +264,8 @@ use std::sync::Arc;
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let quota = Quota::per_second(std::num::NonZeroU32::new(2).unwrap());
     let rate_limiter = Arc::new(DomainRateLimiter::new(quota));
-    
-    let streaming_manager = StreamingManager::new("./streaming-cache".into());
+
+    let streaming_manager = StreamingManager::in_memory(1000).await?;
     
     let client = ClientBuilder::new(reqwest::Client::new())
         .with(StreamingCache::with_options(
@@ -300,11 +300,11 @@ use tower::ServiceBuilder;
 use std::sync::Arc;
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let quota = Quota::per_second(std::num::NonZeroU32::new(3).unwrap());
     let rate_limiter = Arc::new(DomainRateLimiter::new(quota));
-    
-    let streaming_manager = StreamingManager::new("./streaming-cache".into());
+
+    let streaming_manager = StreamingManager::in_memory(1000).await?;
     
     let layer = HttpCacheStreamingLayer::with_options(
         streaming_manager,

@@ -86,11 +86,10 @@ async fn measure_cache_hit_memory_usage(
     let url = format!("{}/large-response", mock_server.uri());
 
     if is_streaming {
-        // Create TRUE streaming cache setup using StreamingManager
-        // This uses the StreamingCache middleware which supports file-based streaming
-        let temp_dir = tempdir().unwrap();
-        let streaming_manager =
-            StreamingManager::new(temp_dir.path().to_path_buf());
+        // Create streaming cache setup using StreamingManager
+        let streaming_manager = StreamingManager::with_temp_dir(1000)
+            .await
+            .expect("Failed to create streaming manager");
         let streaming_cache = StreamingCache::new(
             streaming_manager,
             http_cache::CacheMode::Default,

@@ -27,9 +27,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .mount(&mock_server)
         .await;
 
-    let cache_dir = tempfile::tempdir().unwrap();
-    let streaming_manager =
-        StreamingManager::new(cache_dir.path().to_path_buf());
+    let streaming_manager = StreamingManager::with_temp_dir(1000)
+        .await
+        .expect("Failed to create streaming manager");
 
     let client = ClientBuilder::new(Client::new())
         .with(StreamingCache::with_options(
