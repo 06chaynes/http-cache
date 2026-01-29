@@ -76,7 +76,7 @@ impl FoyerManager {
     pub async fn in_memory(capacity: usize) -> Result<Self> {
         let cache: HybridCache<String, Vec<u8>> = HybridCacheBuilder::new()
             .memory(capacity)
-            .storage()  // noop storage = memory-only mode
+            .storage() // noop storage = memory-only mode
             .build()
             .await
             .map_err(|e| crate::HttpCacheError::cache(e.to_string()))?;
