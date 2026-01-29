@@ -1,0 +1,500 @@
+<!DOCTYPE HTML>
+<html lang="en" class="sidebar-visible no-js oranda-dark">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Rate Limiting - http-cache</title>
+
+
+        <!-- Custom HTML head -->
+        
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff" />
+
+        <link rel="icon" href="favicon.svg">
+        <link rel="shortcut icon" href="favicon.png">
+        <link rel="stylesheet" href="css/variables.css">
+        <link rel="stylesheet" href="css/general.css">
+        <link rel="stylesheet" href="css/chrome.css">
+        <link rel="stylesheet" href="css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" href="highlight.css">
+        <link rel="stylesheet" href="tomorrow-night.css">
+        <link rel="stylesheet" href="ayu-highlight.css">
+        <link rel="stylesheet" href="oranda-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+    </head>
+    <body>
+    <div id="body-container">
+        <!-- Provide site root to javascript -->
+        <script>
+            var path_to_root = "";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "oranda-dark" : "oranda-dark";
+        </script>
+
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                var theme = localStorage.getItem('orandamdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('orandamdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            var theme;
+            try { theme = localStorage.getItem('orandamdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            var html = document.querySelector('html');
+            html.classList.remove('no-js')
+            html.classList.remove('oranda-dark')
+            html.classList.add(theme);
+            html.classList.add('js');
+        </script>
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            var html = document.querySelector('html');
+            var sidebar = 'hidden';
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            }
+            html.classList.remove('sidebar-visible');
+            html.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <div class="sidebar-scrollbox">
+                <ol class="chapter"><li class="chapter-item expanded "><a href="introduction.html"><strong aria-hidden="true">1.</strong> Introduction</a></li><li class="chapter-item expanded "><a href="cache-modes.html"><strong aria-hidden="true">2.</strong> Cache Modes</a></li><li class="chapter-item expanded "><a href="rate-limiting.html" class="active"><strong aria-hidden="true">3.</strong> Rate Limiting</a></li><li class="chapter-item expanded "><a href="development/development.html"><strong aria-hidden="true">4.</strong> Development</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="development/supporting-a-backend-cache-manager.html"><strong aria-hidden="true">4.1.</strong> Supporting a Backend Cache Manager</a></li><li class="chapter-item expanded "><a href="development/supporting-an-http-client.html"><strong aria-hidden="true">4.2.</strong> Supporting an HTTP Client</a></li></ol></li><li class="chapter-item expanded "><a href="clients/clients.html"><strong aria-hidden="true">5.</strong> Client-Side Caching</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="clients/reqwest.html"><strong aria-hidden="true">5.1.</strong> reqwest</a></li><li class="chapter-item expanded "><a href="clients/surf.html"><strong aria-hidden="true">5.2.</strong> surf</a></li><li class="chapter-item expanded "><a href="clients/ureq.html"><strong aria-hidden="true">5.3.</strong> ureq</a></li><li class="chapter-item expanded "><a href="clients/tower.html"><strong aria-hidden="true">5.4.</strong> tower</a></li></ol></li><li class="chapter-item expanded "><a href="server/server.html"><strong aria-hidden="true">6.</strong> Server-Side Caching</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="server/tower-server.html"><strong aria-hidden="true">6.1.</strong> tower-server</a></li></ol></li><li class="chapter-item expanded "><a href="managers/managers.html"><strong aria-hidden="true">7.</strong> Backend Cache Manager Implementations</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="managers/cacache.html"><strong aria-hidden="true">7.1.</strong> cacache</a></li><li class="chapter-item expanded "><a href="managers/moka.html"><strong aria-hidden="true">7.2.</strong> moka</a></li><li class="chapter-item expanded "><a href="managers/foyer.html"><strong aria-hidden="true">7.3.</strong> foyer</a></li><li class="chapter-item expanded "><a href="managers/quick-cache.html"><strong aria-hidden="true">7.4.</strong> quick_cache</a></li><li class="chapter-item expanded "><a href="managers/streaming_cache.html"><strong aria-hidden="true">7.5.</strong> streaming_cache</a></li></ol></li></ol>
+            </div>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky bordered">
+                    <div class="left-buttons">
+                        <button id="sidebar-toggle" class="icon-button" type="button" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </button>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="oranda-dark">Axo Dark</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="oranda-light">Axo Light</button></li>
+
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">http-cache</h1>
+
+                    <div class="right-buttons">
+                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="rate-limiting"><a class="header" href="#rate-limiting">Rate Limiting</a></h1>
+<p>The http-cache library provides built-in cache-aware rate limiting functionality that only applies when making actual network requests (cache misses), not when serving responses from cache (cache hits).</p>
+<p>This feature is available behind the <code>rate-limiting</code> feature flag and provides an elegant solution for scraping scenarios where you want to cache responses to avoid rate limits, but still need to respect rate limits for new requests.</p>
+<h2 id="how-it-works"><a class="header" href="#how-it-works">How It Works</a></h2>
+<p>The rate limiting follows this flow:</p>
+<ol>
+<li><strong>Check cache first</strong> - The cache is checked for an existing response</li>
+<li><strong>If cache hit</strong> - Return the cached response immediately (no rate limiting applied)</li>
+<li><strong>If cache miss</strong> - Apply rate limiting before making the network request</li>
+<li><strong>Make network request</strong> - Fetch from the remote server after rate limiting</li>
+<li><strong>Cache and return</strong> - Store the response and return it</li>
+</ol>
+<p>This ensures that:</p>
+<ul>
+<li>Cached responses are served instantly without any rate limiting delays</li>
+<li>Only actual network requests are rate limited</li>
+<li>Multiple cache hits can be served concurrently without waiting</li>
+</ul>
+<h2 id="rate-limiting-strategies"><a class="header" href="#rate-limiting-strategies">Rate Limiting Strategies</a></h2>
+<h3 id="domainratelimiter"><a class="header" href="#domainratelimiter">DomainRateLimiter</a></h3>
+<p>Applies rate limiting per domain, allowing different rate limits for different hosts:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use http_cache::rate_limiting::{DomainRateLimiter, Quota};
+use std::num::NonZeroU32;
+use std::sync::Arc;
+
+// Allow 10 requests per second per domain
+let quota = Quota::per_second(NonZeroU32::new(10).unwrap());
+let rate_limiter = Arc::new(DomainRateLimiter::new(quota));
+<span class="boring">}</span></code></pre></pre>
+<h3 id="directratelimiter"><a class="header" href="#directratelimiter">DirectRateLimiter</a></h3>
+<p>Applies a global rate limit across all requests regardless of domain:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use http_cache::rate_limiting::{DirectRateLimiter, Quota};
+use std::num::NonZeroU32;
+use std::sync::Arc;
+
+// Allow 5 requests per second globally
+let quota = Quota::per_second(NonZeroU32::new(5).unwrap());
+let rate_limiter = Arc::new(DirectRateLimiter::direct(quota));
+<span class="boring">}</span></code></pre></pre>
+<h3 id="custom-rate-limiters"><a class="header" href="#custom-rate-limiters">Custom Rate Limiters</a></h3>
+<p>You can implement your own rate limiting strategy by implementing the <code>CacheAwareRateLimiter</code> trait:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use http_cache::rate_limiting::CacheAwareRateLimiter;
+use async_trait::async_trait;
+
+struct CustomRateLimiter {
+    // Your custom rate limiting logic
+}
+
+#[async_trait]
+impl CacheAwareRateLimiter for CustomRateLimiter {
+    async fn until_key_ready(&amp;self, key: &amp;str) {
+        // Implement your rate limiting logic here
+        // This method should block until it's safe to make a request
+    }
+
+    fn check_key(&amp;self, key: &amp;str) -&gt; bool {
+        // Return true if a request can be made immediately
+        // Return false if rate limiting would apply
+        true
+    }
+}
+<span class="boring">}</span></code></pre></pre>
+<h2 id="configuration"><a class="header" href="#configuration">Configuration</a></h2>
+<p>Rate limiting is configured through the <code>HttpCacheOptions</code> struct:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use http_cache::{HttpCache, HttpCacheOptions, CacheMode};
+use http_cache::rate_limiting::{DomainRateLimiter, Quota};
+use std::sync::Arc;
+
+let quota = Quota::per_second(std::num::NonZeroU32::new(10).unwrap());
+let rate_limiter = Arc::new(DomainRateLimiter::new(quota));
+
+let cache = HttpCache {
+    mode: CacheMode::Default,
+    manager: your_cache_manager,
+    options: HttpCacheOptions {
+        rate_limiter: Some(rate_limiter),
+        ..Default::default()
+    },
+};
+<span class="boring">}</span></code></pre></pre>
+<h2 id="client-specific-examples"><a class="header" href="#client-specific-examples">Client-Specific Examples</a></h2>
+<h3 id="reqwest"><a class="header" href="#reqwest">reqwest</a></h3>
+<pre><pre class="playground"><code class="language-rust">use http_cache_reqwest::{Cache, HttpCache, CACacheManager, CacheMode, HttpCacheOptions};
+use http_cache_reqwest::{DomainRateLimiter, Quota};
+use reqwest_middleware::ClientBuilder;
+use std::sync::Arc;
+
+#[tokio::main]
+async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
+    let quota = Quota::per_second(std::num::NonZeroU32::new(5).unwrap());
+    let rate_limiter = Arc::new(DomainRateLimiter::new(quota));
+    
+    let client = ClientBuilder::new(reqwest::Client::new())
+        .with(Cache(HttpCache {
+            mode: CacheMode::Default,
+            manager: CACacheManager::new("./cache".into(), true),
+            options: HttpCacheOptions {
+                rate_limiter: Some(rate_limiter),
+                ..Default::default()
+            },
+        }))
+        .build();
+
+    // First request - will be rate limited and cached
+    let resp1 = client.get("https://httpbin.org/delay/1").send().await?;
+    println!("First response: {}", resp1.status());
+
+    // Second identical request - served from cache, no rate limiting
+    let resp2 = client.get("https://httpbin.org/delay/1").send().await?;
+    println!("Second response: {}", resp2.status());
+
+    Ok(())
+}</code></pre></pre>
+<h3 id="surf"><a class="header" href="#surf">surf</a></h3>
+<pre><pre class="playground"><code class="language-rust">use http_cache_surf::{Cache, HttpCache, CACacheManager, CacheMode, HttpCacheOptions};
+use http_cache_surf::{DomainRateLimiter, Quota};
+use surf::Client;
+use std::sync::Arc;
+use macro_rules_attribute::apply;
+use smol_macros::main;
+
+#[apply(main!)]
+async fn main() -&gt; surf::Result&lt;()&gt; {
+    let quota = Quota::per_second(std::num::NonZeroU32::new(5).unwrap());
+    let rate_limiter = Arc::new(DomainRateLimiter::new(quota));
+    
+    let client = Client::new()
+        .with(Cache(HttpCache {
+            mode: CacheMode::Default,
+            manager: CACacheManager::new("./cache".into(), true),
+            options: HttpCacheOptions {
+                rate_limiter: Some(rate_limiter),
+                ..Default::default()
+            },
+        }));
+
+    // Requests will be rate limited on cache misses only
+    let mut resp1 = client.get("https://httpbin.org/delay/1").await?;
+    println!("First response: {}", resp1.body_string().await?);
+
+    let mut resp2 = client.get("https://httpbin.org/delay/1").await?;
+    println!("Second response: {}", resp2.body_string().await?);
+
+    Ok(())
+}</code></pre></pre>
+<h3 id="tower"><a class="header" href="#tower">tower</a></h3>
+<pre><pre class="playground"><code class="language-rust">use http_cache_tower::{HttpCacheLayer, CACacheManager};
+use http_cache::{CacheMode, HttpCache, HttpCacheOptions};
+use http_cache_tower::{DomainRateLimiter, Quota};
+use tower::ServiceBuilder;
+use std::sync::Arc;
+
+#[tokio::main]
+async fn main() {
+    let quota = Quota::per_second(std::num::NonZeroU32::new(5).unwrap());
+    let rate_limiter = Arc::new(DomainRateLimiter::new(quota));
+    
+    let cache = HttpCache {
+        mode: CacheMode::Default,
+        manager: CACacheManager::new("./cache".into(), true),
+        options: HttpCacheOptions {
+            rate_limiter: Some(rate_limiter),
+            ..Default::default()
+        },
+    };
+
+    let service = ServiceBuilder::new()
+        .layer(HttpCacheLayer::with_cache(cache))
+        .service_fn(your_service_function);
+
+    // Use the service - rate limiting will be applied on cache misses
+}</code></pre></pre>
+<h3 id="ureq"><a class="header" href="#ureq">ureq</a></h3>
+<pre><pre class="playground"><code class="language-rust">use http_cache_ureq::{CachedAgent, CACacheManager, CacheMode, HttpCacheOptions};
+use http_cache_ureq::{DomainRateLimiter, Quota};
+use std::sync::Arc;
+
+fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
+    smol::block_on(async {
+        let quota = Quota::per_second(std::num::NonZeroU32::new(5).unwrap());
+        let rate_limiter = Arc::new(DomainRateLimiter::new(quota));
+        
+        let agent = CachedAgent::builder()
+            .cache_manager(CACacheManager::new("./cache".into(), true))
+            .cache_mode(CacheMode::Default)
+            .cache_options(HttpCacheOptions {
+                rate_limiter: Some(rate_limiter),
+                ..Default::default()
+            })
+            .build()?;
+
+        // Rate limiting applies only on cache misses
+        let response1 = agent.get("https://httpbin.org/delay/1").call().await?;
+        println!("First response: {}", response1.status());
+
+        let response2 = agent.get("https://httpbin.org/delay/1").call().await?;
+        println!("Second response: {}", response2.status());
+
+        Ok(())
+    })
+}</code></pre></pre>
+<h2 id="use-cases"><a class="header" href="#use-cases">Use Cases</a></h2>
+<p>This cache-aware rate limiting is particularly useful for:</p>
+<ul>
+<li><strong>Web scraping</strong> - Cache responses to avoid repeated requests while respecting rate limits for new content</li>
+<li><strong>API clients</strong> - Improve performance with caching while staying within API rate limits</li>
+<li><strong>Data collection</strong> - Efficiently gather data without overwhelming servers</li>
+<li><strong>Development and testing</strong> - Reduce API calls during development while maintaining realistic rate limiting behavior</li>
+</ul>
+<h2 id="streaming-support"><a class="header" href="#streaming-support">Streaming Support</a></h2>
+<p>Rate limiting works seamlessly with streaming cache operations. When using streaming managers or streaming middleware, rate limiting is applied in the same cache-aware manner:</p>
+<h3 id="streaming-cache-examples"><a class="header" href="#streaming-cache-examples">Streaming Cache Examples</a></h3>
+<h4 id="reqwest-streaming-with-rate-limiting"><a class="header" href="#reqwest-streaming-with-rate-limiting">reqwest Streaming with Rate Limiting</a></h4>
+<pre><pre class="playground"><code class="language-rust">use http_cache_reqwest::{StreamingCache, HttpCacheOptions};
+use http_cache::{StreamingManager, CacheMode};
+use http_cache_reqwest::{DomainRateLimiter, Quota};
+use reqwest_middleware::ClientBuilder;
+use std::sync::Arc;
+
+#[tokio::main]
+async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
+    let quota = Quota::per_second(std::num::NonZeroU32::new(2).unwrap());
+    let rate_limiter = Arc::new(DomainRateLimiter::new(quota));
+
+    let streaming_manager = StreamingManager::in_memory(1000).await?;
+    
+    let client = ClientBuilder::new(reqwest::Client::new())
+        .with(StreamingCache::with_options(
+            streaming_manager, 
+            CacheMode::Default,
+            HttpCacheOptions {
+                rate_limiter: Some(rate_limiter),
+                ..Default::default()
+            }
+        ))
+        .build();
+
+    // First request - rate limited and cached as streaming
+    let resp1 = client.get("https://httpbin.org/stream-bytes/10000").send().await?;
+    println!("First streaming response: {}", resp1.status());
+
+    // Second request - served from streaming cache, no rate limiting
+    let resp2 = client.get("https://httpbin.org/stream-bytes/10000").send().await?;
+    println!("Second streaming response: {}", resp2.status());
+
+    Ok(())
+}</code></pre></pre>
+<h4 id="tower-streaming-with-rate-limiting"><a class="header" href="#tower-streaming-with-rate-limiting">tower Streaming with Rate Limiting</a></h4>
+<pre><pre class="playground"><code class="language-rust">use http_cache_tower::{HttpCacheStreamingLayer};
+use http_cache::{StreamingManager, CacheMode, HttpCacheOptions};
+use http_cache_tower::{DomainRateLimiter, Quota};
+use tower::ServiceBuilder;
+use std::sync::Arc;
+
+#[tokio::main]
+async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
+    let quota = Quota::per_second(std::num::NonZeroU32::new(3).unwrap());
+    let rate_limiter = Arc::new(DomainRateLimiter::new(quota));
+
+    let streaming_manager = StreamingManager::in_memory(1000).await?;
+    
+    let layer = HttpCacheStreamingLayer::with_options(
+        streaming_manager,
+        HttpCacheOptions {
+            rate_limiter: Some(rate_limiter),
+            ..Default::default()
+        }
+    );
+
+    let service = ServiceBuilder::new()
+        .layer(layer)
+        .service_fn(your_streaming_service_function);
+
+    // Streaming responses will be rate limited on cache misses only
+}</code></pre></pre>
+<h3 id="streaming-rate-limiting-benefits"><a class="header" href="#streaming-rate-limiting-benefits">Streaming Rate Limiting Benefits</a></h3>
+<p>When using streaming with rate limiting:</p>
+<ul>
+<li><strong>Memory efficiency</strong> - Large responses are streamed without full buffering</li>
+<li><strong>Cache-aware rate limiting</strong> - Rate limits only apply to actual network requests, not streaming from cache</li>
+<li><strong>Concurrent streaming</strong> - Multiple cached streams can be served simultaneously without rate limiting delays</li>
+<li><strong>Efficient large file handling</strong> - Perfect for scenarios involving large files or media content</li>
+</ul>
+<h2 id="performance-benefits"><a class="header" href="#performance-benefits">Performance Benefits</a></h2>
+<p>By only applying rate limiting on cache misses, you get:</p>
+<ul>
+<li><strong>Instant cache hits</strong> - No rate limiting delays for cached responses</li>
+<li><strong>Concurrent cache serving</strong> - Multiple cache hits can be served simultaneously</li>
+<li><strong>Efficient scraping</strong> - Re-scraping cached content doesn't count against rate limits</li>
+<li><strong>Better user experience</strong> - Faster response times for frequently accessed resources</li>
+<li><strong>Streaming optimization</strong> - Large cached responses stream immediately without rate limiting overhead</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="cache-modes.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next" href="development/development.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="cache-modes.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next" href="development/development.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="elasticlunr.min.js"></script>
+        <script src="mark.min.js"></script>
+        <script src="searcher.js"></script>
+
+        <script src="clipboard.min.js"></script>
+        <script src="highlight.js"></script>
+        <script src="book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+    </div>
+    </body>
+</html>
