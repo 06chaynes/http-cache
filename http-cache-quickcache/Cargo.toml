@@ -18,7 +18,7 @@ rust-version = "1.88.0"
 [dependencies]
 async-trait = "0.1.85"
 postcard = { version = "1.1", default-features = false, features = ["alloc"] }
-http-cache-semantics = "2.1.0"
+http-cache-semantics = "3.0.0"
 serde = { version = "1.0.217", features = ["derive"] }
 quick_cache = "0.6.9"
 http = "1.2.0"
