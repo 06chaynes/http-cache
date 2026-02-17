@@ -31,17 +31,17 @@ struct Store {
 // Legacy store format (bincode) - HttpResponse without metadata field
 // The metadata field was added alongside postcard, so bincode cache
 // data will never contain it.
-#[cfg(all(feature = "bincode", not(feature = "postcard")))]
+#[cfg(feature = "bincode")]
 #[derive(Debug, Deserialize, Serialize)]
-struct Store {
+struct BincodeStore {
     response: LegacyHttpResponse,
     policy: CachePolicy,
 }
 
-#[cfg(all(feature = "bincode", not(feature = "postcard")))]
+#[cfg(feature = "bincode")]
 use crate::{HttpHeaders, HttpVersion, Url};
 
-#[cfg(all(feature = "bincode", not(feature = "postcard")))]
+#[cfg(feature = "bincode")]
 #[derive(Debug, Clone, Deserialize, Serialize)]
 struct LegacyHttpResponse {
     body: Vec<u8>,
@@ -54,7 +54,7 @@ struct LegacyHttpResponse {
     version: HttpVersion,
 }
 
-#[cfg(all(feature = "bincode", not(feature = "postcard")))]
+#[cfg(feature = "bincode")]
 impl From<LegacyHttpResponse> for HttpResponse {
     fn from(legacy: LegacyHttpResponse) -> Self {
         #[cfg(feature = "http-headers-compat")]
@@ -73,7 +73,7 @@ impl From<LegacyHttpResponse> for HttpResponse {
     }
 }
 
-#[cfg(all(feature = "bincode", not(feature = "postcard")))]
+#[cfg(feature = "bincode")]
 impl From<HttpResponse> for LegacyHttpResponse {
     fn from(response: HttpResponse) -> Self {
         #[cfg(feature = "http-headers-compat")]
@@ -121,29 +121,65 @@ impl CacheManager for CACacheManager {
         &self,
         cache_key: &str,
     ) -> Result<Option<(HttpResponse, CachePolicy)>> {
-        let store: Store = match cacache::read(&self.path, cache_key).await {
-            Ok(d) => {
-                #[cfg(feature = "postcard")]
-                {
-                    postcard::from_bytes(&d)?
-                }
-                #[cfg(all(feature = "bincode", not(feature = "postcard")))]
-                {
-                    bincode::deserialize(&d)?
-                }
-            }
+        let d = match cacache::read(&self.path, cache_key).await {
+            Ok(d) => d,
             Err(_e) => {
                 return Ok(None);
             }
         };
 
+        // When both postcard and bincode are enabled, try postcard first
+        // then fall back to bincode (for reading legacy cache entries).
+        // When only one format is enabled, use that format directly.
         #[cfg(feature = "postcard")]
         {
-            Ok(Some((store.response, store.policy)))
+            match postcard::from_bytes::<Store>(&d) {
+                Ok(store) => return Ok(Some((store.response, store.policy))),
+                Err(_e) => {
+                    #[cfg(feature = "bincode")]
+                    {
+                        match bincode::deserialize::<BincodeStore>(&d) {
+                            Ok(store) => {
+                                return Ok(Some((
+                                    store.response.into(),
+                                    store.policy,
+                                )));
+                            }
+                            Err(e) => {
+                                log::warn!(
+                                    "Failed to deserialize cache entry for key '{}': {}",
+                                    cache_key,
+                                    e
+                                );
+                                return Ok(None);
+                            }
+                        }
+                    }
+                    #[cfg(not(feature = "bincode"))]
+                    {
+                        log::warn!(
+                            "Failed to deserialize cache entry for key '{}': {}",
+                            cache_key,
+                            _e
+                        );
+                        return Ok(None);
+                    }
+                }
+            }
         }
         #[cfg(all(feature = "bincode", not(feature = "postcard")))]
         {
-            Ok(Some((store.response.into(), store.policy)))
+            match bincode::deserialize::<BincodeStore>(&d) {
+                Ok(store) => Ok(Some((store.response.into(), store.policy))),
+                Err(e) => {
+                    log::warn!(
+                        "Failed to deserialize cache entry for key '{}': {}",
+                        cache_key,
+                        e
+                    );
+                    Ok(None)
+                }
+            }
         }
     }
 
@@ -153,10 +189,12 @@ impl CacheManager for CACacheManager {
         response: HttpResponse,
         policy: CachePolicy,
     ) -> Result<HttpResponse> {
+        // Always write with postcard when available (modern format).
+        // Only use bincode when postcard is not enabled.
         #[cfg(feature = "postcard")]
         let data = Store { response, policy };
         #[cfg(all(feature = "bincode", not(feature = "postcard")))]
-        let data = Store { response: response.into(), policy };
+        let data = BincodeStore { response: response.into(), policy };
 
         #[cfg(feature = "postcard")]
         let bytes = postcard::to_allocvec(&data)?;

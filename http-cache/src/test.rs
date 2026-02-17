@@ -208,6 +208,250 @@ mod with_cacache {
         assert!(data.is_none());
         Ok(())
     }
+
+    #[tokio::test]
+    async fn cacache_corrupt_data_returns_none() -> Result<()> {
+        let cache_dir = tempfile::tempdir().unwrap();
+        let manager = CACacheManager::new(cache_dir.path().to_path_buf(), true);
+        let key = "GET:http://example.com/corrupt";
+
+        // Write corrupt data directly to the cache
+        cacache::write(&cache_dir.path().to_path_buf(), key, b"not valid serialized data").await?;
+
+        // get() should return Ok(None) instead of an error
+        let result = manager.get(key).await?;
+        assert!(result.is_none());
+        Ok(())
+    }
+}
+
+// Migration tests: bincode (0.16/0.21) -> postcard (1.0-alpha) with compat features
+#[cfg(all(
+    feature = "manager-cacache",
+    feature = "manager-cacache-bincode",
+    feature = "http-headers-compat"
+))]
+mod cacache_bincode_migration {
+    use super::*;
+    use crate::{CACacheManager, CacheManager, HttpVersion};
+
+    use http_cache_semantics::CachePolicy;
+    use serde::Serialize;
+    use std::collections::HashMap;
+    use std::str::FromStr;
+
+    // Matches the Store struct from http-cache 0.21.0 (bincode era).
+    // This is intentionally a local copy of the internal struct to test
+    // the real-world migration path as a black-box test.
+    #[derive(Serialize)]
+    struct LegacyStore {
+        response: LegacyTestResponse,
+        policy: CachePolicy,
+    }
+
+    // Matches HttpResponse from http-cache 0.21.0 (no metadata field,
+    // headers as HashMap<String, String>).
+    #[derive(Serialize)]
+    struct LegacyTestResponse {
+        body: Vec<u8>,
+        headers: HashMap<String, String>,
+        status: u16,
+        url: Url,
+        version: HttpVersion,
+    }
+
+    #[tokio::test]
+    async fn cacache_bincode_to_postcard_migration() -> Result<()> {
+        let url = Url::from_str("http://example.com/legacy")?;
+        let cache_dir = tempfile::tempdir().unwrap();
+        let manager =
+            CACacheManager::new(cache_dir.path().to_path_buf(), true);
+        let cache_key = format!("GET:{}", &url);
+
+        // Construct a legacy bincode payload matching what 0.16/0.21 wrote
+        let mut headers = HashMap::new();
+        headers.insert(
+            "content-type".to_string(),
+            "application/json".to_string(),
+        );
+        headers.insert(
+            "cache-control".to_string(),
+            "max-age=3600".to_string(),
+        );
+
+        let legacy_response = LegacyTestResponse {
+            body: b"legacy cached body".to_vec(),
+            headers,
+            status: 200,
+            url: url.clone(),
+            version: HttpVersion::Http11,
+        };
+
+        let req =
+            http::Request::get("http://example.com/legacy").body(())?;
+        let res = http::Response::builder()
+            .status(200)
+            .header("cache-control", "max-age=3600")
+            .body(b"legacy cached body".to_vec())?;
+        let policy = CachePolicy::new(&req, &res);
+
+        let legacy_store =
+            LegacyStore { response: legacy_response, policy };
+
+        // Serialize with bincode (exactly as old code would have)
+        let bytes = bincode::serialize(&legacy_store).unwrap();
+
+        // Write directly to cacache (bypassing the manager's put())
+        cacache::write(&cache_dir.path().to_path_buf(), &cache_key, bytes)
+            .await?;
+
+        // Read it back via the manager (postcard first, then bincode fallback)
+        let data = manager.get(&cache_key).await?;
+        assert!(
+            data.is_some(),
+            "Bincode fallback should successfully deserialize legacy entry"
+        );
+
+        let (response, _policy) = data.unwrap();
+        assert_eq!(response.body, b"legacy cached body");
+        assert_eq!(response.status, 200);
+        assert_eq!(response.url, url);
+        assert_eq!(response.version, HttpVersion::Http11);
+        // Legacy entries have no metadata field
+        assert!(response.metadata.is_none());
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn cacache_bincode_migration_preserves_headers() -> Result<()> {
+        let url = Url::from_str("http://example.com/headers")?;
+        let cache_dir = tempfile::tempdir().unwrap();
+        let manager =
+            CACacheManager::new(cache_dir.path().to_path_buf(), true);
+        let cache_key = format!("GET:{}", &url);
+
+        let mut headers = HashMap::new();
+        headers
+            .insert("content-type".to_string(), "text/html".to_string());
+        headers.insert("x-custom".to_string(), "value123".to_string());
+
+        let legacy_response = LegacyTestResponse {
+            body: b"<html>test</html>".to_vec(),
+            headers,
+            status: 200,
+            url: url.clone(),
+            version: HttpVersion::Http11,
+        };
+
+        let req =
+            http::Request::get("http://example.com/headers").body(())?;
+        let res = http::Response::builder()
+            .status(200)
+            .header("cache-control", "max-age=3600")
+            .body(b"<html>test</html>".to_vec())?;
+        let policy = CachePolicy::new(&req, &res);
+
+        let legacy_store =
+            LegacyStore { response: legacy_response, policy };
+        let bytes = bincode::serialize(&legacy_store).unwrap();
+
+        cacache::write(&cache_dir.path().to_path_buf(), &cache_key, bytes)
+            .await?;
+
+        let data = manager.get(&cache_key).await?;
+        assert!(data.is_some());
+
+        let (response, _) = data.unwrap();
+        assert_eq!(
+            response.headers.get("content-type"),
+            Some(&"text/html".to_string())
+        );
+        assert_eq!(
+            response.headers.get("x-custom"),
+            Some(&"value123".to_string())
+        );
+
+        Ok(())
+    }
+}
+
+// Test graceful degradation: bincode entries are treated as cache misses
+// when only postcard is enabled (no bincode compat features).
+#[cfg(all(
+    feature = "manager-cacache",
+    not(feature = "manager-cacache-bincode")
+))]
+mod cacache_bincode_graceful_miss {
+    use super::*;
+    use crate::{CACacheManager, CacheManager};
+
+    #[tokio::test]
+    async fn cacache_bincode_entry_read_without_compat_feature() -> Result<()>
+    {
+        let cache_dir = tempfile::tempdir().unwrap();
+        let manager =
+            CACacheManager::new(cache_dir.path().to_path_buf(), true);
+        let key = "GET:http://example.com/legacy-miss";
+
+        // Write data that looks like a bincode-serialized Store.
+        // Without the bincode feature, postcard deserialization will fail
+        // and the manager should return Ok(None).
+        //
+        // We use actual bincode serialization via the dev-dependency to
+        // produce realistic bytes (not just garbage data — the corrupt_data
+        // test already covers that).
+        use serde::Serialize;
+        use std::collections::HashMap;
+        use std::str::FromStr;
+
+        #[derive(Serialize)]
+        struct FakeStore {
+            response: FakeResponse,
+            policy: http_cache_semantics::CachePolicy,
+        }
+
+        #[derive(Serialize)]
+        struct FakeResponse {
+            body: Vec<u8>,
+            headers: HashMap<String, String>,
+            status: u16,
+            url: Url,
+            version: HttpVersion,
+        }
+
+        let url = Url::from_str("http://example.com/legacy-miss")?;
+        let req = http::Request::get("http://example.com/legacy-miss")
+            .body(())?;
+        let res = http::Response::builder()
+            .status(200)
+            .header("cache-control", "max-age=3600")
+            .body(b"old data".to_vec())?;
+        let policy = http_cache_semantics::CachePolicy::new(&req, &res);
+
+        let fake_store = FakeStore {
+            response: FakeResponse {
+                body: b"old data".to_vec(),
+                headers: HashMap::new(),
+                status: 200,
+                url,
+                version: HttpVersion::Http11,
+            },
+            policy,
+        };
+
+        let bytes = bincode::serialize(&fake_store).unwrap();
+        cacache::write(&cache_dir.path().to_path_buf(), key, bytes).await?;
+
+        // Should return Ok(None) — graceful miss, no crash
+        let result = manager.get(key).await?;
+        assert!(
+            result.is_none(),
+            "Bincode entry should be a cache miss without compat features"
+        );
+
+        Ok(())
+    }
 }
 
 #[cfg(feature = "manager-moka")]
@@ -261,6 +505,21 @@ mod with_moka {
         assert!(data.is_none());
         Ok(())
     }
+
+    #[tokio::test]
+    async fn moka_corrupt_data_returns_none() -> Result<()> {
+        let manager = MokaManager::default();
+        let key = "GET:http://example.com/corrupt";
+
+        // Write corrupt data directly to the cache
+        manager.cache.insert(key.to_string(), Arc::new(b"not valid serialized data".to_vec())).await;
+        manager.cache.run_pending_tasks().await;
+
+        // get() should return Ok(None) instead of an error
+        let result = manager.get(key).await?;
+        assert!(result.is_none());
+        Ok(())
+    }
 }
 
 #[cfg(feature = "manager-foyer")]
@@ -310,6 +569,30 @@ mod with_foyer {
 
         // Note: FoyerManager doesn't have a clear() method like cacache/moka
         // since foyer handles eviction internally
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn foyer_corrupt_data_returns_none() -> Result<()> {
+        // Build the cache directly so we can insert corrupt data
+        let cache: foyer::HybridCache<String, Vec<u8>> =
+            foyer::HybridCacheBuilder::new()
+                .memory(100)
+                .storage()
+                .build()
+                .await
+                .unwrap();
+        let key = "GET:http://example.com/corrupt";
+
+        // Write corrupt data directly to the cache
+        cache.insert(key.to_string(), b"not valid serialized data".to_vec());
+
+        // Wrap in FoyerManager
+        let manager = FoyerManager::new(cache);
+
+        // get() should return Ok(None) instead of an error
+        let result = manager.get(key).await?;
+        assert!(result.is_none());
         Ok(())
     }
 }

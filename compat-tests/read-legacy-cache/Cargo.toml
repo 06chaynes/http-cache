@@ -1,0 +1,9 @@
+[package]
+name = "read-legacy-cache"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+http-cache = { path = "../../http-cache", features = ["manager-cacache", "manager-cacache-bincode", "http-headers-compat"] }
+http-cache-semantics = "2.1.0"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
