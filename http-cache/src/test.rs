@@ -216,7 +216,12 @@ mod with_cacache {
         let key = "GET:http://example.com/corrupt";
 
         // Write corrupt data directly to the cache
-        cacache::write(&cache_dir.path().to_path_buf(), key, b"not valid serialized data").await?;
+        cacache::write(
+            &cache_dir.path().to_path_buf(),
+            key,
+            b"not valid serialized data",
+        )
+        .await?;
 
         // get() should return Ok(None) instead of an error
         let result = manager.get(key).await?;
@@ -264,20 +269,14 @@ mod cacache_bincode_migration {
     async fn cacache_bincode_to_postcard_migration() -> Result<()> {
         let url = Url::from_str("http://example.com/legacy")?;
         let cache_dir = tempfile::tempdir().unwrap();
-        let manager =
-            CACacheManager::new(cache_dir.path().to_path_buf(), true);
+        let manager = CACacheManager::new(cache_dir.path().to_path_buf(), true);
         let cache_key = format!("GET:{}", &url);
 
         // Construct a legacy bincode payload matching what 0.16/0.21 wrote
         let mut headers = HashMap::new();
-        headers.insert(
-            "content-type".to_string(),
-            "application/json".to_string(),
-        );
-        headers.insert(
-            "cache-control".to_string(),
-            "max-age=3600".to_string(),
-        );
+        headers
+            .insert("content-type".to_string(), "application/json".to_string());
+        headers.insert("cache-control".to_string(), "max-age=3600".to_string());
 
         let legacy_response = LegacyTestResponse {
             body: b"legacy cached body".to_vec(),
@@ -287,16 +286,14 @@ mod cacache_bincode_migration {
             version: HttpVersion::Http11,
         };
 
-        let req =
-            http::Request::get("http://example.com/legacy").body(())?;
+        let req = http::Request::get("http://example.com/legacy").body(())?;
         let res = http::Response::builder()
             .status(200)
             .header("cache-control", "max-age=3600")
             .body(b"legacy cached body".to_vec())?;
         let policy = CachePolicy::new(&req, &res);
 
-        let legacy_store =
-            LegacyStore { response: legacy_response, policy };
+        let legacy_store = LegacyStore { response: legacy_response, policy };
 
         // Serialize with bincode (exactly as old code would have)
         let bytes = bincode::serialize(&legacy_store).unwrap();
@@ -327,13 +324,11 @@ mod cacache_bincode_migration {
     async fn cacache_bincode_migration_preserves_headers() -> Result<()> {
         let url = Url::from_str("http://example.com/headers")?;
         let cache_dir = tempfile::tempdir().unwrap();
-        let manager =
-            CACacheManager::new(cache_dir.path().to_path_buf(), true);
+        let manager = CACacheManager::new(cache_dir.path().to_path_buf(), true);
         let cache_key = format!("GET:{}", &url);
 
         let mut headers = HashMap::new();
-        headers
-            .insert("content-type".to_string(), "text/html".to_string());
+        headers.insert("content-type".to_string(), "text/html".to_string());
         headers.insert("x-custom".to_string(), "value123".to_string());
 
         let legacy_response = LegacyTestResponse {
@@ -344,16 +339,14 @@ mod cacache_bincode_migration {
             version: HttpVersion::Http11,
         };
 
-        let req =
-            http::Request::get("http://example.com/headers").body(())?;
+        let req = http::Request::get("http://example.com/headers").body(())?;
         let res = http::Response::builder()
             .status(200)
             .header("cache-control", "max-age=3600")
             .body(b"<html>test</html>".to_vec())?;
         let policy = CachePolicy::new(&req, &res);
 
-        let legacy_store =
-            LegacyStore { response: legacy_response, policy };
+        let legacy_store = LegacyStore { response: legacy_response, policy };
         let bytes = bincode::serialize(&legacy_store).unwrap();
 
         cacache::write(&cache_dir.path().to_path_buf(), &cache_key, bytes)
@@ -387,11 +380,9 @@ mod cacache_bincode_graceful_miss {
     use crate::{CACacheManager, CacheManager};
 
     #[tokio::test]
-    async fn cacache_bincode_entry_read_without_compat_feature() -> Result<()>
-    {
+    async fn cacache_bincode_entry_read_without_compat_feature() -> Result<()> {
         let cache_dir = tempfile::tempdir().unwrap();
-        let manager =
-            CACacheManager::new(cache_dir.path().to_path_buf(), true);
+        let manager = CACacheManager::new(cache_dir.path().to_path_buf(), true);
         let key = "GET:http://example.com/legacy-miss";
 
         // Write data that looks like a bincode-serialized Store.
@@ -421,8 +412,8 @@ mod cacache_bincode_graceful_miss {
         }
 
         let url = Url::from_str("http://example.com/legacy-miss")?;
-        let req = http::Request::get("http://example.com/legacy-miss")
-            .body(())?;
+        let req =
+            http::Request::get("http://example.com/legacy-miss").body(())?;
         let res = http::Response::builder()
             .status(200)
             .header("cache-control", "max-age=3600")
@@ -512,7 +503,13 @@ mod with_moka {
         let key = "GET:http://example.com/corrupt";
 
         // Write corrupt data directly to the cache
-        manager.cache.insert(key.to_string(), Arc::new(b"not valid serialized data".to_vec())).await;
+        manager
+            .cache
+            .insert(
+                key.to_string(),
+                Arc::new(b"not valid serialized data".to_vec()),
+            )
+            .await;
         manager.cache.run_pending_tasks().await;
 
         // get() should return Ok(None) instead of an error

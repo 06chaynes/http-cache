@@ -2426,14 +2426,10 @@ mod bincode_migration {
 
         // Construct a legacy bincode payload
         let mut headers = HashMap::new();
-        headers.insert(
-            "content-type".to_string(),
-            "application/json".to_string(),
-        );
-        headers.insert(
-            "cache-control".to_string(),
-            CACHEABLE_PUBLIC.to_string(),
-        );
+        headers
+            .insert("content-type".to_string(), "application/json".to_string());
+        headers
+            .insert("cache-control".to_string(), CACHEABLE_PUBLIC.to_string());
 
         let legacy_body = b"legacy bincode response";
 
@@ -2492,8 +2488,7 @@ mod bincode_migration {
         let url = format!("{}/new-endpoint", &mock_server.uri());
 
         let cache_dir = tempfile::tempdir().unwrap();
-        let manager =
-            CACacheManager::new(cache_dir.path().to_path_buf(), true);
+        let manager = CACacheManager::new(cache_dir.path().to_path_buf(), true);
 
         let client = ClientBuilder::new(Client::new())
             .with(Cache(HttpCache {
@@ -2509,11 +2504,9 @@ mod bincode_migration {
         assert_eq!(res.bytes().await?, &b"new postcard data"[..]);
 
         // Verify it was cached (written with postcard)
-        let data = CacheManager::get(
-            &manager,
-            &format!("GET:{}", &url_parse(&url)?),
-        )
-        .await?;
+        let data =
+            CacheManager::get(&manager, &format!("GET:{}", &url_parse(&url)?))
+                .await?;
         assert!(data.is_some(), "New entry should be cached with postcard");
 
         // Second request: should come from cache (mock expects only 1 call)
