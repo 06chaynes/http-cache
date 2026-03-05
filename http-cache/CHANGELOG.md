@@ -1,5 +1,28 @@
 # Changelog
 
+## [1.0.0-alpha.5] - 2026-02-17
+
+### Added
+
+- `url-standard` feature flag as the new default URL implementation using the `url` crate
+- Transparent bincode-to-postcard migration in `CACacheManager` and `MokaManager` (reads legacy bincode data, writes postcard)
+
+### Changed
+
+- `StreamingManager` rewritten to use cacache for disk storage with moka for metadata tracking and TinyLFU eviction
+- MSRV bumped from 1.85.0 to 1.88.0
+- Updated `http-cache-semantics` from 2.1.0 to 3.0.0
+- Updated `foyer` to 0.22.3
+- Updated `rand` to 0.10.0
+- `url` crate is now optional behind `url-standard` feature (enabled by default)
+- Removed `runtime` module, streaming no longer requires runtime-specific code
+
+### Fixed
+
+- Metadata handling with bincode serialization
+- `CacheMode` enum variant matching logic
+- Feature flag gates for doc tests
+
 ## [1.0.0-alpha.4] - 2026-01-19
 
 ### Added

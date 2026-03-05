@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.0.0-alpha.5] - 2026-02-17
+
+### Changed
+
+- Updated `http-cache` dependency to 1.0.0-alpha.5
+- Updated `http-cache-semantics` to 3.0.0
+- MSRV bumped from 1.85.0 to 1.88.0
+- Exposed `url-standard`, `url-ada`, and `http-headers-compat` feature flags
+
 ## [1.0.0-alpha.4] - 2026-01-19
 
 ### Changed

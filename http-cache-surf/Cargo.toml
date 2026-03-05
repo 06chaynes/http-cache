@@ -1,6 +1,6 @@
 [package]
 name = "http-cache-surf"
-version = "1.0.0-alpha.4"
+version = "1.0.0-alpha.5"
 description = "http-cache middleware implementation for surf"
 authors = ["Christian Haynes <06chaynes@gmail.com>", "Kat Marchán <kzm@zkat.tech>"]
 repository = "https://github.com/06chaynes/http-cache"
@@ -24,7 +24,7 @@ surf = { version = "2.3.2", default-features = false }
 
 [dependencies.http-cache]
 path = "../http-cache"
-version = "1.0.0-alpha.4"
+version = "1.0.0-alpha.5"
 default-features = false
 features = ["with-http-types"]
 
