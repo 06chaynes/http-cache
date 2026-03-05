@@ -1,0 +1,3237 @@
+<!DOCTYPE HTML>
+<html lang="en" class="sidebar-visible no-js oranda-dark">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>http-cache</title>
+        <meta name="robots" content="noindex" />
+
+
+        <!-- Custom HTML head -->
+        
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff" />
+
+        <link rel="icon" href="favicon.svg">
+        <link rel="shortcut icon" href="favicon.png">
+        <link rel="stylesheet" href="css/variables.css">
+        <link rel="stylesheet" href="css/general.css">
+        <link rel="stylesheet" href="css/chrome.css">
+        <link rel="stylesheet" href="css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" href="highlight.css">
+        <link rel="stylesheet" href="tomorrow-night.css">
+        <link rel="stylesheet" href="ayu-highlight.css">
+        <link rel="stylesheet" href="oranda-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+    </head>
+    <body>
+    <div id="body-container">
+        <!-- Provide site root to javascript -->
+        <script>
+            var path_to_root = "";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "oranda-dark" : "oranda-dark";
+        </script>
+
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                var theme = localStorage.getItem('orandamdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('orandamdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            var theme;
+            try { theme = localStorage.getItem('orandamdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            var html = document.querySelector('html');
+            html.classList.remove('no-js')
+            html.classList.remove('oranda-dark')
+            html.classList.add(theme);
+            html.classList.add('js');
+        </script>
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            var html = document.querySelector('html');
+            var sidebar = 'hidden';
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            }
+            html.classList.remove('sidebar-visible');
+            html.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <div class="sidebar-scrollbox">
+                <ol class="chapter"><li class="chapter-item expanded "><a href="introduction.html"><strong aria-hidden="true">1.</strong> Introduction</a></li><li class="chapter-item expanded "><a href="cache-modes.html"><strong aria-hidden="true">2.</strong> Cache Modes</a></li><li class="chapter-item expanded "><a href="rate-limiting.html"><strong aria-hidden="true">3.</strong> Rate Limiting</a></li><li class="chapter-item expanded "><a href="development/development.html"><strong aria-hidden="true">4.</strong> Development</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="development/supporting-a-backend-cache-manager.html"><strong aria-hidden="true">4.1.</strong> Supporting a Backend Cache Manager</a></li><li class="chapter-item expanded "><a href="development/supporting-an-http-client.html"><strong aria-hidden="true">4.2.</strong> Supporting an HTTP Client</a></li></ol></li><li class="chapter-item expanded "><a href="clients/clients.html"><strong aria-hidden="true">5.</strong> Client-Side Caching</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="clients/reqwest.html"><strong aria-hidden="true">5.1.</strong> reqwest</a></li><li class="chapter-item expanded "><a href="clients/surf.html"><strong aria-hidden="true">5.2.</strong> surf</a></li><li class="chapter-item expanded "><a href="clients/ureq.html"><strong aria-hidden="true">5.3.</strong> ureq</a></li><li class="chapter-item expanded "><a href="clients/tower.html"><strong aria-hidden="true">5.4.</strong> tower</a></li></ol></li><li class="chapter-item expanded "><a href="server/server.html"><strong aria-hidden="true">6.</strong> Server-Side Caching</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="server/tower-server.html"><strong aria-hidden="true">6.1.</strong> tower-server</a></li></ol></li><li class="chapter-item expanded "><a href="managers/managers.html"><strong aria-hidden="true">7.</strong> Backend Cache Manager Implementations</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="managers/cacache.html"><strong aria-hidden="true">7.1.</strong> cacache</a></li><li class="chapter-item expanded "><a href="managers/moka.html"><strong aria-hidden="true">7.2.</strong> moka</a></li><li class="chapter-item expanded "><a href="managers/foyer.html"><strong aria-hidden="true">7.3.</strong> foyer</a></li><li class="chapter-item expanded "><a href="managers/quick-cache.html"><strong aria-hidden="true">7.4.</strong> quick_cache</a></li><li class="chapter-item expanded "><a href="managers/streaming_cache.html"><strong aria-hidden="true">7.5.</strong> streaming_cache</a></li></ol></li></ol>
+            </div>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky bordered">
+                    <div class="left-buttons">
+                        <button id="sidebar-toggle" class="icon-button" type="button" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </button>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="oranda-dark">Axo Dark</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="oranda-light">Axo Light</button></li>
+
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">http-cache</h1>
+
+                    <div class="right-buttons">
+                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="introduction"><a class="header" href="#introduction">Introduction</a></h1>
+<p><code>http-cache</code> is a comprehensive library for HTTP response caching in Rust. It provides both <strong>client-side</strong> and <strong>server-side</strong> caching middleware for multiple HTTP clients and frameworks. Built on top of <a href="https://github.com/kornelski/rusty-http-cache-semantics"><code>http-cache-semantics</code></a>, it correctly implements HTTP cache semantics as defined in RFC 7234.</p>
+<h2 id="key-features"><a class="header" href="#key-features">Key Features</a></h2>
+<ul>
+<li><strong>Client-Side Caching</strong>: Cache responses from external APIs you're calling</li>
+<li><strong>Server-Side Caching</strong>: Cache your own application's responses to reduce load</li>
+<li><strong>Traditional Caching</strong>: Standard HTTP response caching with full buffering</li>
+<li><strong>Streaming Support</strong>: Memory-efficient caching for large responses without full buffering</li>
+<li><strong>Cache-Aware Rate Limiting</strong>: Intelligent rate limiting that only applies on cache misses</li>
+<li><strong>Multiple Backends</strong>: Support for disk-based (cacache) and in-memory (moka, quick-cache) storage</li>
+<li><strong>Client Integrations</strong>: Support for reqwest, surf, tower, and ureq HTTP clients</li>
+<li><strong>Server Framework Support</strong>: Tower-based servers (Axum, Hyper, Tonic)</li>
+<li><strong>RFC 7234 Compliance</strong>: Proper HTTP cache semantics with respect for cache-control headers</li>
+</ul>
+<h2 id="client-side-vs-server-side-caching"><a class="header" href="#client-side-vs-server-side-caching">Client-Side vs Server-Side Caching</a></h2>
+<h3 id="client-side-caching"><a class="header" href="#client-side-caching">Client-Side Caching</a></h3>
+<p>Cache responses from external APIs your application calls:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Example: Caching API responses you fetch
+let client = reqwest::Client::new();
+let cached_client = HttpCache::new(client, cache_manager);
+let response = cached_client.get("https://api.example.com/users").send().await?;
+<span class="boring">}</span></code></pre></pre>
+<p><strong>Use cases:</strong></p>
+<ul>
+<li>Reducing calls to external APIs</li>
+<li>Offline support</li>
+<li>Bandwidth optimization</li>
+<li>Rate limit compliance</li>
+</ul>
+<h3 id="server-side-caching"><a class="header" href="#server-side-caching">Server-Side Caching</a></h3>
+<p>Cache responses your application generates:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Example: Caching your own endpoint responses
+let app = Router::new()
+    .route("/users/:id", get(get_user))
+    .layer(ServerCacheLayer::new(cache_manager)); // Cache your responses
+<span class="boring">}</span></code></pre></pre>
+<p><strong>Use cases:</strong></p>
+<ul>
+<li>Reducing database queries</li>
+<li>Caching expensive computations</li>
+<li>Improving response times</li>
+<li>Reducing server load</li>
+</ul>
+<p><strong>Critical:</strong> Server-side cache middleware must be placed <strong>after</strong> routing to preserve request context (path parameters, state, etc.).</p>
+<h2 id="streaming-vs-traditional-caching"><a class="header" href="#streaming-vs-traditional-caching">Streaming vs Traditional Caching</a></h2>
+<p>The library supports two caching approaches:</p>
+<ul>
+<li><strong>Traditional Caching</strong> (<code>CacheManager</code> trait): Buffers entire responses in memory before caching. Suitable for smaller responses and simpler use cases.</li>
+<li><strong>Streaming Caching</strong> (<code>StreamingCacheManager</code> trait): Processes responses as streams without full buffering. Ideal for large files, media content, or memory-constrained environments.</li>
+</ul>
+<p>Note: Streaming is currently only available for client-side caching. Server-side caching uses buffered responses.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="cache-modes"><a class="header" href="#cache-modes">Cache Modes</a></h1>
+<p>When constructing a new instance of <code>HttpCache</code>, you must specify a cache mode. The cache mode determines how the cache will behave in certain situations. These modes are similar to <a href="https://github.com/npm/make-fetch-happen#--optscache">make-fetch-happen cache options</a>. The available cache modes are:</p>
+<ul>
+<li>
+<p><code>Default</code>: This mode will inspect the HTTP cache on the way to the network. If there is a fresh response it will be used. If there is a stale response a conditional request will be created, and a normal request otherwise. It then updates the HTTP cache with the response. If the revalidation request fails (for example, on a 500 or if you're offline), the stale response will be returned.</p>
+</li>
+<li>
+<p><code>NoStore</code>: This mode will ignore the HTTP cache on the way to the network. It will always create a normal request, and will never cache the response.</p>
+</li>
+<li>
+<p><code>Reload</code>: This mode will ignore the HTTP cache on the way to the network. It will always create a normal request, and will update the HTTP cache with the response.</p>
+</li>
+<li>
+<p><code>NoCache</code>: This mode will create a conditional request if there is a response in the HTTP cache and a normal request otherwise. It then updates the HTTP cache with the response.</p>
+</li>
+<li>
+<p><code>ForceCache</code>: This mode will inspect the HTTP cache on the way to the network. If there is a cached response it will be used regardless of freshness. If there is no cached response it will create a normal request, and will update the cache with the response.</p>
+</li>
+<li>
+<p><code>OnlyIfCached</code>: This mode will inspect the HTTP cache on the way to the network. If there is a cached response it will be used regardless of freshness. If there is no cached response it will return a <code>504 Gateway Timeout</code> error.</p>
+</li>
+<li>
+<p><code>IgnoreRules</code>: This mode will ignore the HTTP headers and always store a response given it was a 200 status code. It will also ignore the staleness when retrieving a response from the cache, so expiration of the cached response will need to be handled manually. If there was no cached response it will create a normal request, and will update the cache with the response.</p>
+</li>
+</ul>
+<h2 id="maximum-ttl-control"><a class="header" href="#maximum-ttl-control">Maximum TTL Control</a></h2>
+<p>When using cache modes like <code>IgnoreRules</code> that bypass server cache headers, you can use the <code>max_ttl</code> option to provide expiration control. This is particularly useful for preventing cached responses from persisting indefinitely.</p>
+<h3 id="usage"><a class="header" href="#usage">Usage</a></h3>
+<p>The <code>max_ttl</code> option accepts a <code>Duration</code> and sets a maximum time-to-live for cached responses:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use http_cache::{HttpCacheOptions, CACacheManager, HttpCache, CacheMode};
+use std::time::Duration;
+
+let manager = CACacheManager::new("./cache".into(), true);
+
+let options = HttpCacheOptions {
+    max_ttl: Some(Duration::from_secs(300)), // 5 minutes maximum
+    ..Default::default()
+};
+
+let cache = HttpCache {
+    mode: CacheMode::IgnoreRules, // Ignore server cache headers
+    manager,
+    options,
+};
+<span class="boring">}</span></code></pre></pre>
+<h3 id="behavior"><a class="header" href="#behavior">Behavior</a></h3>
+<ul>
+<li><strong>Override longer durations</strong>: If the server specifies a longer cache duration (e.g., <code>max-age=3600</code>), <code>max_ttl</code> will reduce it to the specified limit</li>
+<li><strong>Respect shorter durations</strong>: If the server specifies a shorter duration (e.g., <code>max-age=60</code>), the server's shorter duration will be used</li>
+<li><strong>Provide fallback duration</strong>: When using <code>IgnoreRules</code> mode where server headers are ignored, <code>max_ttl</code> provides the cache duration</li>
+</ul>
+<h3 id="examples"><a class="header" href="#examples">Examples</a></h3>
+<p><strong>With IgnoreRules mode:</strong></p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Cache everything for 5 minutes, ignoring server headers
+let options = HttpCacheOptions {
+    max_ttl: Some(Duration::from_secs(300)),
+    ..Default::default()
+};
+let cache = HttpCache {
+    mode: CacheMode::IgnoreRules,
+    manager,
+    options,
+};
+<span class="boring">}</span></code></pre></pre>
+<p><strong>With Default mode:</strong></p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Respect server headers but limit cache duration to 1 hour maximum
+let options = HttpCacheOptions {
+    max_ttl: Some(Duration::from_secs(3600)),
+    ..Default::default()
+};
+let cache = HttpCache {
+    mode: CacheMode::Default,
+    manager,
+    options,
+};
+<span class="boring">}</span></code></pre></pre>
+<h2 id="content-type-based-caching"><a class="header" href="#content-type-based-caching">Content-Type Based Caching</a></h2>
+<p>You can implement selective caching based on response content types using the <code>response_cache_mode_fn</code> option. This allows you to cache only certain types of content while avoiding others.</p>
+<h3 id="basic-content-type-filtering"><a class="header" href="#basic-content-type-filtering">Basic Content-Type Filtering</a></h3>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use http_cache::{HttpCacheOptions, CACacheManager, HttpCache, CacheMode};
+use std::sync::Arc;
+
+let manager = CACacheManager::new("./cache".into(), true);
+
+let options = HttpCacheOptions {
+    response_cache_mode_fn: Some(Arc::new(|_request_parts, response| {
+        // Check the Content-Type header to decide caching behavior
+        if let Some(content_type) = response.headers.get("content-type") {
+            match content_type.to_str().unwrap_or("") {
+                // Cache JSON APIs aggressively (ignore no-cache headers)
+                ct if ct.starts_with("application/json") =&gt; Some(CacheMode::ForceCache),
+                // Cache images with default HTTP caching rules
+                ct if ct.starts_with("image/") =&gt; Some(CacheMode::Default),
+                // Cache static assets aggressively
+                ct if ct.starts_with("text/css") =&gt; Some(CacheMode::ForceCache),
+                ct if ct.starts_with("application/javascript") =&gt; Some(CacheMode::ForceCache),
+                // Don't cache HTML pages (often dynamic)
+                ct if ct.starts_with("text/html") =&gt; Some(CacheMode::NoStore),
+                // Don't cache unknown content types
+                _ =&gt; Some(CacheMode::NoStore),
+            }
+        } else {
+            // No Content-Type header - don't cache for safety
+            Some(CacheMode::NoStore)
+        }
+    })),
+    ..Default::default()
+};
+
+let cache = HttpCache {
+    mode: CacheMode::Default, // This gets overridden by response_cache_mode_fn
+    manager,
+    options,
+};
+<span class="boring">}</span></code></pre></pre>
+<h3 id="advanced-content-type-strategies"><a class="header" href="#advanced-content-type-strategies">Advanced Content-Type Strategies</a></h3>
+<p>For more complex scenarios, you can combine content-type checking with other response properties:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use http_cache::{HttpCacheOptions, CACacheManager, HttpCache, CacheMode};
+use std::sync::Arc;
+use std::time::Duration;
+
+let manager = CACacheManager::new("./cache".into(), true);
+
+let options = HttpCacheOptions {
+    response_cache_mode_fn: Some(Arc::new(|request_parts, response| {
+        // Get content type
+        let content_type = response.headers
+            .get("content-type")
+            .and_then(|ct| ct.to_str().ok())
+            .unwrap_or("");
+
+        // Get URL path for additional context
+        let path = request_parts.uri.path();
+
+        match content_type {
+            // API responses
+            ct if ct.starts_with("application/json") =&gt; {
+                if path.starts_with("/api/") {
+                    // Cache API responses, but respect server headers
+                    Some(CacheMode::Default)
+                } else {
+                    // Force cache non-API JSON (like config files)
+                    Some(CacheMode::ForceCache)
+                }
+            },
+            // Static assets
+            ct if ct.starts_with("text/css") || 
+                  ct.starts_with("application/javascript") =&gt; {
+                Some(CacheMode::ForceCache)
+            },
+            // Images
+            ct if ct.starts_with("image/") =&gt; {
+                if response.status == 200 {
+                    Some(CacheMode::ForceCache)
+                } else {
+                    Some(CacheMode::NoStore) // Don't cache error images
+                }
+            },
+            // HTML
+            ct if ct.starts_with("text/html") =&gt; {
+                if path.starts_with("/static/") {
+                    Some(CacheMode::Default) // Static HTML can be cached
+                } else {
+                    Some(CacheMode::NoStore) // Dynamic HTML shouldn't be cached
+                }
+            },
+            // Everything else
+            _ =&gt; Some(CacheMode::NoStore),
+        }
+    })),
+    // Limit cache duration to 1 hour max
+    max_ttl: Some(Duration::from_secs(3600)),
+    ..Default::default()
+};
+
+let cache = HttpCache {
+    mode: CacheMode::Default,
+    manager,
+    options,
+};
+<span class="boring">}</span></code></pre></pre>
+<h3 id="common-content-type-patterns"><a class="header" href="#common-content-type-patterns">Common Content-Type Patterns</a></h3>
+<p>Here are some common content-type based caching strategies:</p>
+<p><strong>Static Assets (Aggressive Caching):</strong></p>
+<ul>
+<li><code>text/css</code> - CSS stylesheets</li>
+<li><code>application/javascript</code> - JavaScript files</li>
+<li><code>image/*</code> - All image types</li>
+<li><code>font/*</code> - Web fonts</li>
+</ul>
+<p><strong>API Responses (Conditional Caching):</strong></p>
+<ul>
+<li><code>application/json</code> - JSON APIs</li>
+<li><code>application/xml</code> - XML APIs</li>
+<li><code>text/plain</code> - Plain text responses</li>
+</ul>
+<p><strong>Dynamic Content (No Caching):</strong></p>
+<ul>
+<li><code>text/html</code> - HTML pages (usually dynamic)</li>
+<li><code>application/x-www-form-urlencoded</code> - Form submissions</li>
+</ul>
+<h3 id="combining-with-other-options"><a class="header" href="#combining-with-other-options">Combining with Other Options</a></h3>
+<p>Content-type based caching works well with other cache options:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use http_cache::{HttpCacheOptions, CACacheManager, HttpCache, CacheMode};
+use std::sync::Arc;
+use std::time::Duration;
+
+let options = HttpCacheOptions {
+    // Content-type based mode selection
+    response_cache_mode_fn: Some(Arc::new(|_req, response| {
+        match response.headers.get("content-type")?.to_str().ok()? {
+            ct if ct.starts_with("application/json") =&gt; Some(CacheMode::ForceCache),
+            ct if ct.starts_with("image/") =&gt; Some(CacheMode::Default),
+            _ =&gt; Some(CacheMode::NoStore),
+        }
+    })),
+    // Custom cache keys for better organization
+    cache_key: Some(Arc::new(|req| {
+        format!("{}:{}:{}", req.method, req.uri.host().unwrap_or(""), req.uri.path())
+    })),
+    // Maximum cache duration
+    max_ttl: Some(Duration::from_secs(1800)), // 30 minutes
+    // Add cache status headers for debugging
+    cache_status_headers: true,
+    ..Default::default()
+};
+<span class="boring">}</span></code></pre></pre>
+<p>This approach gives you fine-grained control over what gets cached based on the actual content type returned by the server.</p>
+<h2 id="complete-per-request-customization"><a class="header" href="#complete-per-request-customization">Complete Per-Request Customization</a></h2>
+<p>The HTTP cache library provides comprehensive per-request customization capabilities for cache keys, cache options, and cache modes. Here's a complete example showing all features:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use http_cache::{HttpCacheOptions, CACacheManager, HttpCache, CacheMode};
+use std::sync::Arc;
+use std::time::Duration;
+
+let manager = CACacheManager::new("./cache".into(), true);
+
+let options = HttpCacheOptions {
+    // 1. Configure cache keys when initializing (per-request cache key override)
+    cache_key: Some(Arc::new(|req: &amp;http::request::Parts| {
+        // Generate different cache keys based on request properties
+        let path = req.uri.path();
+        let query = req.uri.query().unwrap_or("");
+        
+        match path {
+            // API endpoints: include user context in cache key
+            p if p.starts_with("/api/") =&gt; {
+                if let Some(auth) = req.headers.get("authorization") {
+                    format!("api:{}:{}:{}:authenticated", req.method, path, query)
+                } else {
+                    format!("api:{}:{}:{}:anonymous", req.method, path, query)
+                }
+            },
+            // Static assets: simple cache key
+            p if p.starts_with("/static/") =&gt; {
+                format!("static:{}:{}", req.method, req.uri)
+            },
+            // Dynamic pages: include important headers
+            _ =&gt; {
+                let accept_lang = req.headers.get("accept-language")
+                    .and_then(|h| h.to_str().ok())
+                    .unwrap_or("en");
+                format!("page:{}:{}:{}:{}", req.method, path, query, accept_lang)
+            }
+        }
+    })),
+    
+    // 2. Override cache options on a per-request basis (request-based cache mode)
+    cache_mode_fn: Some(Arc::new(|req: &amp;http::request::Parts| {
+        let path = req.uri.path();
+        
+        // Admin endpoints: never cache
+        if path.starts_with("/admin/") {
+            return CacheMode::NoStore;
+        }
+        
+        // Check for cache control headers from client
+        if req.headers.contains_key("x-no-cache") {
+            return CacheMode::NoStore;
+        }
+        
+        // Development mode: bypass cache
+        if req.headers.get("x-env").and_then(|h| h.to_str().ok()) == Some("development") {
+            return CacheMode::Reload;
+        }
+        
+        // Static assets: force cache
+        if path.starts_with("/static/") || path.ends_with(".css") || path.ends_with(".js") {
+            return CacheMode::ForceCache;
+        }
+        
+        // Default behavior for everything else
+        CacheMode::Default
+    })),
+    
+    // 3. Additional per-response cache override (response-based cache mode)
+    response_cache_mode_fn: Some(Arc::new(|req: &amp;http::request::Parts, response| {
+        // Override cache behavior based on response content and status
+        
+        // Never cache error responses
+        if response.status &gt;= 400 {
+            return Some(CacheMode::NoStore);
+        }
+        
+        // Content-type based caching
+        if let Some(content_type) = response.headers.get("content-type") {
+            match content_type.to_str().unwrap_or("") {
+                // Force cache JSON APIs even with no-cache headers
+                ct if ct.starts_with("application/json") =&gt; Some(CacheMode::ForceCache),
+                // Don't cache HTML in development
+                ct if ct.starts_with("text/html") =&gt; {
+                    if req.headers.get("x-env").and_then(|h| h.to_str().ok()) == Some("development") {
+                        Some(CacheMode::NoStore)
+                    } else {
+                        None // Use default behavior
+                    }
+                },
+                _ =&gt; None,
+            }
+        } else {
+            None
+        }
+    })),
+    
+    // Cache busting for related resources
+    cache_bust: Some(Arc::new(|req: &amp;http::request::Parts, _cache_key_fn, current_key| {
+        let path = req.uri.path();
+        
+        // When updating user data, bust user-specific caches
+        if req.method == "POST" &amp;&amp; path.starts_with("/api/users/") {
+            if let Some(user_id) = path.strip_prefix("/api/users/").and_then(|s| s.split('/').next()) {
+                return vec![
+                    format!("api:GET:/api/users/{}:authenticated", user_id),
+                    format!("api:GET:/api/users/{}:anonymous", user_id),
+                    format!("api:GET:/api/users:authenticated"),
+                ];
+            }
+        }
+        
+        vec![] // No cache busting by default
+    })),
+    
+    // Global cache duration limit
+    max_ttl: Some(Duration::from_secs(86400)),
+    
+    // Enable cache status headers for debugging
+    cache_status_headers: true,
+    
+    ..Default::default()
+};
+
+let cache = HttpCache {
+    mode: CacheMode::Default, // Can be overridden by cache_mode_fn and response_cache_mode_fn
+    manager,
+    options,
+};
+<span class="boring">}</span></code></pre></pre>
+<h3 id="key-capabilities-summary"><a class="header" href="#key-capabilities-summary">Key Capabilities Summary</a></h3>
+<ol>
+<li><strong>Custom Cache Keys</strong>: The <code>cache_key</code> function runs for every request, allowing complete customization of cache keys based on any request property</li>
+<li><strong>Request-Based Cache Mode Override</strong>: The <code>cache_mode_fn</code> allows overriding cache behavior based on request properties (headers, path, method, etc.)</li>
+<li><strong>Response-Based Cache Mode Override</strong>: The <code>response_cache_mode_fn</code> allows overriding cache behavior based on both request and response data</li>
+<li><strong>Cache Busting</strong>: The <code>cache_bust</code> function allows invalidating related cache entries</li>
+<li><strong>Global Settings</strong>: Options like <code>max_ttl</code> and <code>cache_status_headers</code> provide global configuration</li>
+</ol>
+<p>All of these functions are called on a per-request basis, giving you complete control over caching behavior for each individual request.</p>
+<h2 id="response-metadata"><a class="header" href="#response-metadata">Response Metadata</a></h2>
+<p>The cache allows storing custom metadata alongside cached responses using the <code>metadata_provider</code> callback. This is useful for storing computed information that should be associated with cached responses, avoiding recomputation on cache hits.</p>
+<h3 id="basic-usage"><a class="header" href="#basic-usage">Basic Usage</a></h3>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use http_cache::{HttpCacheOptions, CACacheManager, HttpCache, CacheMode};
+use std::sync::Arc;
+
+let manager = CACacheManager::new("./cache".into(), true);
+
+let options = HttpCacheOptions {
+    metadata_provider: Some(Arc::new(|request_parts, response_parts| {
+        // Generate metadata based on request and response
+        let content_type = response_parts
+            .headers
+            .get("content-type")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("unknown");
+
+        // Serialize metadata as bytes (users handle serialization)
+        Some(format!(
+            "path={};content-type={};status={}",
+            request_parts.uri.path(),
+            content_type,
+            response_parts.status.as_u16()
+        ).into_bytes())
+    })),
+    ..Default::default()
+};
+
+let cache = HttpCache {
+    mode: CacheMode::Default,
+    manager,
+    options,
+};
+<span class="boring">}</span></code></pre></pre>
+<h3 id="use-cases"><a class="header" href="#use-cases">Use Cases</a></h3>
+<p>The <code>metadata_provider</code> is particularly useful for:</p>
+<ol>
+<li><strong>Computed Information</strong>: Store computed data based on request/response pairs that would be expensive to recompute</li>
+<li><strong>Logging Context</strong>: Store information for logging that should be associated with cached responses</li>
+<li><strong>Custom Headers</strong>: Store additional headers or information that should be returned with cached responses</li>
+<li><strong>Analytics Data</strong>: Store request timing, transformation information, or other analytics data</li>
+</ol>
+<h3 id="accessing-metadata"><a class="header" href="#accessing-metadata">Accessing Metadata</a></h3>
+<p>When retrieving cached responses through the <code>HttpCacheInterface</code>, the <code>HttpResponse</code> struct contains the metadata field:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// When looking up cached responses
+if let Some((cached_response, policy)) = cache.lookup_cached_response(&amp;cache_key).await? {
+    // Access the metadata
+    if let Some(metadata) = &amp;cached_response.metadata {
+        // Deserialize and use the metadata
+        let metadata_str = String::from_utf8_lossy(metadata);
+        println!("Cached with metadata: {}", metadata_str);
+    }
+
+    // Use the cached response body
+    let body = &amp;cached_response.body;
+}
+<span class="boring">}</span></code></pre></pre>
+<h3 id="conditional-metadata-generation"><a class="header" href="#conditional-metadata-generation">Conditional Metadata Generation</a></h3>
+<p>The metadata provider can return <code>None</code> to skip metadata generation for certain responses:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let options = HttpCacheOptions {
+    metadata_provider: Some(Arc::new(|request_parts, response_parts| {
+        // Only generate metadata for API responses
+        if request_parts.uri.path().starts_with("/api/") {
+            let computed_info = format!(
+                "api_version={};response_time={}",
+                response_parts.headers
+                    .get("x-api-version")
+                    .and_then(|v| v.to_str().ok())
+                    .unwrap_or("unknown"),
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_millis()
+            );
+            Some(computed_info.into_bytes())
+        } else {
+            None // No metadata for non-API responses
+        }
+    })),
+    ..Default::default()
+};
+<span class="boring">}</span></code></pre></pre>
+<h3 id="integration-with-middleware"><a class="header" href="#integration-with-middleware">Integration with Middleware</a></h3>
+<p>For middleware implementations (like reqwest-middleware), the types <code>HttpCacheMetadata</code> and <code>MetadataProvider</code> are re-exported:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use http_cache_reqwest::{
+    HttpCacheMetadata, MetadataProvider, HttpCacheOptions,
+    CacheMode, CACacheManager, HttpCache, Cache
+};
+use reqwest::Client;
+use reqwest_middleware::ClientBuilder;
+use std::sync::Arc;
+
+let options = HttpCacheOptions {
+    metadata_provider: Some(Arc::new(|req, res| {
+        // Store request path and response status as metadata
+        Some(format!("{}:{}", req.uri.path(), res.status.as_u16()).into_bytes())
+    })),
+    ..Default::default()
+};
+
+let client = ClientBuilder::new(Client::new())
+    .with(Cache(HttpCache {
+        mode: CacheMode::Default,
+        manager: CACacheManager::new("./cache".into(), true),
+        options,
+    }))
+    .build();
+<span class="boring">}</span></code></pre></pre>
+<h3 id="notes"><a class="header" href="#notes">Notes</a></h3>
+<ul>
+<li>Users are responsible for serialization/deserialization of metadata</li>
+<li>Metadata is stored as <code>Vec&lt;u8&gt;</code> bytes</li>
+<li>When both explicit metadata is passed to <code>process_response</code> and a <code>metadata_provider</code> is configured, the explicit metadata takes precedence</li>
+<li>Metadata persists with the cached response and is available on cache hits</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="rate-limiting"><a class="header" href="#rate-limiting">Rate Limiting</a></h1>
+<p>The http-cache library provides built-in cache-aware rate limiting functionality that only applies when making actual network requests (cache misses), not when serving responses from cache (cache hits).</p>
+<p>This feature is available behind the <code>rate-limiting</code> feature flag and provides an elegant solution for scraping scenarios where you want to cache responses to avoid rate limits, but still need to respect rate limits for new requests.</p>
+<h2 id="how-it-works"><a class="header" href="#how-it-works">How It Works</a></h2>
+<p>The rate limiting follows this flow:</p>
+<ol>
+<li><strong>Check cache first</strong> - The cache is checked for an existing response</li>
+<li><strong>If cache hit</strong> - Return the cached response immediately (no rate limiting applied)</li>
+<li><strong>If cache miss</strong> - Apply rate limiting before making the network request</li>
+<li><strong>Make network request</strong> - Fetch from the remote server after rate limiting</li>
+<li><strong>Cache and return</strong> - Store the response and return it</li>
+</ol>
+<p>This ensures that:</p>
+<ul>
+<li>Cached responses are served instantly without any rate limiting delays</li>
+<li>Only actual network requests are rate limited</li>
+<li>Multiple cache hits can be served concurrently without waiting</li>
+</ul>
+<h2 id="rate-limiting-strategies"><a class="header" href="#rate-limiting-strategies">Rate Limiting Strategies</a></h2>
+<h3 id="domainratelimiter"><a class="header" href="#domainratelimiter">DomainRateLimiter</a></h3>
+<p>Applies rate limiting per domain, allowing different rate limits for different hosts:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use http_cache::rate_limiting::{DomainRateLimiter, Quota};
+use std::num::NonZeroU32;
+use std::sync::Arc;
+
+// Allow 10 requests per second per domain
+let quota = Quota::per_second(NonZeroU32::new(10).unwrap());
+let rate_limiter = Arc::new(DomainRateLimiter::new(quota));
+<span class="boring">}</span></code></pre></pre>
+<h3 id="directratelimiter"><a class="header" href="#directratelimiter">DirectRateLimiter</a></h3>
+<p>Applies a global rate limit across all requests regardless of domain:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use http_cache::rate_limiting::{DirectRateLimiter, Quota};
+use std::num::NonZeroU32;
+use std::sync::Arc;
+
+// Allow 5 requests per second globally
+let quota = Quota::per_second(NonZeroU32::new(5).unwrap());
+let rate_limiter = Arc::new(DirectRateLimiter::direct(quota));
+<span class="boring">}</span></code></pre></pre>
+<h3 id="custom-rate-limiters"><a class="header" href="#custom-rate-limiters">Custom Rate Limiters</a></h3>
+<p>You can implement your own rate limiting strategy by implementing the <code>CacheAwareRateLimiter</code> trait:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use http_cache::rate_limiting::CacheAwareRateLimiter;
+use async_trait::async_trait;
+
+struct CustomRateLimiter {
+    // Your custom rate limiting logic
+}
+
+#[async_trait]
+impl CacheAwareRateLimiter for CustomRateLimiter {
+    async fn until_key_ready(&amp;self, key: &amp;str) {
+        // Implement your rate limiting logic here
+        // This method should block until it's safe to make a request
+    }
+
+    fn check_key(&amp;self, key: &amp;str) -&gt; bool {
+        // Return true if a request can be made immediately
+        // Return false if rate limiting would apply
+        true
+    }
+}
+<span class="boring">}</span></code></pre></pre>
+<h2 id="configuration"><a class="header" href="#configuration">Configuration</a></h2>
+<p>Rate limiting is configured through the <code>HttpCacheOptions</code> struct:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use http_cache::{HttpCache, HttpCacheOptions, CacheMode};
+use http_cache::rate_limiting::{DomainRateLimiter, Quota};
+use std::sync::Arc;
+
+let quota = Quota::per_second(std::num::NonZeroU32::new(10).unwrap());
+let rate_limiter = Arc::new(DomainRateLimiter::new(quota));
+
+let cache = HttpCache {
+    mode: CacheMode::Default,
+    manager: your_cache_manager,
+    options: HttpCacheOptions {
+        rate_limiter: Some(rate_limiter),
+        ..Default::default()
+    },
+};
+<span class="boring">}</span></code></pre></pre>
+<h2 id="client-specific-examples"><a class="header" href="#client-specific-examples">Client-Specific Examples</a></h2>
+<h3 id="reqwest"><a class="header" href="#reqwest">reqwest</a></h3>
+<pre><pre class="playground"><code class="language-rust">use http_cache_reqwest::{Cache, HttpCache, CACacheManager, CacheMode, HttpCacheOptions};
+use http_cache_reqwest::{DomainRateLimiter, Quota};
+use reqwest_middleware::ClientBuilder;
+use std::sync::Arc;
+
+#[tokio::main]
+async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
+    let quota = Quota::per_second(std::num::NonZeroU32::new(5).unwrap());
+    let rate_limiter = Arc::new(DomainRateLimiter::new(quota));
+    
+    let client = ClientBuilder::new(reqwest::Client::new())
+        .with(Cache(HttpCache {
+            mode: CacheMode::Default,
+            manager: CACacheManager::new("./cache".into(), true),
+            options: HttpCacheOptions {
+                rate_limiter: Some(rate_limiter),
+                ..Default::default()
+            },
+        }))
+        .build();
+
+    // First request - will be rate limited and cached
+    let resp1 = client.get("https://httpbin.org/delay/1").send().await?;
+    println!("First response: {}", resp1.status());
+
+    // Second identical request - served from cache, no rate limiting
+    let resp2 = client.get("https://httpbin.org/delay/1").send().await?;
+    println!("Second response: {}", resp2.status());
+
+    Ok(())
+}</code></pre></pre>
+<h3 id="surf"><a class="header" href="#surf">surf</a></h3>
+<pre><pre class="playground"><code class="language-rust">use http_cache_surf::{Cache, HttpCache, CACacheManager, CacheMode, HttpCacheOptions};
+use http_cache_surf::{DomainRateLimiter, Quota};
+use surf::Client;
+use std::sync::Arc;
+use macro_rules_attribute::apply;
+use smol_macros::main;
+
+#[apply(main!)]
+async fn main() -&gt; surf::Result&lt;()&gt; {
+    let quota = Quota::per_second(std::num::NonZeroU32::new(5).unwrap());
+    let rate_limiter = Arc::new(DomainRateLimiter::new(quota));
+    
+    let client = Client::new()
+        .with(Cache(HttpCache {
+            mode: CacheMode::Default,
+            manager: CACacheManager::new("./cache".into(), true),
+            options: HttpCacheOptions {
+                rate_limiter: Some(rate_limiter),
+                ..Default::default()
+            },
+        }));
+
+    // Requests will be rate limited on cache misses only
+    let mut resp1 = client.get("https://httpbin.org/delay/1").await?;
+    println!("First response: {}", resp1.body_string().await?);
+
+    let mut resp2 = client.get("https://httpbin.org/delay/1").await?;
+    println!("Second response: {}", resp2.body_string().await?);
+
+    Ok(())
+}</code></pre></pre>
+<h3 id="tower"><a class="header" href="#tower">tower</a></h3>
+<pre><pre class="playground"><code class="language-rust">use http_cache_tower::{HttpCacheLayer, CACacheManager};
+use http_cache::{CacheMode, HttpCache, HttpCacheOptions};
+use http_cache_tower::{DomainRateLimiter, Quota};
+use tower::ServiceBuilder;
+use std::sync::Arc;
+
+#[tokio::main]
+async fn main() {
+    let quota = Quota::per_second(std::num::NonZeroU32::new(5).unwrap());
+    let rate_limiter = Arc::new(DomainRateLimiter::new(quota));
+    
+    let cache = HttpCache {
+        mode: CacheMode::Default,
+        manager: CACacheManager::new("./cache".into(), true),
+        options: HttpCacheOptions {
+            rate_limiter: Some(rate_limiter),
+            ..Default::default()
+        },
+    };
+
+    let service = ServiceBuilder::new()
+        .layer(HttpCacheLayer::with_cache(cache))
+        .service_fn(your_service_function);
+
+    // Use the service - rate limiting will be applied on cache misses
+}</code></pre></pre>
+<h3 id="ureq"><a class="header" href="#ureq">ureq</a></h3>
+<pre><pre class="playground"><code class="language-rust">use http_cache_ureq::{CachedAgent, CACacheManager, CacheMode, HttpCacheOptions};
+use http_cache_ureq::{DomainRateLimiter, Quota};
+use std::sync::Arc;
+
+fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
+    smol::block_on(async {
+        let quota = Quota::per_second(std::num::NonZeroU32::new(5).unwrap());
+        let rate_limiter = Arc::new(DomainRateLimiter::new(quota));
+        
+        let agent = CachedAgent::builder()
+            .cache_manager(CACacheManager::new("./cache".into(), true))
+            .cache_mode(CacheMode::Default)
+            .cache_options(HttpCacheOptions {
+                rate_limiter: Some(rate_limiter),
+                ..Default::default()
+            })
+            .build()?;
+
+        // Rate limiting applies only on cache misses
+        let response1 = agent.get("https://httpbin.org/delay/1").call().await?;
+        println!("First response: {}", response1.status());
+
+        let response2 = agent.get("https://httpbin.org/delay/1").call().await?;
+        println!("Second response: {}", response2.status());
+
+        Ok(())
+    })
+}</code></pre></pre>
+<h2 id="use-cases-1"><a class="header" href="#use-cases-1">Use Cases</a></h2>
+<p>This cache-aware rate limiting is particularly useful for:</p>
+<ul>
+<li><strong>Web scraping</strong> - Cache responses to avoid repeated requests while respecting rate limits for new content</li>
+<li><strong>API clients</strong> - Improve performance with caching while staying within API rate limits</li>
+<li><strong>Data collection</strong> - Efficiently gather data without overwhelming servers</li>
+<li><strong>Development and testing</strong> - Reduce API calls during development while maintaining realistic rate limiting behavior</li>
+</ul>
+<h2 id="streaming-support"><a class="header" href="#streaming-support">Streaming Support</a></h2>
+<p>Rate limiting works seamlessly with streaming cache operations. When using streaming managers or streaming middleware, rate limiting is applied in the same cache-aware manner:</p>
+<h3 id="streaming-cache-examples"><a class="header" href="#streaming-cache-examples">Streaming Cache Examples</a></h3>
+<h4 id="reqwest-streaming-with-rate-limiting"><a class="header" href="#reqwest-streaming-with-rate-limiting">reqwest Streaming with Rate Limiting</a></h4>
+<pre><pre class="playground"><code class="language-rust">use http_cache_reqwest::{StreamingCache, HttpCacheOptions};
+use http_cache::{StreamingManager, CacheMode};
+use http_cache_reqwest::{DomainRateLimiter, Quota};
+use reqwest_middleware::ClientBuilder;
+use std::sync::Arc;
+
+#[tokio::main]
+async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
+    let quota = Quota::per_second(std::num::NonZeroU32::new(2).unwrap());
+    let rate_limiter = Arc::new(DomainRateLimiter::new(quota));
+
+    let streaming_manager = StreamingManager::in_memory(1000).await?;
+    
+    let client = ClientBuilder::new(reqwest::Client::new())
+        .with(StreamingCache::with_options(
+            streaming_manager, 
+            CacheMode::Default,
+            HttpCacheOptions {
+                rate_limiter: Some(rate_limiter),
+                ..Default::default()
+            }
+        ))
+        .build();
+
+    // First request - rate limited and cached as streaming
+    let resp1 = client.get("https://httpbin.org/stream-bytes/10000").send().await?;
+    println!("First streaming response: {}", resp1.status());
+
+    // Second request - served from streaming cache, no rate limiting
+    let resp2 = client.get("https://httpbin.org/stream-bytes/10000").send().await?;
+    println!("Second streaming response: {}", resp2.status());
+
+    Ok(())
+}</code></pre></pre>
+<h4 id="tower-streaming-with-rate-limiting"><a class="header" href="#tower-streaming-with-rate-limiting">tower Streaming with Rate Limiting</a></h4>
+<pre><pre class="playground"><code class="language-rust">use http_cache_tower::{HttpCacheStreamingLayer};
+use http_cache::{StreamingManager, CacheMode, HttpCacheOptions};
+use http_cache_tower::{DomainRateLimiter, Quota};
+use tower::ServiceBuilder;
+use std::sync::Arc;
+
+#[tokio::main]
+async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
+    let quota = Quota::per_second(std::num::NonZeroU32::new(3).unwrap());
+    let rate_limiter = Arc::new(DomainRateLimiter::new(quota));
+
+    let streaming_manager = StreamingManager::in_memory(1000).await?;
+    
+    let layer = HttpCacheStreamingLayer::with_options(
+        streaming_manager,
+        HttpCacheOptions {
+            rate_limiter: Some(rate_limiter),
+            ..Default::default()
+        }
+    );
+
+    let service = ServiceBuilder::new()
+        .layer(layer)
+        .service_fn(your_streaming_service_function);
+
+    // Streaming responses will be rate limited on cache misses only
+}</code></pre></pre>
+<h3 id="streaming-rate-limiting-benefits"><a class="header" href="#streaming-rate-limiting-benefits">Streaming Rate Limiting Benefits</a></h3>
+<p>When using streaming with rate limiting:</p>
+<ul>
+<li><strong>Memory efficiency</strong> - Large responses are streamed without full buffering</li>
+<li><strong>Cache-aware rate limiting</strong> - Rate limits only apply to actual network requests, not streaming from cache</li>
+<li><strong>Concurrent streaming</strong> - Multiple cached streams can be served simultaneously without rate limiting delays</li>
+<li><strong>Efficient large file handling</strong> - Perfect for scenarios involving large files or media content</li>
+</ul>
+<h2 id="performance-benefits"><a class="header" href="#performance-benefits">Performance Benefits</a></h2>
+<p>By only applying rate limiting on cache misses, you get:</p>
+<ul>
+<li><strong>Instant cache hits</strong> - No rate limiting delays for cached responses</li>
+<li><strong>Concurrent cache serving</strong> - Multiple cache hits can be served simultaneously</li>
+<li><strong>Efficient scraping</strong> - Re-scraping cached content doesn't count against rate limits</li>
+<li><strong>Better user experience</strong> - Faster response times for frequently accessed resources</li>
+<li><strong>Streaming optimization</strong> - Large cached responses stream immediately without rate limiting overhead</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="development"><a class="header" href="#development">Development</a></h1>
+<p><code>http-cache</code> is meant to be extended to support multiple HTTP clients and backend cache managers. A <a href="https://docs.rs/http-cache/latest/http_cache/trait.CacheManager.html"><code>CacheManager</code></a> trait has been provided to help ease support for new backend cache managers. For memory-efficient handling of large responses, a <a href="https://docs.rs/http-cache/latest/http_cache/trait.StreamingCacheManager.html"><code>StreamingCacheManager</code></a> trait is also available. Similarly, a <a href="https://docs.rs/http-cache/latest/http_cache/trait.Middleware.html"><code>Middleware</code></a> trait has been provided to help ease supporting new HTTP clients.</p>
+<h2 id="supporting-a-backend-cache-manager"><a class="header" href="#supporting-a-backend-cache-manager"><a href="development/./supporting-a-backend-cache-manager.html">Supporting a Backend Cache Manager</a></a></h2>
+<p>This section is intended for those looking to implement a custom backend cache manager, or understand how the <a href="https://docs.rs/http-cache/latest/http_cache/trait.CacheManager.html"><code>CacheManager</code></a> and <a href="https://docs.rs/http-cache/latest/http_cache/trait.StreamingCacheManager.html"><code>StreamingCacheManager</code></a> traits work.</p>
+<h2 id="supporting-an-http-client"><a class="header" href="#supporting-an-http-client"><a href="development/./supporting-an-http-client.html">Supporting an HTTP Client</a></a></h2>
+<p>This section is intended for those looking to implement a custom HTTP client, or understand how the <a href="https://docs.rs/http-cache/latest/http_cache/trait.Middleware.html"><code>Middleware</code></a> trait works.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="supporting-a-backend-cache-manager-1"><a class="header" href="#supporting-a-backend-cache-manager-1">Supporting a Backend Cache Manager</a></h1>
+<p>This section is intended for those looking to implement a custom backend cache manager, or understand how the <a href="https://docs.rs/http-cache/latest/http_cache/trait.CacheManager.html"><code>CacheManager</code></a> and <a href="https://docs.rs/http-cache/latest/http_cache/trait.StreamingCacheManager.html"><code>StreamingCacheManager</code></a> traits work.</p>
+<h2 id="the-cachemanager-trait"><a class="header" href="#the-cachemanager-trait">The <code>CacheManager</code> trait</a></h2>
+<p>The <a href="https://docs.rs/http-cache/latest/http_cache/trait.CacheManager.html"><code>CacheManager</code></a> trait is the main trait that needs to be implemented to support a new backend cache manager. It has three methods that it requires:</p>
+<ul>
+<li><code>get</code>: retrieve a cached response given the provided cache key</li>
+<li><code>put</code>: store a response and related policy object in the cache associated with the provided cache key</li>
+<li><code>delete</code>: remove a cached response from the cache associated with the provided cache key</li>
+</ul>
+<p>Because the methods are asynchronous, they currently require <a href="https://github.com/dtolnay/async-trait"><code>async_trait</code></a> to be derived. This may change in the future.</p>
+<h3 id="the-get-method"><a class="header" href="#the-get-method">The <code>get</code> method</a></h3>
+<p>The <code>get</code> method is used to retrieve a cached response given the provided cache key. It returns an <code>Result&lt;Option&lt;(HttpResponse, CachePolicy)&gt;, BoxError&gt;</code> where <code>HttpResponse</code> is the cached response and <a href="https://docs.rs/http-cache-semantics/latest/http_cache_semantics/struct.CachePolicy.html"><code>CachePolicy</code></a> is the associated cache policy object that provides us helpful metadata. If the cache key does not exist in the cache, <code>Ok(None)</code> is returned.</p>
+<h3 id="the-put-method"><a class="header" href="#the-put-method">The <code>put</code> method</a></h3>
+<p>The <code>put</code> method is used to store a response and related policy object in the cache associated with the provided cache key. It returns an <code>Result&lt;HttpResponse, BoxError&gt;</code> where <code>HttpResponse</code> is the passed response.</p>
+<h3 id="the-delete-method"><a class="header" href="#the-delete-method">The <code>delete</code> method</a></h3>
+<p>The <code>delete</code> method is used to remove a cached response from the cache associated with the provided cache key. It returns an <code>Result&lt;(), BoxError&gt;</code>.</p>
+<h2 id="the-streamingcachemanager-trait"><a class="header" href="#the-streamingcachemanager-trait">The <code>StreamingCacheManager</code> trait</a></h2>
+<p>The <a href="https://docs.rs/http-cache/latest/http_cache/trait.StreamingCacheManager.html"><code>StreamingCacheManager</code></a> trait extends the traditional <code>CacheManager</code> to support streaming operations for memory-efficient handling of large responses. It includes all the methods from <code>CacheManager</code> plus additional streaming-specific methods:</p>
+<ul>
+<li><code>get_stream</code>: retrieve a cached response as a stream given the provided cache key</li>
+<li><code>put_stream</code>: store a streaming response in the cache associated with the provided cache key</li>
+<li><code>stream_response</code>: create a streaming response body from cached data</li>
+</ul>
+<p>The streaming approach is particularly useful for large responses where you don't want to buffer the entire response body in memory.</p>
+<h2 id="how-to-implement-a-custom-backend-cache-manager"><a class="header" href="#how-to-implement-a-custom-backend-cache-manager">How to implement a custom backend cache manager</a></h2>
+<p>This guide shows examples of implementing both traditional and streaming cache managers. We'll use the <a href="https://github.com/06chaynes/http-cache/blob/main/http-cache/src/managers/cacache.rs"><code>CACacheManager</code></a> as an example of implementing the <code>CacheManager</code> trait for traditional disk-based caching, and the <a href="https://github.com/06chaynes/http-cache/blob/main/http-cache/src/managers/streaming_cache.rs"><code>StreamingManager</code></a> as an example of implementing the <code>StreamingManager</code> trait for streaming support that stores response metadata and body content separately to enable memory-efficient handling of large responses. There are several ways to accomplish this, so feel free to experiment!</p>
+<h3 id="part-one-the-base-structs"><a class="header" href="#part-one-the-base-structs">Part One: The base structs</a></h3>
+<p>We'll show the base structs for both traditional and streaming cache managers.</p>
+<p>For traditional caching, we'll use a simple struct that stores the cache directory path:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>/// Traditional cache manager using cacache for disk-based storage
+#[derive(Debug, Clone)]
+pub struct CACacheManager {
+    /// Directory where the cache will be stored.
+    pub path: PathBuf,
+    /// Options for removing cache entries.
+    pub remove_opts: cacache::RemoveOpts,
+}
+<span class="boring">}</span></code></pre></pre>
+<p>For streaming caching, we'll use a struct that stores the root path for the cache directory and organizes content separately:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>/// File-based streaming cache manager
+#[derive(Debug, Clone)]
+pub struct StreamingManager {
+    root_path: PathBuf,
+    ref_counter: ContentRefCounter,
+    config: StreamingCacheConfig,
+}
+<span class="boring">}</span></code></pre></pre>
+<p>The <code>StreamingManager</code> follows a <strong>"simple and reliable"</strong> design philosophy:</p>
+<ul>
+<li><strong>Focused functionality</strong>: Core streaming operations without unnecessary complexity</li>
+<li><strong>Simple configuration</strong>: Minimal options with sensible defaults</li>
+<li><strong>Predictable behavior</strong>: Straightforward LRU eviction and error handling</li>
+<li><strong>Easy maintenance</strong>: Clean code paths for debugging and troubleshooting</li>
+</ul>
+<p>This approach prioritizes maintainability and reliability over feature completeness, making it easier to understand, debug, and extend.</p>
+<p>For traditional caching, we use a simple <code>Store</code> struct that contains both the response and policy together:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>/// Store struct for traditional caching
+#[derive(Debug, Deserialize, Serialize)]
+struct Store {
+    response: HttpResponse,
+    policy: CachePolicy,
+}
+<span class="boring">}</span></code></pre></pre>
+<p>For streaming caching, we create a metadata struct that stores response information separately from the content:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>/// Metadata stored for each cached response
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CacheMetadata {
+    pub status: u16,
+    pub version: u8,
+    pub headers: HashMap&lt;String, String&gt;,
+    pub content_digest: String,
+    pub policy: CachePolicy,
+    pub created_at: u64,
+}
+<span class="boring">}</span></code></pre></pre>
+<p>This struct derives <a href="https://github.com/serde-rs/serde">serde</a> Deserialize and Serialize to ease the serialization and deserialization with JSON for the streaming metadata, and <a href="https://github.com/jamesmunns/postcard">postcard</a> for the traditional Store struct.</p>
+<p><strong>Important:</strong> The <code>bincode</code> serialization format has been deprecated due to RUSTSEC-2025-0141 (bincode is unmaintained). New implementations should use <code>postcard</code> instead. The library still supports bincode through legacy feature flags (<code>manager-cacache-bincode</code>, <code>manager-moka-bincode</code>) for backward compatibility, but these will be removed in the next major version.</p>
+<h3 id="part-two-implementing-the-traditional-cachemanager-trait"><a class="header" href="#part-two-implementing-the-traditional-cachemanager-trait">Part Two: Implementing the traditional <code>CacheManager</code> trait</a></h3>
+<p>For traditional caching that stores entire response bodies, you implement just the <code>CacheManager</code> trait. Here's the <code>CACacheManager</code> implementation using the <code>cacache</code> library:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>impl CACacheManager {
+    /// Creates a new CACacheManager with the given path.
+    pub fn new(path: PathBuf, remove_fully: bool) -&gt; Self {
+        Self {
+            path,
+            remove_opts: cacache::RemoveOpts::new().remove_fully(remove_fully),
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl CacheManager for CACacheManager {
+    async fn get(
+        &amp;self,
+        cache_key: &amp;str,
+    ) -&gt; Result&lt;Option&lt;(HttpResponse, CachePolicy)&gt;&gt; {
+        let store: Store = match cacache::read(&amp;self.path, cache_key).await {
+            Ok(d) =&gt; postcard::from_bytes(&amp;d)?,
+            Err(_e) =&gt; {
+                return Ok(None);
+            }
+        };
+        Ok(Some((store.response, store.policy)))
+    }
+
+    async fn put(
+        &amp;self,
+        cache_key: String,
+        response: HttpResponse,
+        policy: CachePolicy,
+    ) -&gt; Result&lt;HttpResponse&gt; {
+        let data = Store { response, policy };
+        let bytes = postcard::to_allocvec(&amp;data)?;
+        cacache::write(&amp;self.path, cache_key, bytes).await?;
+        Ok(data.response)
+    }
+
+    async fn delete(&amp;self, cache_key: &amp;str) -&gt; Result&lt;()&gt; {
+        self.remove_opts.clone().remove(&amp;self.path, cache_key).await?;
+        Ok(())
+    }
+}
+<span class="boring">}</span></code></pre></pre>
+<h3 id="part-three-implementing-the-streamingcachemanager-trait"><a class="header" href="#part-three-implementing-the-streamingcachemanager-trait">Part Three: Implementing the <code>StreamingCacheManager</code> trait</a></h3>
+<p>For streaming caching that handles large responses without buffering them entirely in memory, you implement the <code>StreamingCacheManager</code> trait. The <code>StreamingCacheManager</code> trait extends <code>CacheManager</code> with streaming-specific methods. We'll start with the implementation signature, but first we must make sure we derive async_trait.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[async_trait::async_trait]
+impl StreamingCacheManager for StreamingManager {
+    type Body = StreamingBody&lt;Empty&lt;Bytes&gt;&gt;;
+    ...
+<span class="boring">}</span></code></pre></pre>
+<h4 id="helper-methods"><a class="header" href="#helper-methods">Helper methods</a></h4>
+<p>First, let's implement some helper methods that our cache will need:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>impl StreamingManager {
+    /// Create a new streaming cache manager with default configuration
+    pub fn new(root_path: PathBuf) -&gt; Self {
+        Self::new_with_config(root_path, StreamingCacheConfig::default())
+    }
+
+    /// Create a new streaming cache manager with custom configuration
+    pub fn new_with_config(
+        root_path: PathBuf,
+        config: StreamingCacheConfig,
+    ) -&gt; Self {
+        Self { 
+            root_path, 
+            ref_counter: ContentRefCounter::new(), 
+            config 
+        }
+    }
+
+    /// Get the path for storing metadata
+    fn metadata_path(&amp;self, key: &amp;str) -&gt; PathBuf {
+        let encoded_key = hex::encode(key.as_bytes());
+        self.root_path
+            .join("cache-v2")
+            .join("metadata")
+            .join(format!("{encoded_key}.json"))
+    }
+
+    /// Get the path for storing content
+    fn content_path(&amp;self, digest: &amp;str) -&gt; PathBuf {
+        self.root_path.join("cache-v2").join("content").join(digest)
+    }
+
+    /// Calculate SHA256 digest of content
+    fn calculate_digest(content: &amp;[u8]) -&gt; String {
+        let mut hasher = Sha256::new();
+        hasher.update(content);
+        hex::encode(hasher.finalize())
+    }
+}
+<span class="boring">}</span></code></pre></pre>
+<h4 id="the-streaming-get-method"><a class="header" href="#the-streaming-get-method">The streaming <code>get</code> method</a></h4>
+<p>The <code>get</code> method accepts a <code>&amp;str</code> as the cache key and returns a <code>Result&lt;Option&lt;(Response&lt;Self::Body&gt;, CachePolicy)&gt;&gt;</code>. This method reads the metadata file to get response information, then creates a streaming body that reads directly from the cached content file without loading it into memory.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>async fn get(
+    &amp;self,
+    cache_key: &amp;str,
+) -&gt; Result&lt;Option&lt;(Response&lt;Self::Body&gt;, CachePolicy)&gt;&gt; {
+    let metadata_path = self.metadata_path(cache_key);
+
+    // Check if metadata file exists
+    if !metadata_path.exists() {
+        return Ok(None);
+    }
+
+    // Read and parse metadata
+    let metadata_content = tokio::fs::read(&amp;metadata_path).await?;
+    let metadata: CacheMetadata = serde_json::from_slice(&amp;metadata_content)?;
+
+    // Check if content file exists
+    let content_path = self.content_path(&amp;metadata.content_digest);
+    if !content_path.exists() {
+        return Ok(None);
+    }
+
+    // Open content file for streaming
+    let file = tokio::fs::File::open(&amp;content_path).await?;
+
+    // Build response with streaming body
+    let mut response_builder = Response::builder()
+        .status(metadata.status)
+        .version(/* convert from metadata.version */);
+
+    // Add headers
+    for (name, value) in &amp;metadata.headers {
+        if let (Ok(header_name), Ok(header_value)) = (
+            name.parse::&lt;http::HeaderName&gt;(),
+            value.parse::&lt;http::HeaderValue&gt;(),
+        ) {
+            response_builder = response_builder.header(header_name, header_value);
+        }
+    }
+
+    // Create streaming body from file
+    let body = StreamingBody::from_file(file);
+    let response = response_builder.body(body)?;
+
+    Ok(Some((response, metadata.policy)))
+}
+<span class="boring">}</span></code></pre></pre>
+<h4 id="the-streaming-put-method"><a class="header" href="#the-streaming-put-method">The streaming <code>put</code> method</a></h4>
+<p>The <code>put</code> method accepts a <code>String</code> as the cache key, a streaming <code>Response&lt;B&gt;</code>, a <code>CachePolicy</code>, and a request URL. It stores the response body content in a file and the metadata separately, enabling efficient retrieval without loading the entire response into memory.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>async fn put&lt;B&gt;(
+    &amp;self,
+    cache_key: String,
+    response: Response&lt;B&gt;,
+    policy: CachePolicy,
+    _request_url: Url,
+    _metadata: Option&lt;Vec&lt;u8&gt;&gt;,
+) -&gt; Result&lt;Response&lt;Self::Body&gt;&gt;
+where
+    B: http_body::Body + Send + 'static,
+    B::Data: Send,
+    B::Error: Into&lt;StreamingError&gt;,
+{
+    let (parts, body) = response.into_parts();
+
+    // Collect body content
+    let collected = body.collect().await?;
+    let body_bytes = collected.to_bytes();
+
+    // Calculate content digest for deduplication
+    let content_digest = Self::calculate_digest(&amp;body_bytes);
+    let content_path = self.content_path(&amp;content_digest);
+
+    // Ensure content directory exists and write content if not already present
+    if !content_path.exists() {
+        if let Some(parent) = content_path.parent() {
+            tokio::fs::create_dir_all(parent).await?;
+        }
+        tokio::fs::write(&amp;content_path, &amp;body_bytes).await?;
+    }
+
+    // Create metadata
+    let metadata = CacheMetadata {
+        status: parts.status.as_u16(),
+        version: match parts.version {
+            Version::HTTP_11 =&gt; 11,
+            Version::HTTP_2 =&gt; 2,
+            // ... other versions
+            _ =&gt; 11,
+        },
+        headers: parts.headers.iter()
+            .map(|(name, value)| {
+                (name.to_string(), value.to_str().unwrap_or("").to_string())
+            })
+            .collect(),
+        content_digest: content_digest.clone(),
+        policy,
+        created_at: std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs(),
+    };
+
+    // Write metadata
+    let metadata_path = self.metadata_path(&amp;cache_key);
+    if let Some(parent) = metadata_path.parent() {
+        tokio::fs::create_dir_all(parent).await?;
+    }
+    let metadata_json = serde_json::to_vec(&amp;metadata)?;
+    tokio::fs::write(&amp;metadata_path, &amp;metadata_json).await?;
+
+    // Return response with buffered body for immediate use
+    let response = Response::from_parts(parts, StreamingBody::buffered(body_bytes));
+    Ok(response)
+}
+<span class="boring">}</span></code></pre></pre>
+<h4 id="the-streaming-delete-method"><a class="header" href="#the-streaming-delete-method">The streaming <code>delete</code> method</a></h4>
+<p>The <code>delete</code> method accepts a <code>&amp;str</code> as the cache key. It removes both the metadata file and the associated content file from the cache directory.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>async fn delete(&amp;self, cache_key: &amp;str) -&gt; Result&lt;()&gt; {
+    let metadata_path = self.metadata_path(cache_key);
+
+    // Read metadata to get content digest
+    if let Ok(metadata_content) = tokio::fs::read(&amp;metadata_path).await {
+        if let Ok(metadata) = serde_json::from_slice::&lt;CacheMetadata&gt;(&amp;metadata_content) {
+            let content_path = self.content_path(&amp;metadata.content_digest);
+            // Remove content file
+            tokio::fs::remove_file(&amp;content_path).await.ok();
+        }
+    }
+
+    // Remove metadata file
+    tokio::fs::remove_file(&amp;metadata_path).await.ok();
+    Ok(())
+}
+<span class="boring">}</span></code></pre></pre>
+<p>Our <code>StreamingManager</code> struct now meets the requirements of both the <code>CacheManager</code> and <code>StreamingCacheManager</code> traits and provides streaming support without buffering large response bodies in memory!</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="supporting-an-http-client-1"><a class="header" href="#supporting-an-http-client-1">Supporting an HTTP Client</a></h1>
+<p>This section is intended for those who wish to add support for a new HTTP client to <code>http-cache</code>, or understand how the <a href="https://docs.rs/http-cache/latest/http_cache/trait.Middleware.html"><code>Middleware</code></a> trait works. If you are looking to use <code>http-cache</code> with an HTTP client that is already supported, please see the <a href="development/../clients/clients.html">Client Implementations</a> section.</p>
+<p>The ecosystem supports both traditional caching (where entire response bodies are buffered) and streaming caching (for memory-efficient handling of large responses). The Tower implementation provides the most comprehensive streaming support.</p>
+<h2 id="the-middleware-trait"><a class="header" href="#the-middleware-trait">The <code>Middleware</code> trait</a></h2>
+<p>The <a href="https://docs.rs/http-cache/latest/http_cache/trait.Middleware.html"><code>Middleware</code></a> trait is the main trait that needs to be implemented to add support for a new HTTP client. It has nine methods that it requires:</p>
+<ul>
+<li><code>is_method_get_head</code>: returns <code>true</code> if the method of the request is <code>GET</code> or <code>HEAD</code>, <code>false</code> otherwise</li>
+<li><code>policy</code>: returns a <a href="https://docs.rs/http-cache-semantics/latest/http_cache_semantics/struct.CachePolicy.html"><code>CachePolicy</code></a> with default options for the given <code>HttpResponse</code></li>
+<li><code>policy_with_options</code>: returns a <a href="https://docs.rs/http-cache-semantics/latest/http_cache_semantics/struct.CachePolicy.html"><code>CachePolicy</code></a> with the provided <a href="https://docs.rs/http-cache-semantics/latest/http_cache_semantics/struct.CacheOptions.html"><code>CacheOptions</code></a> for the given <code>HttpResponse</code></li>
+<li><code>update_headers</code>: updates the request headers with the provided <a href="https://docs.rs/http/latest/http/request/struct.Parts.html"><code>http::request::Parts</code></a></li>
+<li><code>force_no_cache</code>: overrides the <code>Cache-Control</code> header to 'no-cache' directive</li>
+<li><code>parts</code>: returns the <a href="https://docs.rs/http/latest/http/request/struct.Parts.html"><code>http::request::Parts</code></a> from the request</li>
+<li><code>url</code>: returns the requested <a href="https://docs.rs/url/latest/url/struct.Url.html"><code>Url</code></a></li>
+<li><code>method</code>: returns the method of the request as a <code>String</code></li>
+<li><code>remote_fetch</code>: performs the request and returns the <code>HttpResponse</code></li>
+</ul>
+<p>Because the <code>remote_fetch</code> method is asynchronous, it currently requires <a href="https://github.com/dtolnay/async-trait"><code>async_trait</code></a> to be derived. This may change in the future.</p>
+<h3 id="the-is_method_get_head-method"><a class="header" href="#the-is_method_get_head-method">The <code>is_method_get_head</code> method</a></h3>
+<p>The <code>is_method_get_head</code> method is used to determine if the method of the request is <code>GET</code> or <code>HEAD</code>. It returns a <code>bool</code> where <code>true</code> indicates the method is <code>GET</code> or <code>HEAD</code>, and <code>false</code> if otherwise.</p>
+<h3 id="the-policy-and-policy_with_options-methods"><a class="header" href="#the-policy-and-policy_with_options-methods">The <code>policy</code> and <code>policy_with_options</code> methods</a></h3>
+<p>The <code>policy</code> method is used to generate the cache policy for the given <code>HttpResponse</code>. It returns a <a href="https://docs.rs/http-cache-semantics/latest/http_cache_semantics/struct.CachePolicy.html"><code>CachePolicy</code></a> with default options.</p>
+<p>The <code>policy_with_options</code> method is used to generate the cache policy for the given <code>HttpResponse</code> with the provided <a href="https://docs.rs/http-cache-semantics/latest/http_cache_semantics/struct.CacheOptions.html"><code>CacheOptions</code></a>. It returns a <a href="https://docs.rs/http-cache-semantics/latest/http_cache_semantics/struct.CachePolicy.html"><code>CachePolicy</code></a>.</p>
+<h3 id="the-update_headers-method"><a class="header" href="#the-update_headers-method">The <code>update_headers</code> method</a></h3>
+<p>The <code>update_headers</code> method is used to update the request headers with the provided <a href="https://docs.rs/http/latest/http/request/struct.Parts.html"><code>http::request::Parts</code></a>.</p>
+<h3 id="the-force_no_cache-method"><a class="header" href="#the-force_no_cache-method">The <code>force_no_cache</code> method</a></h3>
+<p>The <code>force_no_cache</code> method is used to override the <code>Cache-Control</code> header to 'no-cache' directive. This is used to allow caching but force revalidation before reuse.</p>
+<h3 id="the-parts-method"><a class="header" href="#the-parts-method">The <code>parts</code> method</a></h3>
+<p>The <code>parts</code> method is used to return the <a href="https://docs.rs/http/latest/http/request/struct.Parts.html"><code>http::request::Parts</code></a> from the request which eases working with the <code>http_cache_semantics</code> crate.</p>
+<h3 id="the-url-method"><a class="header" href="#the-url-method">The <code>url</code> method</a></h3>
+<p>The <code>url</code> method is used to return the requested <a href="https://docs.rs/url/latest/url/struct.Url.html"><code>Url</code></a> in a standard format.</p>
+<h3 id="the-method-method"><a class="header" href="#the-method-method">The <code>method</code> method</a></h3>
+<p>The <code>method</code> method is used to return the HTTP method of the request as a <code>String</code> to standardize the format.</p>
+<h3 id="the-remote_fetch-method"><a class="header" href="#the-remote_fetch-method">The <code>remote_fetch</code> method</a></h3>
+<p>The <code>remote_fetch</code> method is used to perform the request and return the <code>HttpResponse</code>. This goal here is to abstract away the HTTP client implementation and return a more generic response type.</p>
+<h2 id="how-to-implement-a-custom-http-client"><a class="header" href="#how-to-implement-a-custom-http-client">How to implement a custom HTTP client</a></h2>
+<p>This guide will use the <a href="https://github.com/http-rs/surf"><code>surf</code></a> HTTP client as an example. The full source can be found <a href="https://github.com/06chaynes/http-cache/blob/main/http-cache-surf/src/lib.rs">here</a>. There are several ways to accomplish this, so feel free to experiment!</p>
+<h3 id="part-one-the-base-structs-1"><a class="header" href="#part-one-the-base-structs-1">Part One: The base structs</a></h3>
+<p>First we will create a wrapper for the <a href="https://docs.rs/http-cache/latest/http_cache/struct.HttpCache.html"><code>HttpCache</code></a> struct. This is required because we cannot implement a trait for a type declared in another crate, see <a href="https://doc.rust-lang.org/error_codes/E0117.html">docs</a> for more info. We will call it <code>Cache</code> in this case.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[derive(Debug)]
+pub struct Cache&lt;T: CacheManager&gt;(pub HttpCache&lt;T&gt;);
+<span class="boring">}</span></code></pre></pre>
+<p>Next we will create a struct to store the request and anything else we will need for our <code>surf::Middleware</code> implementation (more on that later). This struct will also implement the http-cache <a href="https://docs.rs/http-cache/latest/http_cache/trait.Middleware.html"><code>Middleware</code></a> trait. We'll call it <code>SurfMiddleware</code> in this case.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub(crate) struct SurfMiddleware&lt;'a&gt; {
+    pub req: Request,
+    pub client: Client,
+    pub next: Next&lt;'a&gt;,
+}
+<span class="boring">}</span></code></pre></pre>
+<h3 id="part-two-implementing-the-middleware-trait"><a class="header" href="#part-two-implementing-the-middleware-trait">Part Two: Implementing the <code>Middleware</code> trait</a></h3>
+<p>Now that we have our base structs, we can implement the <code>Middleware</code> trait for our <code>SurfMiddleware</code> struct. We'll start with the <code>is_method_get_head</code> method, but first we must make sure we derive async_trait.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[async_trait::async_trait]
+impl Middleware for SurfMiddleware&lt;'_&gt; {
+    ...
+<span class="boring">}</span></code></pre></pre>
+<p>The <code>is_method_get_head</code> will check the request stored in our <code>SurfMiddleware</code> struct and return <code>true</code> if the method is <code>GET</code> or <code>HEAD</code>, <code>false</code> otherwise.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>fn is_method_get_head(&amp;self) -&gt; bool {
+    self.req.method() == Method::Get || self.req.method() == Method::Head
+}
+<span class="boring">}</span></code></pre></pre>
+<p>Next we'll implement the <code>policy</code> method. This method accepts a reference to the <code>HttpResponse</code> and returns a <a href="https://docs.rs/http-cache-semantics/latest/http_cache_semantics/struct.CachePolicy.html"><code>CachePolicy</code></a> with default options. We'll use the <a href="https://docs.rs/http-cache-semantics/latest/http_cache_semantics/struct.CachePolicy.html#method.new"><code>http_cache_semantics::CachePolicy::new</code></a> method to generate the policy.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>fn policy(&amp;self, response: &amp;HttpResponse) -&gt; Result&lt;CachePolicy&gt; {
+    Ok(CachePolicy::new(&amp;self.parts()?, &amp;response.parts()?))
+}
+<span class="boring">}</span></code></pre></pre>
+<p>The <code>policy_with_options</code> method is similar to the <code>policy</code> method, but accepts a <a href="https://docs.rs/http-cache-semantics/latest/http_cache_semantics/struct.CacheOptions.html"><code>CacheOptions</code></a> struct to override the default options. We'll use the <a href="https://docs.rs/http-cache-semantics/latest/http_cache_semantics/struct.CachePolicy.html#method.new_options"><code>http_cache_semantics::CachePolicy::new_options</code></a> method to generate the policy.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>fn policy_with_options(
+    &amp;self,
+    response: &amp;HttpResponse,
+    options: CacheOptions,
+) -&gt; Result&lt;CachePolicy&gt; {
+    Ok(CachePolicy::new_options(
+        &amp;self.parts()?,
+        &amp;response.parts()?,
+        SystemTime::now(),
+        options,
+    ))
+}
+<span class="boring">}</span></code></pre></pre>
+<p>Next we'll implement the <code>update_headers</code> method. This method accepts a reference to the <a href="https://docs.rs/http/latest/http/request/struct.Parts.html"><code>http::request::Parts</code></a> and updates the request headers. We will iterate over the part headers and attempt to convert the header value to a <a href="https://docs.rs/http/latest/http/header/struct.HeaderValue.html"><code>HeaderValue</code></a> and set the header on the request. If the conversion fails, we will return an error.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>fn update_headers(&amp;mut self, parts: &amp;Parts) -&gt; Result&lt;()&gt; {
+    for header in parts.headers.iter() {
+        let value = match HeaderValue::from_str(header.1.to_str()?) {
+            Ok(v) =&gt; v,
+            Err(_e) =&gt; return Err(Box::new(BadHeader)),
+        };
+        self.req.set_header(header.0.as_str(), value);
+    }
+    Ok(())
+}
+<span class="boring">}</span></code></pre></pre>
+<p>The <code>force_no_cache</code> method is used to override the <code>Cache-Control</code> header in the request to 'no-cache' directive. This is used to allow caching but force revalidation before reuse.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>fn force_no_cache(&amp;mut self) -&gt; Result&lt;()&gt; {
+    self.req.insert_header(CACHE_CONTROL.as_str(), "no-cache");
+    Ok(())
+}
+<span class="boring">}</span></code></pre></pre>
+<p>The <code>parts</code> method is used to return the <a href="https://docs.rs/http/latest/http/request/struct.Parts.html"><code>http::request::Parts</code></a> from the request which eases working with the <code>http_cache_semantics</code> crate.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>fn parts(&amp;self) -&gt; Result&lt;Parts&gt; {
+    let mut converted = request::Builder::new()
+        .method(self.req.method().as_ref())
+        .uri(self.req.url().as_str())
+        .body(())?;
+    {
+        let headers = converted.headers_mut();
+        for header in self.req.iter() {
+            headers.insert(
+                http::header::HeaderName::from_str(header.0.as_str())?,
+                http::HeaderValue::from_str(header.1.as_str())?,
+            );
+        }
+    }
+    Ok(converted.into_parts().0)
+}
+<span class="boring">}</span></code></pre></pre>
+<p>The <code>url</code> method is used to return the requested <a href="https://docs.rs/url/latest/url/struct.Url.html"><code>Url</code></a> in a standard format.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>fn url(&amp;self) -&gt; Result&lt;Url&gt; {
+    Ok(self.req.url().clone())
+}
+<span class="boring">}</span></code></pre></pre>
+<p>The <code>method</code> method is used to return the HTTP method of the request as a <code>String</code> to standardize the format.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>fn method(&amp;self) -&gt; Result&lt;String&gt; {
+    Ok(self.req.method().as_ref().to_string())
+}
+<span class="boring">}</span></code></pre></pre>
+<p>Finally, the <code>remote_fetch</code> method is used to perform the request and return the <code>HttpResponse</code>.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>async fn remote_fetch(&amp;mut self) -&gt; Result&lt;HttpResponse&gt; {
+    let url = self.req.url().clone();
+    let mut res =
+        self.next.run(self.req.clone(), self.client.clone()).await?;
+    let mut headers = HashMap::new();
+    for header in res.iter() {
+        headers.insert(
+            header.0.as_str().to_owned(),
+            header.1.as_str().to_owned(),
+        );
+    }
+    let status = res.status().into();
+    let version = res.version().unwrap_or(Version::Http1_1);
+    let body: Vec&lt;u8&gt; = res.body_bytes().await?;
+    Ok(HttpResponse {
+        body,
+        headers,
+        status,
+        url,
+        version: version.try_into()?,
+    })
+}
+<span class="boring">}</span></code></pre></pre>
+<p>Our <code>SurfMiddleware</code> struct now meets the requirements of the <code>Middleware</code> trait. We can now implement the <a href="https://docs.rs/surf/latest/surf/middleware/trait.Middleware.html"><code>surf::middleware::Middleware</code></a> trait for our <code>Cache</code> struct.</p>
+<h3 id="part-three-implementing-the-surfmiddlewaremiddleware-trait"><a class="header" href="#part-three-implementing-the-surfmiddlewaremiddleware-trait">Part Three: Implementing the <code>surf::middleware::Middleware</code> trait</a></h3>
+<p>We have our <code>Cache</code> struct that wraps our <code>HttpCache</code> struct, but we need to implement the <a href="https://docs.rs/surf/latest/surf/middleware/trait.Middleware.html"><code>surf::middleware::Middleware</code></a> trait for it. This is required to use our <code>Cache</code> struct as a middleware with <code>surf</code>. This part may differ depending on the HTTP client you are supporting.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[surf::utils::async_trait]
+impl&lt;T: CacheManager&gt; surf::middleware::Middleware for Cache&lt;T&gt; {
+    async fn handle(
+        &amp;self,
+        req: Request,
+        client: Client,
+        next: Next&lt;'_&gt;,
+    ) -&gt; std::result::Result&lt;surf::Response, http_types::Error&gt; {
+        let middleware = SurfMiddleware { req, client, next };
+        let res = self.0.run(middleware).await.map_err(to_http_types_error)?;
+        let mut converted = Response::new(StatusCode::Ok);
+        for header in &amp;res.headers {
+            let val = HeaderValue::from_bytes(header.1.as_bytes().to_vec())?;
+            converted.insert_header(header.0.as_str(), val);
+        }
+        converted.set_status(res.status.try_into()?);
+        converted.set_version(Some(res.version.try_into()?));
+        converted.set_body(res.body);
+        Ok(surf::Response::from(converted))
+    }
+}
+<span class="boring">}</span></code></pre></pre>
+<p>First we create a <a href="development/supporting-an-http-client.html#part-two-implementing-the-middleware-trait"><code>SurfMiddleware</code></a> struct with the provided <code>req</code>, <code>client</code>, and <code>next</code> arguments. Then we call the <code>run</code> method on our <code>HttpCache</code> struct with our <code>SurfMiddleware</code> struct as the argument. This will perform the request and return the <code>HttpResponse</code>. We then convert the <code>HttpResponse</code> to a <code>surf::Response</code> and return it.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="client-side-caching-1"><a class="header" href="#client-side-caching-1">Client-Side Caching</a></h1>
+<p>These middleware implementations cache responses from external APIs that your application calls. This is different from server-side caching, which caches your own application's responses.</p>
+<p><strong>Use client-side caching when:</strong></p>
+<ul>
+<li>Calling external APIs</li>
+<li>Reducing API rate limit consumption</li>
+<li>Improving offline support</li>
+<li>Reducing bandwidth usage</li>
+<li>Speeding up repeated API calls</li>
+</ul>
+<p><strong>For server-side caching</strong> (caching your own app's responses), see <a href="clients/../server/server.html">Server-Side Caching</a>.</p>
+<h2 id="available-client-implementations"><a class="header" href="#available-client-implementations">Available Client Implementations</a></h2>
+<p>The following client implementations are provided by this crate:</p>
+<h2 id="reqwest-1"><a class="header" href="#reqwest-1"><a href="clients/./reqwest.html">reqwest</a></a></h2>
+<p>The <a href="https://github.com/06chaynes/http-cache/tree/main/http-cache-reqwest"><code>http-cache-reqwest</code></a> crate provides a <a href="https://docs.rs/http-cache/latest/http_cache/trait.Middleware.html"><code>Middleware</code></a> implementation for the <a href="https://github.com/seanmonstar/reqwest"><code>reqwest</code></a> HTTP client.</p>
+<h2 id="surf-1"><a class="header" href="#surf-1"><a href="clients/./surf.html">surf</a></a></h2>
+<p>The <a href="https://github.com/06chaynes/http-cache/tree/main/http-cache-surf"><code>http-cache-surf</code></a> crate provides a <a href="https://docs.rs/http-cache/latest/http_cache/trait.Middleware.html"><code>Middleware</code></a> implementation for the <a href="https://github.com/http-rs/surf"><code>surf</code></a> HTTP client.</p>
+<h2 id="ureq-1"><a class="header" href="#ureq-1"><a href="clients/./ureq.html">ureq</a></a></h2>
+<p>The <a href="https://github.com/06chaynes/http-cache/tree/main/http-cache-ureq"><code>http-cache-ureq</code></a> crate provides a caching wrapper for the <a href="https://github.com/algesten/ureq"><code>ureq</code></a> HTTP client. Since ureq is a synchronous HTTP client, this wrapper uses the smol async runtime to integrate with the async http-cache system.</p>
+<h2 id="tower-1"><a class="header" href="#tower-1"><a href="clients/./tower.html">tower</a></a></h2>
+<p>The <a href="https://github.com/06chaynes/http-cache/tree/main/http-cache-tower"><code>http-cache-tower</code></a> crate provides Tower Layer and Service implementations for caching HTTP requests and responses. It supports both regular and streaming cache operations for memory-efficient handling of large responses.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="reqwest-2"><a class="header" href="#reqwest-2">reqwest</a></h1>
+<p>The <a href="https://github.com/06chaynes/http-cache/tree/main/http-cache-reqwest"><code>http-cache-reqwest</code></a> crate provides a <a href="https://docs.rs/http-cache/latest/http_cache/trait.Middleware.html"><code>Middleware</code></a> implementation for the <a href="https://github.com/seanmonstar/reqwest"><code>reqwest</code></a> HTTP client. It accomplishes this by utilizing <a href="https://github.com/TrueLayer/reqwest-middleware"><code>reqwest_middleware</code></a>.</p>
+<h2 id="getting-started"><a class="header" href="#getting-started">Getting Started</a></h2>
+<pre><code class="language-sh">cargo add http-cache-reqwest
+</code></pre>
+<h2 id="features"><a class="header" href="#features">Features</a></h2>
+<ul>
+<li><code>manager-cacache</code>: (default) Enables the <a href="https://docs.rs/http-cache/latest/http_cache/struct.CACacheManager.html"><code>CACacheManager</code></a> backend cache manager.</li>
+<li><code>manager-moka</code>: Enables the <a href="https://docs.rs/http-cache/latest/http_cache/struct.MokaManager.html"><code>MokaManager</code></a> backend cache manager.</li>
+<li><code>manager-foyer</code>: Enables the <a href="https://docs.rs/http-cache/latest/http_cache/struct.FoyerManager.html"><code>FoyerManager</code></a> backend cache manager.</li>
+<li><code>streaming</code>: Enables streaming cache support for memory-efficient handling of large response bodies.</li>
+<li><code>rate-limiting</code>: Enables cache-aware rate limiting functionality.</li>
+<li><code>url-ada</code>: Enables ada-url for URL parsing.</li>
+</ul>
+<h2 id="usage-1"><a class="header" href="#usage-1">Usage</a></h2>
+<p>In the following example we will construct our client using the builder provided by <a href="https://github.com/TrueLayer/reqwest-middleware"><code>reqwest_middleware</code></a> with our cache struct from <a href="https://github.com/06chaynes/http-cache/tree/main/http-cache-reqwest"><code>http-cache-reqwest</code></a>. This example will use the default mode, default cacache manager, and default http cache options.</p>
+<p>After constructing our client, we will make a request to the <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching">MDN Caching Docs</a> which should result in an object stored in cache on disk.</p>
+<pre><pre class="playground"><code class="language-rust">use reqwest::Client;
+use reqwest_middleware::{ClientBuilder, Result};
+use http_cache_reqwest::{Cache, CacheMode, CACacheManager, HttpCache, HttpCacheOptions};
+use std::path::PathBuf;
+
+#[tokio::main]
+async fn main() -&gt; Result&lt;()&gt; {
+    let client = ClientBuilder::new(Client::new())
+        .with(Cache(HttpCache {
+          mode: CacheMode::Default,
+          manager: CACacheManager::new(PathBuf::from("./cache"), false),
+          options: HttpCacheOptions::default(),
+        }))
+        .build();
+    client
+        .get("https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching")
+        .send()
+        .await?;
+    Ok(())
+}</code></pre></pre>
+<h2 id="streaming-cache-support"><a class="header" href="#streaming-cache-support">Streaming Cache Support</a></h2>
+<p>For memory-efficient caching of large response bodies, you can use the streaming cache feature. This is particularly useful for handling large files, media content, or API responses without loading the entire response into memory.</p>
+<p>To enable streaming cache support, add the <code>streaming</code> feature to your <code>Cargo.toml</code>:</p>
+<pre><code class="language-toml">[dependencies]
+http-cache-reqwest = { version = "1.0", features = ["streaming"] }
+</code></pre>
+<h3 id="basic-streaming-example"><a class="header" href="#basic-streaming-example">Basic Streaming Example</a></h3>
+<pre><pre class="playground"><code class="language-rust">use http_cache::StreamingManager;
+use http_cache_reqwest::{StreamingCache, CacheMode};
+use reqwest::Client;
+use reqwest_middleware::ClientBuilder;
+use futures_util::StreamExt;
+
+#[tokio::main]
+async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error + Send + Sync&gt;&gt; {
+    // Create streaming cache manager (in-memory with 1000 entry capacity)
+    let cache_manager = StreamingManager::in_memory(1000).await?;
+    let streaming_cache = StreamingCache::new(cache_manager, CacheMode::Default);
+
+    // Build client with streaming cache
+    let client = ClientBuilder::new(Client::new())
+        .with(streaming_cache)
+        .build();
+
+    // Make request to large content
+    let response = client
+        .get("https://example.com/large-file.zip")
+        .send()
+        .await?;
+
+    // Stream the response body
+    let mut stream = response.bytes_stream();
+    let mut total_bytes = 0;
+    
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk?;
+        total_bytes += chunk.len();
+        // Process chunk without loading entire response into memory
+    }
+    
+    println!("Downloaded {total_bytes} bytes");
+    Ok(())
+}</code></pre></pre>
+<h3 id="key-benefits-of-streaming-cache"><a class="header" href="#key-benefits-of-streaming-cache">Key Benefits of Streaming Cache</a></h3>
+<ul>
+<li><strong>Memory Efficiency</strong>: Large responses are streamed directly to/from disk cache without buffering in memory</li>
+<li><strong>Performance</strong>: Cached responses can be streamed immediately without waiting for complete download</li>
+<li><strong>Scalability</strong>: Handle responses of any size without memory constraints</li>
+</ul>
+<h2 id="non-cloneable-request-handling"><a class="header" href="#non-cloneable-request-handling">Non-Cloneable Request Handling</a></h2>
+<p>The reqwest middleware gracefully handles requests with non-cloneable bodies (such as multipart forms, streaming uploads, and custom body types). When a request cannot be cloned for caching operations, the middleware automatically:</p>
+<ol>
+<li><strong>Bypasses the cache gracefully</strong>: The request proceeds normally without caching</li>
+<li><strong>Performs cache maintenance</strong>: Still handles cache deletion and busting operations where possible</li>
+<li><strong>Avoids errors</strong>: No "Request object is not cloneable" errors are thrown</li>
+</ol>
+<p>This ensures that your application continues to work seamlessly even when using complex request body types.</p>
+<h3 id="example-with-multipart-forms"><a class="header" href="#example-with-multipart-forms">Example with Multipart Forms</a></h3>
+<pre><pre class="playground"><code class="language-rust">use reqwest::Client;
+use reqwest_middleware::ClientBuilder;
+use http_cache_reqwest::{Cache, CacheMode, CACacheManager, HttpCache, HttpCacheOptions};
+use std::path::PathBuf;
+
+#[tokio::main]
+async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error + Send + Sync&gt;&gt; {
+    let client = ClientBuilder::new(Client::new())
+        .with(Cache(HttpCache {
+            mode: CacheMode::Default,
+            manager: CACacheManager::new(PathBuf::from("./cache"), false),
+            options: HttpCacheOptions::default(),
+        }))
+        .build();
+
+    // Multipart forms are handled gracefully - no caching errors
+    let form = reqwest::multipart::Form::new()
+        .text("field1", "value1")
+        .file("upload", "/path/to/file.txt").await?;
+    
+    let response = client
+        .post("https://httpbin.org/post")
+        .multipart(form)
+        .send()
+        .await?;
+    
+    println!("Status: {}", response.status());
+    Ok(())
+}</code></pre></pre>
+<h3 id="example-with-streaming-bodies"><a class="header" href="#example-with-streaming-bodies">Example with Streaming Bodies</a></h3>
+<pre><pre class="playground"><code class="language-rust">use reqwest::Client;
+use reqwest_middleware::ClientBuilder;
+use http_cache_reqwest::{Cache, CacheMode, CACacheManager, HttpCache, HttpCacheOptions};
+use futures_util::stream;
+use bytes::Bytes;
+use std::path::PathBuf;
+
+#[tokio::main]
+async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error + Send + Sync&gt;&gt; {
+    let client = ClientBuilder::new(Client::new())
+        .with(Cache(HttpCache {
+            mode: CacheMode::Default,
+            manager: CACacheManager::new(PathBuf::from("./cache"), false),
+            options: HttpCacheOptions::default(),
+        }))
+        .build();
+
+    // Create a streaming body
+    let stream_data = vec!["chunk1", "chunk2", "chunk3"];
+    let stream = stream::iter(stream_data)
+        .map(|s| Ok::&lt;_, reqwest::Error&gt;(Bytes::from(s)));
+    let body = reqwest::Body::wrap_stream(stream);
+    
+    // Streaming bodies are handled gracefully - no caching errors
+    let response = client
+        .put("https://httpbin.org/put")
+        .body(body)
+        .send()
+        .await?;
+    
+    println!("Status: {}", response.status());
+    Ok(())
+}</code></pre></pre>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="surf-2"><a class="header" href="#surf-2">surf</a></h1>
+<p>The <a href="https://github.com/06chaynes/http-cache/tree/main/http-cache-surf"><code>http-cache-surf</code></a> crate provides a <a href="https://docs.rs/http-cache/latest/http_cache/trait.Middleware.html"><code>Middleware</code></a> implementation for the <a href="https://github.com/http-rs/surf"><code>surf</code></a> HTTP client.</p>
+<h2 id="getting-started-1"><a class="header" href="#getting-started-1">Getting Started</a></h2>
+<pre><code class="language-sh">cargo add http-cache-surf
+</code></pre>
+<h2 id="features-1"><a class="header" href="#features-1">Features</a></h2>
+<ul>
+<li><code>manager-cacache</code>: (default) Enables the <a href="https://docs.rs/http-cache/latest/http_cache/struct.CACacheManager.html"><code>CACacheManager</code></a> backend cache manager.</li>
+<li><code>manager-moka</code>: Enables the <a href="https://docs.rs/http-cache/latest/http_cache/struct.MokaManager.html"><code>MokaManager</code></a> backend cache manager.</li>
+<li><code>manager-foyer</code>: Enables the <a href="https://docs.rs/http-cache/latest/http_cache/struct.FoyerManager.html"><code>FoyerManager</code></a> backend cache manager.</li>
+</ul>
+<h2 id="usage-2"><a class="header" href="#usage-2">Usage</a></h2>
+<p>In the following example we will construct our client with our cache struct from <a href="https://github.com/06chaynes/http-cache/tree/main/http-cache-surf"><code>http-cache-surf</code></a>. This example will use the default mode, default cacache manager, and default http cache options.</p>
+<p>After constructing our client, we will make a request to the <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching">MDN Caching Docs</a> which should result in an object stored in cache on disk.</p>
+<pre><pre class="playground"><code class="language-rust">use http_cache_surf::{Cache, CacheMode, CACacheManager, HttpCache, HttpCacheOptions};
+use surf::Client;
+use macro_rules_attribute::apply;
+use smol_macros::main;
+use std::path::PathBuf;
+
+#[apply(main!)]
+async fn main() -&gt; surf::Result&lt;()&gt; {
+    let client = Client::new()
+        .with(Cache(HttpCache {
+          mode: CacheMode::Default,
+          manager: CACacheManager::new(PathBuf::from("./cache"), false),
+          options: HttpCacheOptions::default(),
+        }));
+
+    client
+        .get("https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching")
+        .await?;
+    Ok(())
+}</code></pre></pre>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="ureq-2"><a class="header" href="#ureq-2">ureq</a></h1>
+<p>The <a href="https://github.com/06chaynes/http-cache/tree/main/http-cache-ureq"><code>http-cache-ureq</code></a> crate provides HTTP caching for the <a href="https://github.com/algesten/ureq"><code>ureq</code></a> HTTP client.</p>
+<p>Since ureq is a synchronous HTTP client, this implementation uses the <a href="https://github.com/smol-rs/smol">smol</a> async runtime to integrate with the async http-cache system. The caching wrapper preserves ureq's synchronous interface while providing async caching capabilities internally.</p>
+<h2 id="features-2"><a class="header" href="#features-2">Features</a></h2>
+<ul>
+<li><code>manager-cacache</code> (default): Enable <a href="https://docs.rs/cacache/">cacache</a> cache manager.</li>
+<li><code>manager-moka</code>: Enable <a href="https://docs.rs/moka/">moka</a> cache manager.</li>
+<li><code>manager-foyer</code>: Enable <a href="https://github.com/foyer-rs/foyer">foyer</a> hybrid in-memory + disk cache manager.</li>
+<li><code>json</code>: Enables JSON request/response support via <code>send_json()</code> and <code>into_json()</code> methods (requires <code>serde_json</code>).</li>
+<li><code>rate-limiting</code>: Enable cache-aware rate limiting functionality.</li>
+<li><code>url-ada</code>: Enable ada-url for URL parsing.</li>
+</ul>
+<h2 id="basic-usage-1"><a class="header" href="#basic-usage-1">Basic Usage</a></h2>
+<p>Add the dependency to your <code>Cargo.toml</code>:</p>
+<pre><code class="language-toml">[dependencies]
+http-cache-ureq = "1.0"
+</code></pre>
+<p>Use the <code>CachedAgent</code> builder to create a cached HTTP client:</p>
+<pre><pre class="playground"><code class="language-rust">use http_cache_ureq::{CachedAgent, CACacheManager, CacheMode};
+
+fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
+    smol::block_on(async {
+        let agent = CachedAgent::builder()
+            .cache_manager(CACacheManager::new("./cache".into(), true))
+            .cache_mode(CacheMode::Default)
+            .build()?;
+        
+        // This request will be cached according to response headers
+        let response = agent.get("https://httpbin.org/cache/60").call().await?;
+        println!("Status: {}", response.status());
+        println!("Cached: {}", response.is_cached());
+        println!("Response: {}", response.into_string()?);
+        
+        // Subsequent identical requests may be served from cache
+        let cached_response = agent.get("https://httpbin.org/cache/60").call().await?;
+        println!("Cached status: {}", cached_response.status());
+        println!("Is cached: {}", cached_response.is_cached());
+        println!("Cached response: {}", cached_response.into_string()?);
+        
+        Ok(())
+    })
+}</code></pre></pre>
+<h2 id="json-support"><a class="header" href="#json-support">JSON Support</a></h2>
+<p>Enable the <code>json</code> feature to send and parse JSON data:</p>
+<pre><code class="language-toml">[dependencies]
+http-cache-ureq = { version = "1.0", features = ["json"] }
+</code></pre>
+<pre><pre class="playground"><code class="language-rust">use http_cache_ureq::{CachedAgent, CACacheManager, CacheMode};
+use serde_json::json;
+
+fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
+    smol::block_on(async {
+        let agent = CachedAgent::builder()
+            .cache_manager(CACacheManager::new("./cache".into(), true))
+            .cache_mode(CacheMode::Default)
+            .build()?;
+        
+        // Send JSON data
+        let response = agent.post("https://httpbin.org/post")
+            .send_json(json!({"key": "value"}))
+            .await?;
+        
+        // Parse JSON response
+        let json: serde_json::Value = response.into_json()?;
+        println!("Response: {}", json);
+        
+        Ok(())
+    })
+}</code></pre></pre>
+<h2 id="cache-modes-1"><a class="header" href="#cache-modes-1">Cache Modes</a></h2>
+<p>Control caching behavior with different modes:</p>
+<pre><pre class="playground"><code class="language-rust">use http_cache_ureq::{CachedAgent, CACacheManager, CacheMode};
+
+fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
+    smol::block_on(async {
+        let agent = CachedAgent::builder()
+            .cache_manager(CACacheManager::new("./cache".into(), true))
+            .cache_mode(CacheMode::ForceCache) // Cache everything, ignore headers
+            .build()?;
+        
+        // This will be cached even if headers say not to cache
+        let response = agent.get("https://httpbin.org/uuid").call().await?;
+        println!("Response: {}", response.into_string()?);
+        
+        Ok(())
+    })
+}</code></pre></pre>
+<h2 id="custom-ureq-configuration"><a class="header" href="#custom-ureq-configuration">Custom ureq Configuration</a></h2>
+<p>Preserve your ureq agent configuration while adding caching:</p>
+<pre><pre class="playground"><code class="language-rust">use http_cache_ureq::{CachedAgent, CACacheManager, CacheMode};
+use std::time::Duration;
+
+fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
+    smol::block_on(async {
+        // Create custom ureq configuration
+        let config = ureq::config::Config::builder()
+            .timeout_global(Some(Duration::from_secs(30)))
+            .user_agent("MyApp/1.0")
+            .build();
+        
+        let agent = CachedAgent::builder()
+            .agent_config(config)
+            .cache_manager(CACacheManager::new("./cache".into(), true))
+            .cache_mode(CacheMode::Default)
+            .build()?;
+        
+        let response = agent.get("https://httpbin.org/cache/60").call().await?;
+        println!("Response: {}", response.into_string()?);
+        
+        Ok(())
+    })
+}</code></pre></pre>
+<h2 id="in-memory-caching"><a class="header" href="#in-memory-caching">In-Memory Caching</a></h2>
+<p>Use the Moka in-memory cache:</p>
+<pre><code class="language-toml">[dependencies]
+http-cache-ureq = { version = "1.0", features = ["manager-moka"] }
+</code></pre>
+<pre><pre class="playground"><code class="language-rust">use http_cache_ureq::{CachedAgent, MokaManager, MokaCache, CacheMode};
+
+fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
+    smol::block_on(async {
+        let agent = CachedAgent::builder()
+            .cache_manager(MokaManager::new(MokaCache::new(1000))) // Max 1000 entries
+            .cache_mode(CacheMode::Default)
+            .build()?;
+            
+        let response = agent.get("https://httpbin.org/cache/60").call().await?;
+        println!("Response: {}", response.into_string()?);
+        
+        Ok(())
+    })
+}</code></pre></pre>
+<h2 id="maximum-ttl-control-1"><a class="header" href="#maximum-ttl-control-1">Maximum TTL Control</a></h2>
+<p>Control cache expiration times, particularly useful with <code>IgnoreRules</code> mode:</p>
+<pre><pre class="playground"><code class="language-rust">use http_cache_ureq::{CachedAgent, CACacheManager, CacheMode, HttpCacheOptions};
+use std::time::Duration;
+
+fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
+    smol::block_on(async {
+        let agent = CachedAgent::builder()
+            .cache_manager(CACacheManager::new("./cache".into(), true))
+            .cache_mode(CacheMode::IgnoreRules) // Ignore server cache headers
+            .cache_options(HttpCacheOptions {
+                max_ttl: Some(Duration::from_secs(300)), // Limit cache to 5 minutes maximum
+                ..Default::default()
+            })
+            .build()?;
+        
+        // This will be cached for max 5 minutes even if server says cache longer
+        let response = agent.get("https://httpbin.org/cache/3600").call().await?;
+        println!("Response: {}", response.into_string()?);
+        
+        Ok(())
+    })
+}</code></pre></pre>
+<h2 id="implementation-notes"><a class="header" href="#implementation-notes">Implementation Notes</a></h2>
+<ul>
+<li>The wrapper preserves ureq's synchronous interface while using async caching internally</li>
+<li>The <code>http_status_as_error</code> setting is automatically disabled to ensure proper cache operation</li>
+<li>All HTTP methods are supported (GET, POST, PUT, DELETE, HEAD, etc.)</li>
+<li>Cache invalidation occurs for non-GET/HEAD requests to the same resource</li>
+<li>Only GET and HEAD requests are cached by default</li>
+<li><code>max_ttl</code> provides expiration control when using <code>CacheMode::IgnoreRules</code></li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="tower-2"><a class="header" href="#tower-2">tower</a></h1>
+<p>The <a href="https://github.com/06chaynes/http-cache/tree/main/http-cache-tower"><code>http-cache-tower</code></a> crate provides Tower Layer and Service implementations that add HTTP caching capabilities to your HTTP clients and services. It supports both regular and <strong>full streaming cache operations</strong> for memory-efficient handling of large responses.</p>
+<h2 id="getting-started-2"><a class="header" href="#getting-started-2">Getting Started</a></h2>
+<pre><code class="language-sh">cargo add http-cache-tower
+</code></pre>
+<h2 id="features-3"><a class="header" href="#features-3">Features</a></h2>
+<ul>
+<li><code>manager-cacache</code>: (default) Enables the <a href="https://docs.rs/http-cache/latest/http_cache/struct.CACacheManager.html"><code>CACacheManager</code></a> backend cache manager.</li>
+<li><code>manager-moka</code>: Enables the <a href="https://docs.rs/http-cache/latest/http_cache/struct.MokaManager.html"><code>MokaManager</code></a> backend cache manager.</li>
+<li><code>manager-foyer</code>: Enables the <a href="https://docs.rs/http-cache/latest/http_cache/struct.FoyerManager.html"><code>FoyerManager</code></a> backend cache manager.</li>
+<li><code>streaming</code>: Enables streaming cache support for memory-efficient handling of large response bodies.</li>
+<li><code>rate-limiting</code>: Enables cache-aware rate limiting functionality.</li>
+<li><code>url-ada</code>: Enables ada-url for URL parsing.</li>
+</ul>
+<h2 id="basic-usage-2"><a class="header" href="#basic-usage-2">Basic Usage</a></h2>
+<p>Here's a basic example using the regular HTTP cache layer:</p>
+<pre><pre class="playground"><code class="language-rust">use http_cache_tower::HttpCacheLayer;
+use http_cache::CACacheManager;
+use tower::{ServiceBuilder, ServiceExt};
+use http::{Request, Response};
+use http_body_util::Full;
+use bytes::Bytes;
+use std::path::PathBuf;
+
+#[tokio::main]
+async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
+    // Create a cache manager
+    let cache_manager = CACacheManager::new(PathBuf::from("./cache"), false);
+
+    // Create the cache layer
+    let cache_layer = HttpCacheLayer::new(cache_manager);
+
+    // Build your service stack
+    let service = ServiceBuilder::new()
+        .layer(cache_layer)
+        .service_fn(|_req: Request&lt;Full&lt;Bytes&gt;&gt;| async {
+            Ok::&lt;_, std::convert::Infallible&gt;(
+                Response::new(Full::new(Bytes::from("Hello, world!")))
+            )
+        });
+
+    // Use the service
+    let request = Request::builder()
+        .uri("https://httpbin.org/cache/300")
+        .body(Full::new(Bytes::new()))?;
+
+    let response = service.oneshot(request).await?;
+
+    println!("Status: {}", response.status());
+
+    Ok(())
+}</code></pre></pre>
+<h2 id="streaming-usage"><a class="header" href="#streaming-usage">Streaming Usage</a></h2>
+<p>For large responses or when memory efficiency is important, use the streaming cache layer with the <code>streaming</code> feature:</p>
+<pre><code class="language-toml">[dependencies]
+http-cache-tower = { version = "1.0", features = ["streaming"] }
+</code></pre>
+<pre><pre class="playground"><code class="language-rust">use http_cache_tower::HttpCacheStreamingLayer;
+use http_cache::StreamingManager;
+use tower::{ServiceBuilder, ServiceExt};
+use http::{Request, Response};
+use http_body_util::Full;
+use bytes::Bytes;
+
+#[tokio::main]
+async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
+    // Create a streaming cache manager (in-memory with 1000 entry capacity)
+    let streaming_manager = StreamingManager::in_memory(1000).await?;
+
+    // Create the streaming cache layer
+    let cache_layer = HttpCacheStreamingLayer::new(streaming_manager);
+
+    // Build your service stack
+    let service = ServiceBuilder::new()
+        .layer(cache_layer)
+        .service_fn(|_req: Request&lt;Full&lt;Bytes&gt;&gt;| async {
+            Ok::&lt;_, std::convert::Infallible&gt;(
+                Response::new(Full::new(Bytes::from("Large response data...")))
+            )
+        });
+
+    // Use the service - responses are streamed without buffering entire body
+    let request = Request::builder()
+        .uri("https://example.com/large-file")
+        .body(Full::new(Bytes::new()))?;
+
+    let response = service.oneshot(request).await?;
+
+    println!("Status: {}", response.status());
+
+    Ok(())
+}</code></pre></pre>
+<h2 id="integration-with-hyper-client"><a class="header" href="#integration-with-hyper-client">Integration with Hyper Client</a></h2>
+<p>The tower layers can be easily integrated with Hyper clients:</p>
+<pre><pre class="playground"><code class="language-rust">use http_cache_tower::HttpCacheLayer;
+use http_cache::CACacheManager;
+use hyper_util::client::legacy::Client;
+use hyper_util::rt::TokioExecutor;
+use tower::{ServiceBuilder, ServiceExt};
+use std::path::PathBuf;
+
+#[tokio::main]
+async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
+    let cache_manager = CACacheManager::new(PathBuf::from("./cache"), false);
+    let cache_layer = HttpCacheLayer::new(cache_manager);
+
+    let client = Client::builder(TokioExecutor::new()).build_http();
+
+    let cached_client = ServiceBuilder::new()
+        .layer(cache_layer)
+        .service(client);
+
+    // Now use cached_client for HTTP requests
+    Ok(())
+}</code></pre></pre>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="server-side-caching-1"><a class="header" href="#server-side-caching-1">Server-Side Caching</a></h1>
+<p>Server-side HTTP response caching is fundamentally different from client-side caching. While client-side middleware caches responses from external APIs, server-side middleware caches your own application's responses to reduce load and improve performance.</p>
+<h2 id="what-is-server-side-caching"><a class="header" href="#what-is-server-side-caching">What is Server-Side Caching?</a></h2>
+<p>Server-side caching stores the responses your application generates so that subsequent identical requests can be served from cache without re-executing expensive operations like database queries or complex computations.</p>
+<h3 id="example-flow"><a class="header" href="#example-flow">Example Flow</a></h3>
+<p><strong>Without Server-Side Caching:</strong></p>
+<pre><code>Request → Routing → Handler → Database Query → Response (200ms)
+Request → Routing → Handler → Database Query → Response (200ms)
+Request → Routing → Handler → Database Query → Response (200ms)
+</code></pre>
+<p><strong>With Server-Side Caching:</strong></p>
+<pre><code>Request → Routing → Cache MISS → Handler → Database Query → Response (200ms) → Cached
+Request → Routing → Cache HIT → Response (2ms)
+Request → Routing → Cache HIT → Response (2ms)
+</code></pre>
+<h2 id="key-differences-from-client-side-caching"><a class="header" href="#key-differences-from-client-side-caching">Key Differences from Client-Side Caching</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Aspect</th><th>Client-Side</th><th>Server-Side</th></tr></thead><tbody>
+<tr><td><strong>What it caches</strong></td><td>External API responses</td><td>Your app's responses</td></tr>
+<tr><td><strong>Position</strong></td><td>Before making outbound requests</td><td>After routing, before handlers</td></tr>
+<tr><td><strong>Use case</strong></td><td>Reduce external API calls</td><td>Reduce internal computation</td></tr>
+<tr><td><strong>RFC 7234 behavior</strong></td><td>Client cache rules</td><td>Shared cache rules</td></tr>
+<tr><td><strong>Request extensions</strong></td><td>N/A</td><td>Must preserve (path params, state)</td></tr>
+</tbody></table>
+</div>
+<h2 id="available-implementations"><a class="header" href="#available-implementations">Available Implementations</a></h2>
+<p>Currently, server-side caching is available for:</p>
+<ul>
+<li><strong>Tower-based servers</strong> (Axum, Hyper, Tonic) - See <a href="server/./tower-server.html">tower-server</a></li>
+</ul>
+<h2 id="when-to-use-server-side-caching"><a class="header" href="#when-to-use-server-side-caching">When to Use Server-Side Caching</a></h2>
+<h3 id="good-use-cases-"><a class="header" href="#good-use-cases-">Good Use Cases ✅</a></h3>
+<ol>
+<li><strong>Public API endpoints</strong> with expensive database queries</li>
+<li><strong>Read-heavy workloads</strong> where data doesn't change frequently</li>
+<li><strong>Dashboard or analytics data</strong> that updates periodically</li>
+<li><strong>Static-like content</strong> that requires dynamic generation</li>
+<li><strong>Search results</strong> for common queries</li>
+<li><strong>Rendered HTML</strong> for public pages</li>
+</ol>
+<h3 id="avoid-caching-"><a class="header" href="#avoid-caching-">Avoid Caching ❌</a></h3>
+<ol>
+<li><strong>User-specific data</strong> (unless using proper cache key differentiation)</li>
+<li><strong>Authenticated endpoints</strong> (without user ID in cache key)</li>
+<li><strong>Real-time data</strong> that must always be fresh</li>
+<li><strong>Write operations</strong> (POST/PUT/DELETE requests)</li>
+<li><strong>Sensitive information</strong> that shouldn't be shared</li>
+<li><strong>Session-dependent responses</strong> (without session ID in cache key)</li>
+</ol>
+<h2 id="security-considerations"><a class="header" href="#security-considerations">Security Considerations</a></h2>
+<p>Server-side caches are <strong>shared caches</strong> - cached responses are served to ALL users. This is different from client-side caches which are per-client.</p>
+<h3 id="critical-security-rule"><a class="header" href="#critical-security-rule">Critical Security Rule</a></h3>
+<p><strong>Never cache user-specific data without including the user/session identifier in the cache key.</strong></p>
+<h3 id="safe-patterns"><a class="header" href="#safe-patterns">Safe Patterns</a></h3>
+<p><strong>Pattern 1: Mark user-specific responses as private</strong></p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>async fn user_profile() -&gt; Response {
+    (
+        [(header::CACHE_CONTROL, "private")], // Won't be cached
+        "User profile data"
+    ).into_response()
+}
+<span class="boring">}</span></code></pre></pre>
+<p><strong>Pattern 2: Include user ID in cache key</strong></p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let keyer = CustomKeyer::new(|req: &amp;Request&lt;()&gt;| {
+    let user_id = extract_user_id(req);
+    format!("{} {} user:{}", req.method(), req.uri().path(), user_id)
+});
+<span class="boring">}</span></code></pre></pre>
+<p><strong>Pattern 3: Don't cache at all</strong></p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>async fn sensitive_data() -&gt; Response {
+    (
+        [(header::CACHE_CONTROL, "no-store")],
+        "Sensitive data"
+    ).into_response()
+}
+<span class="boring">}</span></code></pre></pre>
+<h2 id="rfc-7234-compliance"><a class="header" href="#rfc-7234-compliance">RFC 7234 Compliance</a></h2>
+<p>Server-side caches implement <strong>shared cache</strong> semantics as defined in RFC 7234:</p>
+<h3 id="must-not-cache"><a class="header" href="#must-not-cache">Must NOT Cache</a></h3>
+<ul>
+<li>Responses with <code>Cache-Control: private</code> (user-specific)</li>
+<li>Responses with <code>Cache-Control: no-store</code> (sensitive)</li>
+<li>Responses with <code>Cache-Control: no-cache</code> (requires revalidation)</li>
+<li>Non-2xx status codes (errors)</li>
+<li>Requests with <code>Authorization</code> header (unless response explicitly allows via <code>public</code>, <code>s-maxage</code>, or <code>must-revalidate</code>)</li>
+</ul>
+<h3 id="must-cache-correctly"><a class="header" href="#must-cache-correctly">Must Cache Correctly</a></h3>
+<ul>
+<li>Prefer <code>s-maxage</code> over <code>max-age</code> (shared cache specific)</li>
+<li>Respect <code>Vary</code> headers (content negotiation)</li>
+<li>Handle <code>Expires</code> header as fallback</li>
+<li>Support <code>max-age</code> and <code>public</code> directives</li>
+</ul>
+<h2 id="performance-characteristics"><a class="header" href="#performance-characteristics">Performance Characteristics</a></h2>
+<h3 id="benefits"><a class="header" href="#benefits">Benefits</a></h3>
+<ul>
+<li><strong>Reduced database load</strong>: Cached responses don't hit the database</li>
+<li><strong>Lower CPU usage</strong>: Expensive computations run once</li>
+<li><strong>Faster response times</strong>: Cache hits are typically &lt;5ms</li>
+<li><strong>Better scalability</strong>: Handle more requests with same resources</li>
+</ul>
+<h3 id="considerations"><a class="header" href="#considerations">Considerations</a></h3>
+<ul>
+<li><strong>Memory usage</strong>: Cached responses stored in memory or disk</li>
+<li><strong>Stale data</strong>: Cached data may become outdated</li>
+<li><strong>Cache warming</strong>: Initial requests (cache misses) are slower</li>
+<li><strong>Invalidation complexity</strong>: Updating cached data can be tricky</li>
+</ul>
+<h2 id="cache-invalidation-strategies"><a class="header" href="#cache-invalidation-strategies">Cache Invalidation Strategies</a></h2>
+<h3 id="time-based-ttl"><a class="header" href="#time-based-ttl">Time-Based (TTL)</a></h3>
+<p>Set expiration times on cached responses:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>async fn handler() -&gt; Response {
+    (
+        [(header::CACHE_CONTROL, "max-age=300")], // 5 minutes
+        "Response data"
+    ).into_response()
+}
+<span class="boring">}</span></code></pre></pre>
+<h3 id="event-based"><a class="header" href="#event-based">Event-Based</a></h3>
+<p>Manually invalidate cache entries when data changes:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// After updating user data
+cache_manager.delete(&amp;format!("GET /users/{}", user_id)).await?;
+<span class="boring">}</span></code></pre></pre>
+<h3 id="hybrid-approach"><a class="header" href="#hybrid-approach">Hybrid Approach</a></h3>
+<p>Combine TTL with manual invalidation:</p>
+<ul>
+<li>Use TTL for automatic expiration</li>
+<li>Invalidate early when you know data changed</li>
+</ul>
+<h2 id="best-practices"><a class="header" href="#best-practices">Best Practices</a></h2>
+<ol>
+<li><strong>Start conservative</strong>: Use shorter TTLs initially, increase as you gain confidence</li>
+<li><strong>Monitor cache hit rates</strong>: Track X-Cache headers to measure effectiveness</li>
+<li><strong>Set size limits</strong>: Prevent cache from consuming too much memory</li>
+<li><strong>Use appropriate keyers</strong>: Match cache key strategy to your needs</li>
+<li><strong>Document caching behavior</strong>: Make it clear which endpoints are cached</li>
+<li><strong>Test cache invalidation</strong>: Ensure updates propagate correctly</li>
+<li><strong>Consider cache warming</strong>: Pre-populate cache for common requests</li>
+<li><strong>Handle cache failures gracefully</strong>: Application should work even if cache fails</li>
+</ol>
+<h2 id="monitoring-and-debugging"><a class="header" href="#monitoring-and-debugging">Monitoring and Debugging</a></h2>
+<h3 id="enable-cache-status-headers"><a class="header" href="#enable-cache-status-headers">Enable Cache Status Headers</a></h3>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let options = ServerCacheOptions {
+    cache_status_headers: true,
+    ..Default::default()
+};
+<span class="boring">}</span></code></pre></pre>
+<p>This adds <code>X-Cache</code> headers to responses:</p>
+<ul>
+<li><code>X-Cache: HIT</code> - Served from cache</li>
+<li><code>X-Cache: MISS</code> - Generated by handler</li>
+</ul>
+<h3 id="track-metrics"><a class="header" href="#track-metrics">Track Metrics</a></h3>
+<p>Monitor these key metrics:</p>
+<ul>
+<li>Cache hit rate (hits / total requests)</li>
+<li>Average response time (hits vs misses)</li>
+<li>Cache size and memory usage</li>
+<li>Cache eviction rate</li>
+<li>Stale response rate</li>
+</ul>
+<h2 id="getting-started-3"><a class="header" href="#getting-started-3">Getting Started</a></h2>
+<p>See the <a href="server/./tower-server.html">tower-server</a> documentation for detailed implementation guide.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="tower-server"><a class="header" href="#tower-server">tower-server</a></h1>
+<p>The <a href="https://github.com/06chaynes/http-cache/tree/main/http-cache-tower-server"><code>http-cache-tower-server</code></a> crate provides Tower Layer and Service implementations for server-side HTTP response caching. Unlike client-side caching, this middleware caches your own application's responses to reduce database queries, computation, and improve response times.</p>
+<h2 id="key-differences-from-client-side-caching-1"><a class="header" href="#key-differences-from-client-side-caching-1">Key Differences from Client-Side Caching</a></h2>
+<p><strong>Client-Side (<code>http-cache-tower</code>)</strong>: Caches responses from external APIs you're calling
+<strong>Server-Side (<code>http-cache-tower-server</code>)</strong>: Caches responses your application generates</p>
+<p><strong>Critical:</strong> Server-side cache middleware must be placed <strong>AFTER</strong> routing in your middleware stack to preserve request extensions like path parameters (see <a href="https://github.com/06chaynes/http-cache/issues/121">Issue #121</a>).</p>
+<h2 id="getting-started-4"><a class="header" href="#getting-started-4">Getting Started</a></h2>
+<pre><code class="language-sh">cargo add http-cache-tower-server
+</code></pre>
+<h2 id="features-4"><a class="header" href="#features-4">Features</a></h2>
+<ul>
+<li><code>manager-cacache</code>: (default) Enables the <a href="https://docs.rs/http-cache/latest/http_cache/struct.CACacheManager.html"><code>CACacheManager</code></a> backend cache manager.</li>
+<li><code>manager-moka</code>: Enables the <a href="https://docs.rs/http-cache/latest/http_cache/struct.MokaManager.html"><code>MokaManager</code></a> backend cache manager.</li>
+</ul>
+<h2 id="basic-usage-with-axum"><a class="header" href="#basic-usage-with-axum">Basic Usage with Axum</a></h2>
+<pre><pre class="playground"><code class="language-rust">use axum::{
+    routing::get,
+    Router,
+    extract::Path,
+};
+use http_cache_tower_server::ServerCacheLayer;
+use http_cache::CACacheManager;
+use std::path::PathBuf;
+
+#[tokio::main]
+async fn main() {
+    // Create cache manager
+    let cache_manager = CACacheManager::new(PathBuf::from("./cache"), false);
+
+    // Create the server cache layer
+    let cache_layer = ServerCacheLayer::new(cache_manager);
+
+    // Build your Axum app
+    let app = Router::new()
+        .route("/users/:id", get(get_user))
+        .route("/posts/:id", get(get_post))
+        // IMPORTANT: Place cache layer AFTER routing
+        .layer(cache_layer);
+
+    // Run the server
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:3000")
+        .await
+        .unwrap();
+    axum::serve(listener, app).await.unwrap();
+}
+
+async fn get_user(Path(id): Path&lt;u32&gt;) -&gt; String {
+    // Expensive database query or computation
+    format!("User {}", id)
+}
+
+async fn get_post(Path(id): Path&lt;u32&gt;) -&gt; String {
+    format!("Post {}", id)
+}</code></pre></pre>
+<h2 id="cache-control-with-response-headers"><a class="header" href="#cache-control-with-response-headers">Cache Control with Response Headers</a></h2>
+<p>The middleware respects standard HTTP Cache-Control headers from your handlers:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use axum::{
+    response::{IntoResponse, Response},
+    http::header,
+};
+
+async fn cacheable_handler() -&gt; Response {
+    (
+        [(header::CACHE_CONTROL, "max-age=300")], // Cache for 5 minutes
+        "This response will be cached"
+    ).into_response()
+}
+
+async fn no_cache_handler() -&gt; Response {
+    (
+        [(header::CACHE_CONTROL, "no-store")], // Don't cache
+        "This response will NOT be cached"
+    ).into_response()
+}
+
+async fn private_handler() -&gt; Response {
+    (
+        [(header::CACHE_CONTROL, "private")], // User-specific data
+        "This response will NOT be cached (shared cache)"
+    ).into_response()
+}
+<span class="boring">}</span></code></pre></pre>
+<h2 id="rfc-7234-compliance-1"><a class="header" href="#rfc-7234-compliance-1">RFC 7234 Compliance</a></h2>
+<p>This implementation acts as a <strong>shared cache</strong> per RFC 7234:</p>
+<h3 id="automatically-rejects"><a class="header" href="#automatically-rejects">Automatically Rejects</a></h3>
+<ul>
+<li><code>no-store</code> directive</li>
+<li><code>no-cache</code> directive (requires revalidation, which is not supported)</li>
+<li><code>private</code> directive (shared caches cannot store private responses)</li>
+<li>Non-2xx status codes</li>
+</ul>
+<h3 id="supports"><a class="header" href="#supports">Supports</a></h3>
+<ul>
+<li><code>max-age</code>: Cache lifetime in seconds</li>
+<li><code>s-maxage</code>: Shared cache specific lifetime (takes precedence over max-age)</li>
+<li><code>public</code>: Makes response cacheable</li>
+<li><code>Expires</code>: Fallback header when Cache-Control is absent</li>
+</ul>
+<h2 id="cache-key-strategies"><a class="header" href="#cache-key-strategies">Cache Key Strategies</a></h2>
+<h3 id="defaultkeyer-default"><a class="header" href="#defaultkeyer-default">DefaultKeyer (Default)</a></h3>
+<p>Caches based on HTTP method and path:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use http_cache_tower_server::{ServerCacheLayer, DefaultKeyer};
+
+let cache_layer = ServerCacheLayer::new(cache_manager);
+// GET /users/123 and GET /users/456 are cached separately
+<span class="boring">}</span></code></pre></pre>
+<h3 id="querykeyer"><a class="header" href="#querykeyer">QueryKeyer</a></h3>
+<p>Includes query parameters in the cache key:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use http_cache_tower_server::{ServerCacheLayer, QueryKeyer};
+
+let cache_layer = ServerCacheLayer::with_keyer(cache_manager, QueryKeyer);
+// GET /search?q=rust and GET /search?q=python are cached separately
+<span class="boring">}</span></code></pre></pre>
+<h3 id="customkeyer"><a class="header" href="#customkeyer">CustomKeyer</a></h3>
+<p>For advanced use cases like content negotiation or user-specific caching:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use http_cache_tower_server::{ServerCacheLayer, CustomKeyer};
+
+// Example: Include Accept-Language header in cache key
+let keyer = CustomKeyer::new(|req: &amp;http::Request&lt;()&gt;| {
+    let lang = req.headers()
+        .get("accept-language")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("en");
+    format!("{} {} lang:{}", req.method(), req.uri().path(), lang)
+});
+
+let cache_layer = ServerCacheLayer::with_keyer(cache_manager, keyer);
+<span class="boring">}</span></code></pre></pre>
+<h2 id="configuration-options"><a class="header" href="#configuration-options">Configuration Options</a></h2>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use http_cache_tower_server::{ServerCacheLayer, ServerCacheOptions};
+use std::time::Duration;
+
+let options = ServerCacheOptions {
+    // Default TTL when no Cache-Control header present
+    default_ttl: Some(Duration::from_secs(60)),
+
+    // Maximum TTL (even if response specifies longer)
+    max_ttl: Some(Duration::from_secs(3600)),
+
+    // Minimum TTL (even if response specifies shorter)
+    min_ttl: Some(Duration::from_secs(10)),
+
+    // Add X-Cache: HIT/MISS headers for debugging
+    cache_status_headers: true,
+
+    // Maximum body size to cache (bytes)
+    max_body_size: 128 * 1024 * 1024, // 128 MB
+
+    // Cache responses without Cache-Control header
+    cache_by_default: false,
+
+    // Respect Vary header for content negotiation (default: true)
+    // When enabled, cached responses are only served if the request's
+    // headers match those specified in the response's Vary header
+    respect_vary: true,
+
+    // Respect Authorization headers per RFC 7234 (default: true)
+    // When enabled, requests with Authorization headers are not cached
+    // unless the response explicitly permits it via public, s-maxage,
+    // or must-revalidate directives
+    respect_authorization: true,
+};
+
+let cache_layer = ServerCacheLayer::new(cache_manager)
+    .with_options(options);
+<span class="boring">}</span></code></pre></pre>
+<h2 id="security-warnings"><a class="header" href="#security-warnings">Security Warnings</a></h2>
+<h3 id="shared-cache-behavior"><a class="header" href="#shared-cache-behavior">Shared Cache Behavior</a></h3>
+<p>This is a <strong>shared cache</strong> - cached responses are served to ALL users. Improper configuration can leak user-specific data.</p>
+<h3 id="do-not-cache"><a class="header" href="#do-not-cache">Do NOT Cache</a></h3>
+<ul>
+<li>Authenticated endpoints (unless using appropriate CustomKeyer)</li>
+<li>User-specific data (unless keyed by user/session ID)</li>
+<li>Responses with sensitive information</li>
+</ul>
+<h3 id="safe-approaches"><a class="header" href="#safe-approaches">Safe Approaches</a></h3>
+<p><strong>Option 1: Use Cache-Control: private</strong></p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>async fn user_specific_handler() -&gt; Response {
+    (
+        [(header::CACHE_CONTROL, "private")],
+        "User-specific data - won't be cached"
+    ).into_response()
+}
+<span class="boring">}</span></code></pre></pre>
+<p><strong>Option 2: Include user ID in cache key</strong></p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let keyer = CustomKeyer::new(|req: &amp;http::Request&lt;()&gt;| {
+    let user_id = req.headers()
+        .get("x-user-id")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("anonymous");
+    format!("{} {} user:{}", req.method(), req.uri().path(), user_id)
+});
+<span class="boring">}</span></code></pre></pre>
+<p><strong>Option 3: Don't cache at all</strong></p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>async fn sensitive_handler() -&gt; Response {
+    (
+        [(header::CACHE_CONTROL, "no-store")],
+        "Sensitive data - never cached"
+    ).into_response()
+}
+<span class="boring">}</span></code></pre></pre>
+<h2 id="content-negotiation"><a class="header" href="#content-negotiation">Content Negotiation</a></h2>
+<p>The middleware respects <code>Vary</code> headers via <code>http-cache-semantics</code> when <code>respect_vary</code> is enabled (the default). Cached responses are only served if the request's headers match those specified in the response's <code>Vary</code> header. For additional control, you can also use a <code>CustomKeyer</code>:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Example: Cache different responses based on Accept-Language
+let keyer = CustomKeyer::new(|req: &amp;http::Request&lt;()&gt;| {
+    let lang = req.headers()
+        .get("accept-language")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.split(',').next())
+        .unwrap_or("en");
+    format!("{} {} lang:{}", req.method(), req.uri().path(), lang)
+});
+<span class="boring">}</span></code></pre></pre>
+<h2 id="cache-inspection"><a class="header" href="#cache-inspection">Cache Inspection</a></h2>
+<p>Responses include <code>X-Cache</code> headers when <code>cache_status_headers</code> is enabled:</p>
+<ul>
+<li><code>X-Cache: HIT</code> - Response served from cache</li>
+<li><code>X-Cache: MISS</code> - Response generated by handler and cached (if cacheable)</li>
+<li>No header - Response not cacheable (or headers disabled)</li>
+</ul>
+<h2 id="cache-metrics"><a class="header" href="#cache-metrics">Cache Metrics</a></h2>
+<p>The <code>ServerCacheLayer</code> provides access to cache performance metrics via <code>CacheMetrics</code>:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use http_cache_tower_server::{ServerCacheLayer, CacheMetrics};
+use std::sync::Arc;
+
+// Create the cache layer
+let cache_layer = ServerCacheLayer::new(cache_manager);
+
+// Access metrics
+let metrics: &amp;Arc&lt;CacheMetrics&gt; = cache_layer.metrics();
+
+// Get hit rate (0.0 to 1.0)
+let hit_rate = metrics.hit_rate();
+println!("Cache hit rate: {:.2}%", hit_rate * 100.0);
+
+// Access individual counters
+println!("Hits: {}", metrics.hits.load(std::sync::atomic::Ordering::Relaxed));
+println!("Misses: {}", metrics.misses.load(std::sync::atomic::Ordering::Relaxed));
+println!("Stores: {}", metrics.stores.load(std::sync::atomic::Ordering::Relaxed));
+println!("Skipped: {}", metrics.skipped.load(std::sync::atomic::Ordering::Relaxed));
+
+// Reset metrics
+metrics.reset();
+<span class="boring">}</span></code></pre></pre>
+<h3 id="available-metrics"><a class="header" href="#available-metrics">Available Metrics</a></h3>
+<ul>
+<li><code>hits</code>: Number of cache hits</li>
+<li><code>misses</code>: Number of cache misses</li>
+<li><code>stores</code>: Number of responses stored in cache</li>
+<li><code>skipped</code>: Number of responses skipped (too large, not cacheable, etc.)</li>
+</ul>
+<h2 id="complete-example"><a class="header" href="#complete-example">Complete Example</a></h2>
+<pre><pre class="playground"><code class="language-rust">use axum::{
+    routing::get,
+    Router,
+    extract::Path,
+    response::{IntoResponse, Response},
+    http::header,
+};
+use http_cache_tower_server::{ServerCacheLayer, ServerCacheOptions, QueryKeyer};
+use http_cache::CACacheManager;
+use std::time::Duration;
+use std::path::PathBuf;
+
+#[tokio::main]
+async fn main() {
+    // Configure cache manager
+    let cache_manager = CACacheManager::new(PathBuf::from("./cache"), false);
+
+    // Configure cache options
+    let options = ServerCacheOptions {
+        default_ttl: Some(Duration::from_secs(60)),
+        max_ttl: Some(Duration::from_secs(3600)),
+        cache_status_headers: true,
+        ..Default::default()
+    };
+
+    // Create cache layer with query parameter support
+    let cache_layer = ServerCacheLayer::with_keyer(cache_manager, QueryKeyer)
+        .with_options(options);
+
+    // Build app
+    let app = Router::new()
+        .route("/users/:id", get(get_user))
+        .route("/search", get(search))
+        .route("/admin/stats", get(admin_stats))
+        .layer(cache_layer); // AFTER routing
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:3000")
+        .await
+        .unwrap();
+    axum::serve(listener, app).await.unwrap();
+}
+
+// Cacheable for 5 minutes
+async fn get_user(Path(id): Path&lt;u32&gt;) -&gt; Response {
+    (
+        [(header::CACHE_CONTROL, "max-age=300")],
+        format!("User {}", id)
+    ).into_response()
+}
+
+// Cacheable with query parameters
+async fn search(query: axum::extract::Query&lt;std::collections::HashMap&lt;String, String&gt;&gt;) -&gt; Response {
+    (
+        [(header::CACHE_CONTROL, "max-age=60")],
+        format!("Search results: {:?}", query)
+    ).into_response()
+}
+
+// Never cached (admin data)
+async fn admin_stats() -&gt; Response {
+    (
+        [(header::CACHE_CONTROL, "no-store")],
+        "Admin statistics - not cached"
+    ).into_response()
+}</code></pre></pre>
+<h2 id="best-practices-1"><a class="header" href="#best-practices-1">Best Practices</a></h2>
+<ol>
+<li><strong>Place middleware after routing</strong> to preserve request extensions</li>
+<li><strong>Set appropriate Cache-Control headers</strong> in your handlers</li>
+<li><strong>Use <code>private</code> directive</strong> for user-specific responses</li>
+<li><strong>Monitor cache hit rates</strong> using X-Cache headers</li>
+<li><strong>Set reasonable TTL limits</strong> to prevent stale data</li>
+<li><strong>Use CustomKeyer</strong> for content negotiation or user-specific caching</li>
+<li><strong>Don't cache authenticated endpoints</strong> without proper keying</li>
+</ol>
+<h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
+<h3 id="path-parameters-not-working"><a class="header" href="#path-parameters-not-working">Path parameters not working</a></h3>
+<p><strong>Problem:</strong> Axum path extractors fail with cached responses</p>
+<p><strong>Solution:</strong> Ensure cache layer is placed AFTER routing:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// ❌ Wrong - cache layer before routing
+let app = Router::new()
+    .layer(cache_layer)  // Too early!
+    .route("/users/:id", get(handler));
+
+// ✅ Correct - cache layer after routing
+let app = Router::new()
+    .route("/users/:id", get(handler))
+    .layer(cache_layer);  // After routing
+<span class="boring">}</span></code></pre></pre>
+<h3 id="responses-not-being-cached"><a class="header" href="#responses-not-being-cached">Responses not being cached</a></h3>
+<p><strong>Possible causes:</strong></p>
+<ol>
+<li>Response has <code>no-store</code>, <code>no-cache</code>, or <code>private</code> directive</li>
+<li>Response is not 2xx status code</li>
+<li>Response body exceeds <code>max_body_size</code></li>
+<li><code>cache_by_default</code> is false and no Cache-Control header present</li>
+</ol>
+<p><strong>Solution:</strong> Add appropriate Cache-Control headers:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>async fn handler() -&gt; Response {
+    (
+        [(header::CACHE_CONTROL, "max-age=300")],
+        "Response body"
+    ).into_response()
+}
+<span class="boring">}</span></code></pre></pre>
+<h3 id="user-data-leaking-between-requests"><a class="header" href="#user-data-leaking-between-requests">User data leaking between requests</a></h3>
+<p><strong>Problem:</strong> Cached user-specific responses served to other users</p>
+<p><strong>Solution:</strong> Use <code>CustomKeyer</code> with user identifier:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let keyer = CustomKeyer::new(|req: &amp;http::Request&lt;()&gt;| {
+    let user = req.headers()
+        .get("x-user-id")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("anonymous");
+    format!("{} {} user:{}", req.method(), req.uri().path(), user)
+});
+<span class="boring">}</span></code></pre></pre>
+<p>Or use <code>Cache-Control: private</code> to prevent caching entirely.</p>
+<h2 id="performance-considerations"><a class="header" href="#performance-considerations">Performance Considerations</a></h2>
+<ul>
+<li>Cache writes are fire-and-forget (non-blocking)</li>
+<li>Cache lookups are async but fast (especially with in-memory managers)</li>
+<li>Body buffering is required (responses are fully buffered before caching)</li>
+<li>Consider using moka manager for frequently accessed data</li>
+<li>Use cacache manager for larger datasets with disk persistence</li>
+</ul>
+<h2 id="comparison-with-other-frameworks"><a class="header" href="#comparison-with-other-frameworks">Comparison with Other Frameworks</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Feature</th><th>http-cache-tower-server</th><th>Django Cache</th><th>NGINX FastCGI</th></tr></thead><tbody>
+<tr><td>Middleware-based</td><td>✅</td><td>✅</td><td>❌</td></tr>
+<tr><td>RFC 7234 compliant</td><td>✅</td><td>⚠️ Partial</td><td>⚠️ Partial</td></tr>
+<tr><td>Pluggable backends</td><td>✅</td><td>✅</td><td>❌</td></tr>
+<tr><td>Custom cache keys</td><td>✅</td><td>✅</td><td>✅</td></tr>
+<tr><td>Type-safe</td><td>✅</td><td>❌</td><td>❌</td></tr>
+<tr><td>Async-first</td><td>✅</td><td>❌</td><td>✅</td></tr>
+</tbody></table>
+</div><div style="break-before: page; page-break-before: always;"></div><h1 id="backend-cache-manager-implementations"><a class="header" href="#backend-cache-manager-implementations">Backend Cache Manager Implementations</a></h1>
+<p>The following backend cache manager implementations are provided by this crate:</p>
+<h2 id="cacache"><a class="header" href="#cacache"><a href="managers/./cacache.html">cacache</a></a></h2>
+<p><a href="https://github.com/zkat/cacache-rs"><code>cacache</code></a> is a high-performance, concurrent, content-addressable disk cache, optimized for async APIs. Provides traditional buffered caching.</p>
+<h2 id="moka"><a class="header" href="#moka"><a href="managers/./moka.html">moka</a></a></h2>
+<p><a href="https://github.com/moka-rs/moka"><code>moka</code></a> is a fast, concurrent cache library inspired by the Caffeine library for Java. Provides in-memory caching with traditional buffering.</p>
+<h2 id="foyer"><a class="header" href="#foyer"><a href="managers/./foyer.html">foyer</a></a></h2>
+<p><a href="https://github.com/foyer-rs/foyer"><code>foyer</code></a> is a hybrid in-memory + disk cache that provides configurable eviction strategies (w-TinyLFU, S3-FIFO, SIEVE), optional disk storage, request deduplication, and Tokio-native async operations.</p>
+<h2 id="quick_cache"><a class="header" href="#quick_cache"><a href="managers/./quick-cache.html">quick_cache</a></a></h2>
+<p><a href="https://github.com/arthurprs/quick-cache"><code>quick_cache</code></a> is a lightweight and high performance concurrent cache optimized for low cache overhead. Provides traditional buffered caching operations.</p>
+<h2 id="streaming_cache"><a class="header" href="#streaming_cache"><a href="managers/./streaming_cache.html">streaming_cache</a></a></h2>
+<p><a href="https://github.com/06chaynes/http-cache/blob/main/http-cache/src/managers/streaming_cache.rs"><code>StreamingManager</code></a> combines cacache for disk storage with moka for metadata tracking and TinyLFU eviction. Streams cached responses from disk in 8KB chunks without buffering entire bodies in memory. Ideal for large responses.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="cacache-1"><a class="header" href="#cacache-1">cacache</a></h1>
+<p><a href="https://github.com/zkat/cacache-rs"><code>cacache</code></a> is a high-performance, concurrent, content-addressable disk cache, optimized for async APIs. It provides traditional buffered caching for memory-efficient handling of responses.</p>
+<h2 id="getting-started-5"><a class="header" href="#getting-started-5">Getting Started</a></h2>
+<p>The <code>cacache</code> backend cache manager is provided by the <code>http-cache</code> crate and is enabled by default. The <code>http-cache-reqwest</code>, <code>http-cache-surf</code>, and <code>http-cache-tower</code> crates all expose the types so no need to pull in the <code>http-cache</code> directly unless you need to implement your own client.</p>
+<h3 id="reqwest-3"><a class="header" href="#reqwest-3">reqwest</a></h3>
+<pre><code class="language-sh">cargo add http-cache-reqwest
+</code></pre>
+<h3 id="surf-3"><a class="header" href="#surf-3">surf</a></h3>
+<pre><code class="language-sh">cargo add http-cache-surf
+</code></pre>
+<h3 id="tower-3"><a class="header" href="#tower-3">tower</a></h3>
+<pre><code class="language-sh">cargo add http-cache-tower
+</code></pre>
+<h2 id="working-with-the-manager-directly"><a class="header" href="#working-with-the-manager-directly">Working with the manager directly</a></h2>
+<p>First construct your manager instance. You need to specify the cache directory and whether cache entries should be fully removed from disk.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use std::path::PathBuf;
+
+let manager = CACacheManager::new(PathBuf::from("./my-cache"), false);
+<span class="boring">}</span></code></pre></pre>
+<p>The second argument (<code>remove_fully</code>) controls whether cached entries are completely removed from disk when deleted:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Keep cache metadata on delete (faster, uses more disk space)
+let manager = CACacheManager::new(PathBuf::from("./my-cache"), false);
+
+// Fully remove entries from disk on delete (slower, saves disk space)
+let manager = CACacheManager::new(PathBuf::from("./my-cache"), true);
+<span class="boring">}</span></code></pre></pre>
+<p>You can attempt to retrieve a record from the cache using the <code>get</code> method. This method accepts a <code>&amp;str</code> as the cache key and returns an <code>Result&lt;Option&lt;(HttpResponse, CachePolicy)&gt;, BoxError&gt;</code>.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let response = manager.get("my-cache-key").await?;
+<span class="boring">}</span></code></pre></pre>
+<p>You can store a record in the cache using the <code>put</code> method. This method accepts a <code>String</code> as the cache key, a <code>HttpResponse</code> as the response, and a <code>CachePolicy</code> as the policy object. It returns an <code>Result&lt;HttpResponse, BoxError&gt;</code>. The below example constructs the response and policy manually, normally this would be handled by the middleware.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let url = Url::parse("http://example.com")?;
+let response = HttpResponse {
+    body: TEST_BODY.to_vec(),
+    headers: Default::default(),
+    status: 200,
+    url: url.clone(),
+    version: HttpVersion::Http11,
+};
+let req = http::Request::get("http://example.com").body(())?;
+let res = http::Response::builder()
+    .status(200)
+    .body(TEST_BODY.to_vec())?;
+let policy = CachePolicy::new(&amp;req, &amp;res);
+let response = manager.put("my-cache-key".into(), response, policy).await?;
+<span class="boring">}</span></code></pre></pre>
+<p>You can remove a record from the cache using the <code>delete</code> method. This method accepts a <code>&amp;str</code> as the cache key and returns an <code>Result&lt;(), BoxError&gt;</code>.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>manager.delete("my-cache-key").await?;
+<span class="boring">}</span></code></pre></pre>
+<p>You can also clear the entire cache using the <code>clear</code> method. This method accepts no arguments and returns an <code>Result&lt;(), BoxError&gt;</code>.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>manager.clear().await?;
+<span class="boring">}</span></code></pre></pre>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="moka-1"><a class="header" href="#moka-1">moka</a></h1>
+<p><a href="https://github.com/moka-rs/moka"><code>moka</code></a> is a fast, concurrent cache library inspired by the Caffeine library for Java. The moka manager provides traditional buffered caching operations for fast in-memory access.</p>
+<h2 id="getting-started-6"><a class="header" href="#getting-started-6">Getting Started</a></h2>
+<p>The <code>moka</code> backend cache manager is provided by the <code>http-cache</code> crate but is not enabled by default. The <code>http-cache-reqwest</code>, <code>http-cache-surf</code>, and <code>http-cache-tower</code> crates all expose the types so no need to pull in the <code>http-cache</code> directly unless you need to implement your own client.</p>
+<h3 id="reqwest-4"><a class="header" href="#reqwest-4">reqwest</a></h3>
+<pre><code class="language-sh">cargo add http-cache-reqwest --no-default-features -F manager-moka
+</code></pre>
+<h3 id="surf-4"><a class="header" href="#surf-4">surf</a></h3>
+<pre><code class="language-sh">cargo add http-cache-surf --no-default-features -F manager-moka
+</code></pre>
+<h3 id="tower-4"><a class="header" href="#tower-4">tower</a></h3>
+<pre><code class="language-sh">cargo add http-cache-tower --no-default-features -F manager-moka
+</code></pre>
+<h2 id="working-with-the-manager-directly-1"><a class="header" href="#working-with-the-manager-directly-1">Working with the manager directly</a></h2>
+<p>First construct your manager instance. This example will use the default cache configuration (42).</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let manager = Arc::new(MokaManager::default());
+<span class="boring">}</span></code></pre></pre>
+<p>You can also specify other configuration options. This uses the <code>new</code> methods on both <code>MokaManager</code> and <code>moka::future::Cache</code> to construct a cache with a maximum capacity of 100 items.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let manager = Arc::new(MokaManager::new(moka::future::Cache::new(100)));
+<span class="boring">}</span></code></pre></pre>
+<p>You can attempt to retrieve a record from the cache using the <code>get</code> method. This method accepts a <code>&amp;str</code> as the cache key and returns an <code>Result&lt;Option&lt;(HttpResponse, CachePolicy)&gt;, BoxError&gt;</code>.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let response = manager.get("my-cache-key").await?;
+<span class="boring">}</span></code></pre></pre>
+<p>You can store a record in the cache using the <code>put</code> method. This method accepts a <code>String</code> as the cache key, a <code>HttpResponse</code> as the response, and a <code>CachePolicy</code> as the policy object. It returns an <code>Result&lt;HttpResponse, BoxError&gt;</code>. The below example constructs the response and policy manually, normally this would be handled by the middleware.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let url = Url::parse("http://example.com")?;
+let response = HttpResponse {
+    body: TEST_BODY.to_vec(),
+    headers: Default::default(),
+    status: 200,
+    url: url.clone(),
+    version: HttpVersion::Http11,
+};
+let req = http::Request::get("http://example.com").body(())?;
+let res = http::Response::builder()
+    .status(200)
+    .body(TEST_BODY.to_vec())?;
+let policy = CachePolicy::new(&amp;req, &amp;res);
+let response = manager.put("my-cache-key".into(), response, policy).await?;
+<span class="boring">}</span></code></pre></pre>
+<p>You can remove a record from the cache using the <code>delete</code> method. This method accepts a <code>&amp;str</code> as the cache key and returns an <code>Result&lt;(), BoxError&gt;</code>.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>manager.delete("my-cache-key").await?;
+<span class="boring">}</span></code></pre></pre>
+<p>You can also clear the entire cache using the <code>clear</code> method. This method accepts no arguments and returns an <code>Result&lt;(), BoxError&gt;</code>.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>manager.clear().await?;
+<span class="boring">}</span></code></pre></pre>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="foyer-1"><a class="header" href="#foyer-1">foyer</a></h1>
+<p><a href="https://github.com/foyer-rs/foyer"><code>foyer</code></a> is a hybrid in-memory + disk cache that provides configurable eviction strategies, optional disk storage, request deduplication, and Tokio-native async operations. The <code>http-cache</code> implementation provides traditional buffered caching capabilities using the <code>FoyerManager</code>.</p>
+<h2 id="getting-started-7"><a class="header" href="#getting-started-7">Getting Started</a></h2>
+<p>The <code>foyer</code> backend cache manager is available when the <code>manager-foyer</code> feature is enabled.</p>
+<pre><code class="language-toml">[dependencies]
+http-cache = { version = "1.0", features = ["manager-foyer"] }
+</code></pre>
+<h2 id="basic-usage-3"><a class="header" href="#basic-usage-3">Basic Usage</a></h2>
+<h3 id="in-memory-only-cache"><a class="header" href="#in-memory-only-cache">In-Memory Only Cache</a></h3>
+<p>For a simple memory-only cache:</p>
+<pre><pre class="playground"><code class="language-rust">use http_cache::FoyerManager;
+
+#[tokio::main]
+async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
+    // Create an in-memory cache with capacity for 1000 entries
+    let manager = FoyerManager::in_memory(1000).await?;
+
+    Ok(())
+}</code></pre></pre>
+<h3 id="hybrid-cache-memory--disk"><a class="header" href="#hybrid-cache-memory--disk">Hybrid Cache (Memory + Disk)</a></h3>
+<p>For a hybrid cache with both memory and disk storage:</p>
+<pre><pre class="playground"><code class="language-rust">use http_cache::FoyerManager;
+use foyer::{HybridCacheBuilder, Engine};
+use std::path::PathBuf;
+
+#[tokio::main]
+async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
+    // Build a hybrid cache with memory and disk storage
+    let cache = HybridCacheBuilder::new()
+        .memory(64)  // Memory capacity in entries
+        .storage(Engine::Large)
+        .with_device_options(
+            foyer::DirectFsDeviceOptionsBuilder::new(PathBuf::from("./cache"))
+                .with_capacity(256 * 1024 * 1024)  // 256 MB disk capacity
+                .build()
+        )
+        .build()
+        .await?;
+
+    let manager = FoyerManager::new(cache);
+
+    Ok(())
+}</code></pre></pre>
+<h2 id="features-5"><a class="header" href="#features-5">Features</a></h2>
+<ul>
+<li><strong>Hybrid Storage</strong>: Combine fast in-memory caching with persistent disk storage</li>
+<li><strong>Configurable Eviction</strong>: Support for w-TinyLFU, S3-FIFO, and SIEVE eviction strategies</li>
+<li><strong>Request Deduplication</strong>: Automatic deduplication of concurrent requests for the same key</li>
+<li><strong>Tokio-Native</strong>: Built for async Rust with native Tokio support</li>
+</ul>
+<h2 id="working-with-the-manager-directly-2"><a class="header" href="#working-with-the-manager-directly-2">Working with the Manager Directly</a></h2>
+<h3 id="creating-a-manager"><a class="header" href="#creating-a-manager">Creating a Manager</a></h3>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use http_cache::FoyerManager;
+use foyer::HybridCacheBuilder;
+
+// In-memory only (simple)
+let manager = FoyerManager::in_memory(1000).await?;
+
+// Or with custom configuration
+let cache = HybridCacheBuilder::new()
+    .memory(100)
+    .storage(foyer::Engine::Large)
+    .build()
+    .await?;
+let manager = FoyerManager::new(cache);
+<span class="boring">}</span></code></pre></pre>
+<h3 id="cache-operations"><a class="header" href="#cache-operations">Cache Operations</a></h3>
+<p>The <code>FoyerManager</code> implements the <code>CacheManager</code> trait:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use http_cache::{CacheManager, HttpResponse, HttpVersion};
+use http_cache_semantics::CachePolicy;
+use url::Url;
+
+// Retrieve a cached response
+let response = manager.get("my-cache-key").await?;
+
+// Store a response in the cache
+let url = Url::parse("http://example.com")?;
+let response = HttpResponse {
+    body: b"response body".to_vec(),
+    headers: Default::default(),
+    status: 200,
+    url: url.clone(),
+    version: HttpVersion::Http11,
+};
+let req = http::Request::get("http://example.com").body(())?;
+let res = http::Response::builder()
+    .status(200)
+    .body(b"response body".to_vec())?;
+let policy = CachePolicy::new(&amp;req, &amp;res);
+let cached = manager.put("my-cache-key".into(), response, policy).await?;
+
+// Remove from cache
+manager.delete("my-cache-key").await?;
+<span class="boring">}</span></code></pre></pre>
+<h3 id="graceful-shutdown"><a class="header" href="#graceful-shutdown">Graceful Shutdown</a></h3>
+<p>When using disk storage, call <code>close()</code> before application exit to ensure data is flushed:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Before application exit
+manager.close().await?;
+<span class="boring">}</span></code></pre></pre>
+<h2 id="when-to-use-foyer"><a class="header" href="#when-to-use-foyer">When to Use Foyer</a></h2>
+<p><code>FoyerManager</code> is ideal for:</p>
+<ul>
+<li><strong>Large Caches</strong>: When you need both in-memory speed and disk persistence</li>
+<li><strong>Configurable Eviction</strong>: When you need fine-grained control over eviction policies</li>
+<li><strong>High Concurrency</strong>: When you have many concurrent requests for the same resources</li>
+<li><strong>Persistence</strong>: When cached data should survive application restarts</li>
+</ul>
+<p>For simpler use cases, consider:</p>
+<ul>
+<li><code>CACacheManager</code> for disk-only caching</li>
+<li><code>MokaManager</code> for memory-only caching with simple configuration</li>
+<li><code>QuickManager</code> for lightweight in-memory caching</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="quick_cache-1"><a class="header" href="#quick_cache-1">quick_cache</a></h1>
+<p><a href="https://github.com/arthurprs/quick-cache"><code>quick_cache</code></a> is a lightweight and high performance concurrent cache optimized for low cache overhead. The <code>http-cache-quickcache</code> implementation provides traditional buffered caching capabilities.</p>
+<h2 id="getting-started-8"><a class="header" href="#getting-started-8">Getting Started</a></h2>
+<p>The <code>quick_cache</code> backend cache manager is provided by the <a href="https://github.com/06chaynes/http-cache/tree/main/http-cache-quickcache"><code>http-cache-quickcache</code></a> crate.</p>
+<pre><code class="language-sh">cargo add http-cache-quickcache
+</code></pre>
+<h2 id="basic-usage-with-tower"><a class="header" href="#basic-usage-with-tower">Basic Usage with Tower</a></h2>
+<p>The quickcache manager works excellently with Tower services:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use tower::{Service, ServiceExt};
+use http::{Request, Response, StatusCode};
+use http_body_util::Full;
+use bytes::Bytes;
+use http_cache_quickcache::QuickManager;
+use std::convert::Infallible;
+
+// Example Tower service that uses QuickManager for caching
+#[derive(Clone)]
+struct CachingService {
+    cache_manager: QuickManager,
+}
+
+impl Service&lt;Request&lt;Full&lt;Bytes&gt;&gt;&gt; for CachingService {
+    type Response = Response&lt;Full&lt;Bytes&gt;&gt;;
+    type Error = Box&lt;dyn std::error::Error + Send + Sync&gt;;
+    type Future = std::pin::Pin&lt;Box&lt;dyn std::future::Future&lt;Output = Result&lt;Self::Response, Self::Error&gt;&gt; + Send&gt;&gt;;
+
+    fn poll_ready(&amp;mut self, _cx: &amp;mut std::task::Context&lt;'_&gt;) -&gt; std::task::Poll&lt;Result&lt;(), Self::Error&gt;&gt; {
+        std::task::Poll::Ready(Ok(()))
+    }
+
+    fn call(&amp;mut self, req: Request&lt;Full&lt;Bytes&gt;&gt;) -&gt; Self::Future {
+        let manager = self.cache_manager.clone();
+        Box::pin(async move {
+            // Cache logic using the manager would go here
+            let response = Response::builder()
+                .status(StatusCode::OK)
+                .body(Full::new(Bytes::from("Hello from cached service!")))?;
+            Ok(response)
+        })
+    }
+}
+<span class="boring">}</span></code></pre></pre>
+<h2 id="working-with-the-manager-directly-3"><a class="header" href="#working-with-the-manager-directly-3">Working with the manager directly</a></h2>
+<p>First construct your manager instance. This example will use the default cache configuration.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let manager = Arc::new(QuickManager::default());
+<span class="boring">}</span></code></pre></pre>
+<p>You can also specify other configuration options. This uses the <code>new</code> methods on both <code>QuickManager</code> and <code>quick_cache::sync::Cache</code> to construct a cache with a maximum capacity of 100 items.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let manager = Arc::new(QuickManager::new(quick_cache::sync::Cache::new(100)));
+<span class="boring">}</span></code></pre></pre>
+<h3 id="traditional-cache-operations"><a class="header" href="#traditional-cache-operations">Traditional Cache Operations</a></h3>
+<p>You can attempt to retrieve a record from the cache using the <code>get</code> method. This method accepts a <code>&amp;str</code> as the cache key and returns an <code>Result&lt;Option&lt;(HttpResponse, CachePolicy)&gt;, BoxError&gt;</code>.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let response = manager.get("my-cache-key").await?;
+<span class="boring">}</span></code></pre></pre>
+<p>You can store a record in the cache using the <code>put</code> method. This method accepts a <code>String</code> as the cache key, a <code>HttpResponse</code> as the response, and a <code>CachePolicy</code> as the policy object. It returns an <code>Result&lt;HttpResponse, BoxError&gt;</code>. The below example constructs the response and policy manually, normally this would be handled by the middleware.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let url = Url::parse("http://example.com")?;
+let response = HttpResponse {
+    body: TEST_BODY.to_vec(),
+    headers: Default::default(),
+    status: 200,
+    url: url.clone(),
+    version: HttpVersion::Http11,
+};
+let req = http::Request::get("http://example.com").body(())?;
+let res = http::Response::builder()
+    .status(200)
+    .body(TEST_BODY.to_vec())?;
+let policy = CachePolicy::new(&amp;req, &amp;res);
+let response = manager.put("my-cache-key".into(), response, policy).await?;
+<span class="boring">}</span></code></pre></pre>
+<p>You can remove a record from the cache using the <code>delete</code> method. This method accepts a <code>&amp;str</code> as the cache key and returns an <code>Result&lt;(), BoxError&gt;</code>.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>manager.delete("my-cache-key").await?;
+<span class="boring">}</span></code></pre></pre>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="streamingmanager-streaming-cache"><a class="header" href="#streamingmanager-streaming-cache">StreamingManager (Streaming Cache)</a></h1>
+<p><a href="https://github.com/06chaynes/http-cache/blob/main/http-cache/src/managers/streaming_cache.rs"><code>StreamingManager</code></a> is a streaming cache manager that combines <a href="https://github.com/zkat/cacache-rs">cacache</a> for disk storage with <a href="https://github.com/moka-rs/moka">moka</a> for metadata tracking and TinyLFU eviction.</p>
+<h2 id="key-features-1"><a class="header" href="#key-features-1">Key Features</a></h2>
+<ul>
+<li><strong>True streaming on read</strong>: Cached responses are streamed from disk in 64KB chunks, not loaded fully into memory</li>
+<li><strong>TinyLFU eviction</strong>: Better hit rates than simple LRU by filtering out one-hit wonders</li>
+<li><strong>Content deduplication</strong>: Automatic via cacache's content-addressed storage</li>
+<li><strong>Integrity verification</strong>: Cached data is verified on read</li>
+<li><strong>Body size limits</strong>: Configurable maximum body size to prevent memory exhaustion</li>
+<li><strong>Backpressure handling</strong>: Eviction cleanup uses bounded channels to prevent task accumulation</li>
+</ul>
+<h2 id="important-write-path-buffering"><a class="header" href="#important-write-path-buffering">Important: Write-Path Buffering</a></h2>
+<p>While cached responses are streamed on <strong>read</strong> (GET), the <strong>write</strong> path (PUT) requires buffering the entire response body in memory. This is necessary to:</p>
+<ul>
+<li>Compute the content hash for cacache's content-addressed storage</li>
+<li>Enable content deduplication</li>
+</ul>
+<p>For very large responses, configure the <code>max_body_size</code> limit to prevent OOM. Memory usage during PUT is O(response_size), not O(buffer_size). The default limit is 100MB.</p>
+<h2 id="getting-started-9"><a class="header" href="#getting-started-9">Getting Started</a></h2>
+<p>The <code>StreamingManager</code> is built into the core <code>http-cache</code> crate and is available when the <code>streaming</code> feature is enabled.</p>
+<pre><code class="language-toml">[dependencies]
+http-cache = { version = "1.0", features = ["streaming"] }
+</code></pre>
+<h2 id="basic-usage-4"><a class="header" href="#basic-usage-4">Basic Usage</a></h2>
+<pre><pre class="playground"><code class="language-rust">use http_cache::StreamingManager;
+use std::path::PathBuf;
+
+#[tokio::main]
+async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
+    // Create a streaming cache manager with disk storage
+    let manager = StreamingManager::new(
+        PathBuf::from("./cache"),  // Cache directory
+        10_000,                     // Max entries
+    ).await?;
+
+    // Or use with_temp_dir() for testing (uses temp directory)
+    let test_manager = StreamingManager::with_temp_dir(1000).await?;
+
+    // For custom body size limits (e.g., 50MB max)
+    let custom_manager = StreamingManager::with_max_body_size(
+        PathBuf::from("./cache"),
+        10_000,
+        50 * 1024 * 1024,
+    ).await?;
+
+    Ok(())
+}</code></pre></pre>
+<h2 id="architecture"><a class="header" href="#architecture">Architecture</a></h2>
+<pre><code class="language-text">┌─────────────────────────────────────────────────────────────────┐
+│  moka::Cache&lt;String, CacheMetadata&gt;  (in-memory)               │
+│  - Tracks: key → {content_hash, policy, headers, size}         │
+│  - TinyLFU eviction (better hit rates than LRU)                │
+│  - Eviction listener sends to bounded cleanup channel          │
+└─────────────────────────────────────────────────────────────────┘
+                          │
+                          ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  cacache (disk)                                                 │
+│  - Content-addressed storage (automatic deduplication)         │
+│  - Streaming reads via AsyncRead (64KB chunks)                 │
+│  - Integrity verification built-in                              │
+└─────────────────────────────────────────────────────────────────┘
+</code></pre>
+<h2 id="memory-efficiency"><a class="header" href="#memory-efficiency">Memory Efficiency</a></h2>
+<p><strong>On cache hit (GET):</strong> Only ~64KB is held in memory at a time (the streaming buffer), regardless of response size:</p>
+<div class="table-wrapper"><table><thead><tr><th>Response Size</th><th>Peak Memory (Buffered)</th><th>Peak Memory (Streaming GET)</th></tr></thead><tbody>
+<tr><td>100KB</td><td>100KB</td><td>~64KB</td></tr>
+<tr><td>1MB</td><td>1MB</td><td>~64KB</td></tr>
+<tr><td>10MB</td><td>10MB</td><td>~64KB</td></tr>
+<tr><td>100MB</td><td>100MB</td><td>~64KB</td></tr>
+</tbody></table>
+</div>
+<p><strong>On cache write (PUT):</strong> The entire response body is buffered in memory to compute the content hash. This is limited by <code>max_body_size</code> (default: 100MB) to prevent memory exhaustion.</p>
+<h2 id="usage-with-tower"><a class="header" href="#usage-with-tower">Usage with Tower</a></h2>
+<pre><pre class="playground"><code class="language-rust">use http_cache::StreamingManager;
+use http_cache_tower::HttpCacheStreamingLayer;
+use tower::{Service, ServiceExt};
+use http::{Request, Response, StatusCode};
+use http_body_util::Full;
+use bytes::Bytes;
+use std::path::PathBuf;
+
+#[tokio::main]
+async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
+    // Create streaming cache manager
+    let manager = StreamingManager::new(
+        PathBuf::from("./cache"),
+        10_000,
+    ).await?;
+
+    // Create streaming cache layer
+    let cache_layer = HttpCacheStreamingLayer::new(manager);
+
+    // Your base service
+    let service = tower::service_fn(|_req: Request&lt;Full&lt;Bytes&gt;&gt;| async {
+        Ok::&lt;_, std::convert::Infallible&gt;(
+            Response::builder()
+                .status(StatusCode::OK)
+                .header("cache-control", "max-age=3600")
+                .body(Full::new(Bytes::from("Response data...")))?
+        )
+    });
+
+    // Wrap with caching
+    let cached_service = cache_layer.layer(service);
+
+    // Make requests
+    let request = Request::builder()
+        .uri("https://example.com/api")
+        .body(Full::new(Bytes::new()))?;
+
+    let response = cached_service.oneshot(request).await?;
+    println!("Response status: {}", response.status());
+
+    Ok(())
+}</code></pre></pre>
+<h2 id="usage-with-reqwest"><a class="header" href="#usage-with-reqwest">Usage with Reqwest</a></h2>
+<pre><pre class="playground"><code class="language-rust">use http_cache::StreamingManager;
+use http_cache_reqwest::{StreamingCache, CacheMode};
+use reqwest::Client;
+use reqwest_middleware::ClientBuilder;
+use std::path::PathBuf;
+
+#[tokio::main]
+async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
+    let manager = StreamingManager::new(
+        PathBuf::from("./cache"),
+        10_000,
+    ).await?;
+
+    let client = ClientBuilder::new(Client::new())
+        .with(StreamingCache::new(manager, CacheMode::Default))
+        .build();
+
+    let response = client
+        .get("https://httpbin.org/get")
+        .send()
+        .await?;
+
+    println!("Status: {}", response.status());
+    Ok(())
+}</code></pre></pre>
+<h2 id="working-with-the-manager-directly-4"><a class="header" href="#working-with-the-manager-directly-4">Working with the manager directly</a></h2>
+<h3 id="caching-a-response"><a class="header" href="#caching-a-response">Caching a response</a></h3>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use http_cache::{StreamingManager, StreamingCacheManager};
+use http::{Request, Response, StatusCode};
+use http_body_util::Full;
+use bytes::Bytes;
+use http_cache_semantics::CachePolicy;
+use url::Url;
+use std::path::PathBuf;
+
+let manager = StreamingManager::new(PathBuf::from("./cache"), 10_000).await?;
+
+// Create a response to cache
+let response = Response::builder()
+    .status(StatusCode::OK)
+    .header("cache-control", "max-age=3600, public")
+    .header("content-type", "application/json")
+    .body(Full::new(Bytes::from(r#"{"data": "example"}"#)))?;
+
+// Create cache policy
+let request = Request::builder()
+    .method("GET")
+    .uri("https://example.com/api")
+    .body(())?;
+let policy = CachePolicy::new(&amp;request, &amp;Response::builder()
+    .status(200)
+    .header("cache-control", "max-age=3600, public")
+    .body(vec![])?);
+
+// Cache the response
+let url = Url::parse("https://example.com/api")?;
+let cached_response = manager.put(
+    "GET:https://example.com/api".to_string(),
+    response,
+    policy,
+    url,
+    None, // optional metadata
+).await?;
+<span class="boring">}</span></code></pre></pre>
+<h3 id="retrieving-a-cached-response"><a class="header" href="#retrieving-a-cached-response">Retrieving a cached response</a></h3>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Retrieve from cache - body is streamed from disk!
+let cached = manager.get("GET:https://example.com/api").await?;
+
+if let Some((response, policy)) = cached {
+    println!("Cache hit! Status: {}", response.status());
+
+    // The response body streams from disk in 8KB chunks
+    // Memory usage stays constant regardless of body size
+    use http_body_util::BodyExt;
+    let body = response.into_body();
+    let bytes = body.collect().await?.to_bytes();
+    println!("Body: {} bytes", bytes.len());
+} else {
+    println!("Cache miss");
+}
+<span class="boring">}</span></code></pre></pre>
+<h3 id="deleting-cached-entries"><a class="header" href="#deleting-cached-entries">Deleting cached entries</a></h3>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Remove from cache
+manager.delete("GET:https://example.com/api").await?;
+<span class="boring">}</span></code></pre></pre>
+<h3 id="cache-management"><a class="header" href="#cache-management">Cache management</a></h3>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Get the number of entries
+let count = manager.entry_count();
+
+// Clear all entries
+manager.clear().await?;
+
+// Run pending maintenance tasks
+manager.run_pending_tasks().await;
+<span class="boring">}</span></code></pre></pre>
+<h2 id="content-deduplication"><a class="header" href="#content-deduplication">Content Deduplication</a></h2>
+<p>The cacache backend automatically deduplicates content. If two different URLs return the same response body, it's only stored once on disk:</p>
+<pre><code class="language-text">Request 1: GET /api/users → 1MB response (hash: abc123)
+  └─ metadata/key1.json → points to content/abc123
+
+Request 2: GET /api/users?v=2 → Same 1MB response (hash: abc123)
+  └─ metadata/key2.json → points to content/abc123 (same file!)
+
+Storage: 1MB (not 2MB)
+</code></pre>
+<h2 id="comparison-with-buffered-caching"><a class="header" href="#comparison-with-buffered-caching">Comparison with Buffered Caching</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Aspect</th><th>CACacheManager (Buffered)</th><th>StreamingManager</th></tr></thead><tbody>
+<tr><td><strong>Memory on GET</strong></td><td>Full body in memory</td><td>~64KB streaming buffer</td></tr>
+<tr><td><strong>Memory on PUT</strong></td><td>Full body in memory</td><td>Full body in memory (limited by max_body_size)</td></tr>
+<tr><td><strong>Eviction</strong></td><td>Manual/None</td><td>TinyLFU (automatic)</td></tr>
+<tr><td><strong>Content Dedup</strong></td><td>Yes (cacache)</td><td>Yes (cacache)</td></tr>
+<tr><td><strong>Large responses</strong></td><td>May OOM</td><td>Configurable limit, streaming on read</td></tr>
+<tr><td><strong>Body size limit</strong></td><td>None</td><td>Configurable (default 100MB)</td></tr>
+<tr><td><strong>Use case</strong></td><td>Small responses</td><td>Large responses</td></tr>
+</tbody></table>
+</div>
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="elasticlunr.min.js"></script>
+        <script src="mark.min.js"></script>
+        <script src="searcher.js"></script>
+
+        <script src="clipboard.min.js"></script>
+        <script src="highlight.js"></script>
+        <script src="book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+        <script>
+        window.addEventListener('load', function() {
+            window.setTimeout(window.print, 100);
+        });
+        </script>
+
+    </div>
+    </body>
+</html>

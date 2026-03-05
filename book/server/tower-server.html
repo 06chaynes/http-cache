@@ -1,0 +1,612 @@
+<!DOCTYPE HTML>
+<html lang="en" class="sidebar-visible no-js oranda-dark">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>tower-server - http-cache</title>
+
+
+        <!-- Custom HTML head -->
+        
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff" />
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" href="../highlight.css">
+        <link rel="stylesheet" href="../tomorrow-night.css">
+        <link rel="stylesheet" href="../ayu-highlight.css">
+        <link rel="stylesheet" href="../oranda-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+    </head>
+    <body>
+    <div id="body-container">
+        <!-- Provide site root to javascript -->
+        <script>
+            var path_to_root = "../";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "oranda-dark" : "oranda-dark";
+        </script>
+
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                var theme = localStorage.getItem('orandamdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('orandamdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            var theme;
+            try { theme = localStorage.getItem('orandamdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            var html = document.querySelector('html');
+            html.classList.remove('no-js')
+            html.classList.remove('oranda-dark')
+            html.classList.add(theme);
+            html.classList.add('js');
+        </script>
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            var html = document.querySelector('html');
+            var sidebar = 'hidden';
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            }
+            html.classList.remove('sidebar-visible');
+            html.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <div class="sidebar-scrollbox">
+                <ol class="chapter"><li class="chapter-item expanded "><a href="../introduction.html"><strong aria-hidden="true">1.</strong> Introduction</a></li><li class="chapter-item expanded "><a href="../cache-modes.html"><strong aria-hidden="true">2.</strong> Cache Modes</a></li><li class="chapter-item expanded "><a href="../rate-limiting.html"><strong aria-hidden="true">3.</strong> Rate Limiting</a></li><li class="chapter-item expanded "><a href="../development/development.html"><strong aria-hidden="true">4.</strong> Development</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../development/supporting-a-backend-cache-manager.html"><strong aria-hidden="true">4.1.</strong> Supporting a Backend Cache Manager</a></li><li class="chapter-item expanded "><a href="../development/supporting-an-http-client.html"><strong aria-hidden="true">4.2.</strong> Supporting an HTTP Client</a></li></ol></li><li class="chapter-item expanded "><a href="../clients/clients.html"><strong aria-hidden="true">5.</strong> Client-Side Caching</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../clients/reqwest.html"><strong aria-hidden="true">5.1.</strong> reqwest</a></li><li class="chapter-item expanded "><a href="../clients/surf.html"><strong aria-hidden="true">5.2.</strong> surf</a></li><li class="chapter-item expanded "><a href="../clients/ureq.html"><strong aria-hidden="true">5.3.</strong> ureq</a></li><li class="chapter-item expanded "><a href="../clients/tower.html"><strong aria-hidden="true">5.4.</strong> tower</a></li></ol></li><li class="chapter-item expanded "><a href="../server/server.html"><strong aria-hidden="true">6.</strong> Server-Side Caching</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../server/tower-server.html" class="active"><strong aria-hidden="true">6.1.</strong> tower-server</a></li></ol></li><li class="chapter-item expanded "><a href="../managers/managers.html"><strong aria-hidden="true">7.</strong> Backend Cache Manager Implementations</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../managers/cacache.html"><strong aria-hidden="true">7.1.</strong> cacache</a></li><li class="chapter-item expanded "><a href="../managers/moka.html"><strong aria-hidden="true">7.2.</strong> moka</a></li><li class="chapter-item expanded "><a href="../managers/foyer.html"><strong aria-hidden="true">7.3.</strong> foyer</a></li><li class="chapter-item expanded "><a href="../managers/quick-cache.html"><strong aria-hidden="true">7.4.</strong> quick_cache</a></li><li class="chapter-item expanded "><a href="../managers/streaming_cache.html"><strong aria-hidden="true">7.5.</strong> streaming_cache</a></li></ol></li></ol>
+            </div>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky bordered">
+                    <div class="left-buttons">
+                        <button id="sidebar-toggle" class="icon-button" type="button" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </button>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="oranda-dark">Axo Dark</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="oranda-light">Axo Light</button></li>
+
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">http-cache</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="tower-server"><a class="header" href="#tower-server">tower-server</a></h1>
+<p>The <a href="https://github.com/06chaynes/http-cache/tree/main/http-cache-tower-server"><code>http-cache-tower-server</code></a> crate provides Tower Layer and Service implementations for server-side HTTP response caching. Unlike client-side caching, this middleware caches your own application's responses to reduce database queries, computation, and improve response times.</p>
+<h2 id="key-differences-from-client-side-caching"><a class="header" href="#key-differences-from-client-side-caching">Key Differences from Client-Side Caching</a></h2>
+<p><strong>Client-Side (<code>http-cache-tower</code>)</strong>: Caches responses from external APIs you're calling
+<strong>Server-Side (<code>http-cache-tower-server</code>)</strong>: Caches responses your application generates</p>
+<p><strong>Critical:</strong> Server-side cache middleware must be placed <strong>AFTER</strong> routing in your middleware stack to preserve request extensions like path parameters (see <a href="https://github.com/06chaynes/http-cache/issues/121">Issue #121</a>).</p>
+<h2 id="getting-started"><a class="header" href="#getting-started">Getting Started</a></h2>
+<pre><code class="language-sh">cargo add http-cache-tower-server
+</code></pre>
+<h2 id="features"><a class="header" href="#features">Features</a></h2>
+<ul>
+<li><code>manager-cacache</code>: (default) Enables the <a href="https://docs.rs/http-cache/latest/http_cache/struct.CACacheManager.html"><code>CACacheManager</code></a> backend cache manager.</li>
+<li><code>manager-moka</code>: Enables the <a href="https://docs.rs/http-cache/latest/http_cache/struct.MokaManager.html"><code>MokaManager</code></a> backend cache manager.</li>
+</ul>
+<h2 id="basic-usage-with-axum"><a class="header" href="#basic-usage-with-axum">Basic Usage with Axum</a></h2>
+<pre><pre class="playground"><code class="language-rust">use axum::{
+    routing::get,
+    Router,
+    extract::Path,
+};
+use http_cache_tower_server::ServerCacheLayer;
+use http_cache::CACacheManager;
+use std::path::PathBuf;
+
+#[tokio::main]
+async fn main() {
+    // Create cache manager
+    let cache_manager = CACacheManager::new(PathBuf::from("./cache"), false);
+
+    // Create the server cache layer
+    let cache_layer = ServerCacheLayer::new(cache_manager);
+
+    // Build your Axum app
+    let app = Router::new()
+        .route("/users/:id", get(get_user))
+        .route("/posts/:id", get(get_post))
+        // IMPORTANT: Place cache layer AFTER routing
+        .layer(cache_layer);
+
+    // Run the server
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:3000")
+        .await
+        .unwrap();
+    axum::serve(listener, app).await.unwrap();
+}
+
+async fn get_user(Path(id): Path&lt;u32&gt;) -&gt; String {
+    // Expensive database query or computation
+    format!("User {}", id)
+}
+
+async fn get_post(Path(id): Path&lt;u32&gt;) -&gt; String {
+    format!("Post {}", id)
+}</code></pre></pre>
+<h2 id="cache-control-with-response-headers"><a class="header" href="#cache-control-with-response-headers">Cache Control with Response Headers</a></h2>
+<p>The middleware respects standard HTTP Cache-Control headers from your handlers:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use axum::{
+    response::{IntoResponse, Response},
+    http::header,
+};
+
+async fn cacheable_handler() -&gt; Response {
+    (
+        [(header::CACHE_CONTROL, "max-age=300")], // Cache for 5 minutes
+        "This response will be cached"
+    ).into_response()
+}
+
+async fn no_cache_handler() -&gt; Response {
+    (
+        [(header::CACHE_CONTROL, "no-store")], // Don't cache
+        "This response will NOT be cached"
+    ).into_response()
+}
+
+async fn private_handler() -&gt; Response {
+    (
+        [(header::CACHE_CONTROL, "private")], // User-specific data
+        "This response will NOT be cached (shared cache)"
+    ).into_response()
+}
+<span class="boring">}</span></code></pre></pre>
+<h2 id="rfc-7234-compliance"><a class="header" href="#rfc-7234-compliance">RFC 7234 Compliance</a></h2>
+<p>This implementation acts as a <strong>shared cache</strong> per RFC 7234:</p>
+<h3 id="automatically-rejects"><a class="header" href="#automatically-rejects">Automatically Rejects</a></h3>
+<ul>
+<li><code>no-store</code> directive</li>
+<li><code>no-cache</code> directive (requires revalidation, which is not supported)</li>
+<li><code>private</code> directive (shared caches cannot store private responses)</li>
+<li>Non-2xx status codes</li>
+</ul>
+<h3 id="supports"><a class="header" href="#supports">Supports</a></h3>
+<ul>
+<li><code>max-age</code>: Cache lifetime in seconds</li>
+<li><code>s-maxage</code>: Shared cache specific lifetime (takes precedence over max-age)</li>
+<li><code>public</code>: Makes response cacheable</li>
+<li><code>Expires</code>: Fallback header when Cache-Control is absent</li>
+</ul>
+<h2 id="cache-key-strategies"><a class="header" href="#cache-key-strategies">Cache Key Strategies</a></h2>
+<h3 id="defaultkeyer-default"><a class="header" href="#defaultkeyer-default">DefaultKeyer (Default)</a></h3>
+<p>Caches based on HTTP method and path:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use http_cache_tower_server::{ServerCacheLayer, DefaultKeyer};
+
+let cache_layer = ServerCacheLayer::new(cache_manager);
+// GET /users/123 and GET /users/456 are cached separately
+<span class="boring">}</span></code></pre></pre>
+<h3 id="querykeyer"><a class="header" href="#querykeyer">QueryKeyer</a></h3>
+<p>Includes query parameters in the cache key:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use http_cache_tower_server::{ServerCacheLayer, QueryKeyer};
+
+let cache_layer = ServerCacheLayer::with_keyer(cache_manager, QueryKeyer);
+// GET /search?q=rust and GET /search?q=python are cached separately
+<span class="boring">}</span></code></pre></pre>
+<h3 id="customkeyer"><a class="header" href="#customkeyer">CustomKeyer</a></h3>
+<p>For advanced use cases like content negotiation or user-specific caching:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use http_cache_tower_server::{ServerCacheLayer, CustomKeyer};
+
+// Example: Include Accept-Language header in cache key
+let keyer = CustomKeyer::new(|req: &amp;http::Request&lt;()&gt;| {
+    let lang = req.headers()
+        .get("accept-language")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("en");
+    format!("{} {} lang:{}", req.method(), req.uri().path(), lang)
+});
+
+let cache_layer = ServerCacheLayer::with_keyer(cache_manager, keyer);
+<span class="boring">}</span></code></pre></pre>
+<h2 id="configuration-options"><a class="header" href="#configuration-options">Configuration Options</a></h2>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use http_cache_tower_server::{ServerCacheLayer, ServerCacheOptions};
+use std::time::Duration;
+
+let options = ServerCacheOptions {
+    // Default TTL when no Cache-Control header present
+    default_ttl: Some(Duration::from_secs(60)),
+
+    // Maximum TTL (even if response specifies longer)
+    max_ttl: Some(Duration::from_secs(3600)),
+
+    // Minimum TTL (even if response specifies shorter)
+    min_ttl: Some(Duration::from_secs(10)),
+
+    // Add X-Cache: HIT/MISS headers for debugging
+    cache_status_headers: true,
+
+    // Maximum body size to cache (bytes)
+    max_body_size: 128 * 1024 * 1024, // 128 MB
+
+    // Cache responses without Cache-Control header
+    cache_by_default: false,
+
+    // Respect Vary header for content negotiation (default: true)
+    // When enabled, cached responses are only served if the request's
+    // headers match those specified in the response's Vary header
+    respect_vary: true,
+
+    // Respect Authorization headers per RFC 7234 (default: true)
+    // When enabled, requests with Authorization headers are not cached
+    // unless the response explicitly permits it via public, s-maxage,
+    // or must-revalidate directives
+    respect_authorization: true,
+};
+
+let cache_layer = ServerCacheLayer::new(cache_manager)
+    .with_options(options);
+<span class="boring">}</span></code></pre></pre>
+<h2 id="security-warnings"><a class="header" href="#security-warnings">Security Warnings</a></h2>
+<h3 id="shared-cache-behavior"><a class="header" href="#shared-cache-behavior">Shared Cache Behavior</a></h3>
+<p>This is a <strong>shared cache</strong> - cached responses are served to ALL users. Improper configuration can leak user-specific data.</p>
+<h3 id="do-not-cache"><a class="header" href="#do-not-cache">Do NOT Cache</a></h3>
+<ul>
+<li>Authenticated endpoints (unless using appropriate CustomKeyer)</li>
+<li>User-specific data (unless keyed by user/session ID)</li>
+<li>Responses with sensitive information</li>
+</ul>
+<h3 id="safe-approaches"><a class="header" href="#safe-approaches">Safe Approaches</a></h3>
+<p><strong>Option 1: Use Cache-Control: private</strong></p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>async fn user_specific_handler() -&gt; Response {
+    (
+        [(header::CACHE_CONTROL, "private")],
+        "User-specific data - won't be cached"
+    ).into_response()
+}
+<span class="boring">}</span></code></pre></pre>
+<p><strong>Option 2: Include user ID in cache key</strong></p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let keyer = CustomKeyer::new(|req: &amp;http::Request&lt;()&gt;| {
+    let user_id = req.headers()
+        .get("x-user-id")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("anonymous");
+    format!("{} {} user:{}", req.method(), req.uri().path(), user_id)
+});
+<span class="boring">}</span></code></pre></pre>
+<p><strong>Option 3: Don't cache at all</strong></p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>async fn sensitive_handler() -&gt; Response {
+    (
+        [(header::CACHE_CONTROL, "no-store")],
+        "Sensitive data - never cached"
+    ).into_response()
+}
+<span class="boring">}</span></code></pre></pre>
+<h2 id="content-negotiation"><a class="header" href="#content-negotiation">Content Negotiation</a></h2>
+<p>The middleware respects <code>Vary</code> headers via <code>http-cache-semantics</code> when <code>respect_vary</code> is enabled (the default). Cached responses are only served if the request's headers match those specified in the response's <code>Vary</code> header. For additional control, you can also use a <code>CustomKeyer</code>:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Example: Cache different responses based on Accept-Language
+let keyer = CustomKeyer::new(|req: &amp;http::Request&lt;()&gt;| {
+    let lang = req.headers()
+        .get("accept-language")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.split(',').next())
+        .unwrap_or("en");
+    format!("{} {} lang:{}", req.method(), req.uri().path(), lang)
+});
+<span class="boring">}</span></code></pre></pre>
+<h2 id="cache-inspection"><a class="header" href="#cache-inspection">Cache Inspection</a></h2>
+<p>Responses include <code>X-Cache</code> headers when <code>cache_status_headers</code> is enabled:</p>
+<ul>
+<li><code>X-Cache: HIT</code> - Response served from cache</li>
+<li><code>X-Cache: MISS</code> - Response generated by handler and cached (if cacheable)</li>
+<li>No header - Response not cacheable (or headers disabled)</li>
+</ul>
+<h2 id="cache-metrics"><a class="header" href="#cache-metrics">Cache Metrics</a></h2>
+<p>The <code>ServerCacheLayer</code> provides access to cache performance metrics via <code>CacheMetrics</code>:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use http_cache_tower_server::{ServerCacheLayer, CacheMetrics};
+use std::sync::Arc;
+
+// Create the cache layer
+let cache_layer = ServerCacheLayer::new(cache_manager);
+
+// Access metrics
+let metrics: &amp;Arc&lt;CacheMetrics&gt; = cache_layer.metrics();
+
+// Get hit rate (0.0 to 1.0)
+let hit_rate = metrics.hit_rate();
+println!("Cache hit rate: {:.2}%", hit_rate * 100.0);
+
+// Access individual counters
+println!("Hits: {}", metrics.hits.load(std::sync::atomic::Ordering::Relaxed));
+println!("Misses: {}", metrics.misses.load(std::sync::atomic::Ordering::Relaxed));
+println!("Stores: {}", metrics.stores.load(std::sync::atomic::Ordering::Relaxed));
+println!("Skipped: {}", metrics.skipped.load(std::sync::atomic::Ordering::Relaxed));
+
+// Reset metrics
+metrics.reset();
+<span class="boring">}</span></code></pre></pre>
+<h3 id="available-metrics"><a class="header" href="#available-metrics">Available Metrics</a></h3>
+<ul>
+<li><code>hits</code>: Number of cache hits</li>
+<li><code>misses</code>: Number of cache misses</li>
+<li><code>stores</code>: Number of responses stored in cache</li>
+<li><code>skipped</code>: Number of responses skipped (too large, not cacheable, etc.)</li>
+</ul>
+<h2 id="complete-example"><a class="header" href="#complete-example">Complete Example</a></h2>
+<pre><pre class="playground"><code class="language-rust">use axum::{
+    routing::get,
+    Router,
+    extract::Path,
+    response::{IntoResponse, Response},
+    http::header,
+};
+use http_cache_tower_server::{ServerCacheLayer, ServerCacheOptions, QueryKeyer};
+use http_cache::CACacheManager;
+use std::time::Duration;
+use std::path::PathBuf;
+
+#[tokio::main]
+async fn main() {
+    // Configure cache manager
+    let cache_manager = CACacheManager::new(PathBuf::from("./cache"), false);
+
+    // Configure cache options
+    let options = ServerCacheOptions {
+        default_ttl: Some(Duration::from_secs(60)),
+        max_ttl: Some(Duration::from_secs(3600)),
+        cache_status_headers: true,
+        ..Default::default()
+    };
+
+    // Create cache layer with query parameter support
+    let cache_layer = ServerCacheLayer::with_keyer(cache_manager, QueryKeyer)
+        .with_options(options);
+
+    // Build app
+    let app = Router::new()
+        .route("/users/:id", get(get_user))
+        .route("/search", get(search))
+        .route("/admin/stats", get(admin_stats))
+        .layer(cache_layer); // AFTER routing
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:3000")
+        .await
+        .unwrap();
+    axum::serve(listener, app).await.unwrap();
+}
+
+// Cacheable for 5 minutes
+async fn get_user(Path(id): Path&lt;u32&gt;) -&gt; Response {
+    (
+        [(header::CACHE_CONTROL, "max-age=300")],
+        format!("User {}", id)
+    ).into_response()
+}
+
+// Cacheable with query parameters
+async fn search(query: axum::extract::Query&lt;std::collections::HashMap&lt;String, String&gt;&gt;) -&gt; Response {
+    (
+        [(header::CACHE_CONTROL, "max-age=60")],
+        format!("Search results: {:?}", query)
+    ).into_response()
+}
+
+// Never cached (admin data)
+async fn admin_stats() -&gt; Response {
+    (
+        [(header::CACHE_CONTROL, "no-store")],
+        "Admin statistics - not cached"
+    ).into_response()
+}</code></pre></pre>
+<h2 id="best-practices"><a class="header" href="#best-practices">Best Practices</a></h2>
+<ol>
+<li><strong>Place middleware after routing</strong> to preserve request extensions</li>
+<li><strong>Set appropriate Cache-Control headers</strong> in your handlers</li>
+<li><strong>Use <code>private</code> directive</strong> for user-specific responses</li>
+<li><strong>Monitor cache hit rates</strong> using X-Cache headers</li>
+<li><strong>Set reasonable TTL limits</strong> to prevent stale data</li>
+<li><strong>Use CustomKeyer</strong> for content negotiation or user-specific caching</li>
+<li><strong>Don't cache authenticated endpoints</strong> without proper keying</li>
+</ol>
+<h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
+<h3 id="path-parameters-not-working"><a class="header" href="#path-parameters-not-working">Path parameters not working</a></h3>
+<p><strong>Problem:</strong> Axum path extractors fail with cached responses</p>
+<p><strong>Solution:</strong> Ensure cache layer is placed AFTER routing:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// ❌ Wrong - cache layer before routing
+let app = Router::new()
+    .layer(cache_layer)  // Too early!
+    .route("/users/:id", get(handler));
+
+// ✅ Correct - cache layer after routing
+let app = Router::new()
+    .route("/users/:id", get(handler))
+    .layer(cache_layer);  // After routing
+<span class="boring">}</span></code></pre></pre>
+<h3 id="responses-not-being-cached"><a class="header" href="#responses-not-being-cached">Responses not being cached</a></h3>
+<p><strong>Possible causes:</strong></p>
+<ol>
+<li>Response has <code>no-store</code>, <code>no-cache</code>, or <code>private</code> directive</li>
+<li>Response is not 2xx status code</li>
+<li>Response body exceeds <code>max_body_size</code></li>
+<li><code>cache_by_default</code> is false and no Cache-Control header present</li>
+</ol>
+<p><strong>Solution:</strong> Add appropriate Cache-Control headers:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>async fn handler() -&gt; Response {
+    (
+        [(header::CACHE_CONTROL, "max-age=300")],
+        "Response body"
+    ).into_response()
+}
+<span class="boring">}</span></code></pre></pre>
+<h3 id="user-data-leaking-between-requests"><a class="header" href="#user-data-leaking-between-requests">User data leaking between requests</a></h3>
+<p><strong>Problem:</strong> Cached user-specific responses served to other users</p>
+<p><strong>Solution:</strong> Use <code>CustomKeyer</code> with user identifier:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let keyer = CustomKeyer::new(|req: &amp;http::Request&lt;()&gt;| {
+    let user = req.headers()
+        .get("x-user-id")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("anonymous");
+    format!("{} {} user:{}", req.method(), req.uri().path(), user)
+});
+<span class="boring">}</span></code></pre></pre>
+<p>Or use <code>Cache-Control: private</code> to prevent caching entirely.</p>
+<h2 id="performance-considerations"><a class="header" href="#performance-considerations">Performance Considerations</a></h2>
+<ul>
+<li>Cache writes are fire-and-forget (non-blocking)</li>
+<li>Cache lookups are async but fast (especially with in-memory managers)</li>
+<li>Body buffering is required (responses are fully buffered before caching)</li>
+<li>Consider using moka manager for frequently accessed data</li>
+<li>Use cacache manager for larger datasets with disk persistence</li>
+</ul>
+<h2 id="comparison-with-other-frameworks"><a class="header" href="#comparison-with-other-frameworks">Comparison with Other Frameworks</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Feature</th><th>http-cache-tower-server</th><th>Django Cache</th><th>NGINX FastCGI</th></tr></thead><tbody>
+<tr><td>Middleware-based</td><td>✅</td><td>✅</td><td>❌</td></tr>
+<tr><td>RFC 7234 compliant</td><td>✅</td><td>⚠️ Partial</td><td>⚠️ Partial</td></tr>
+<tr><td>Pluggable backends</td><td>✅</td><td>✅</td><td>❌</td></tr>
+<tr><td>Custom cache keys</td><td>✅</td><td>✅</td><td>✅</td></tr>
+<tr><td>Type-safe</td><td>✅</td><td>❌</td><td>❌</td></tr>
+<tr><td>Async-first</td><td>✅</td><td>❌</td><td>✅</td></tr>
+</tbody></table>
+</div>
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../server/server.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next" href="../managers/managers.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../server/server.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next" href="../managers/managers.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+    </div>
+    </body>
+</html>
