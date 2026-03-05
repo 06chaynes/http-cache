@@ -104,8 +104,17 @@ impl CacheManager for FoyerManager {
     ) -> Result<Option<(HttpResponse, CachePolicy)>> {
         match self.cache.get(&cache_key.to_string()).await {
             Ok(Some(entry)) => {
-                let store: Store = postcard::from_bytes(entry.value())?;
-                Ok(Some((store.response, store.policy)))
+                match postcard::from_bytes::<Store>(entry.value()) {
+                    Ok(store) => Ok(Some((store.response, store.policy))),
+                    Err(e) => {
+                        log::warn!(
+                            "Failed to deserialize cache entry for key '{}': {}",
+                            cache_key,
+                            e
+                        );
+                        Ok(None)
+                    }
+                }
             }
             Ok(None) => Ok(None),
             Err(_) => Ok(None),

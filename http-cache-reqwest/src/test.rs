@@ -2374,3 +2374,146 @@ async fn test_metadata_retrieval_through_extensions() -> Result<()> {
 
     Ok(())
 }
+
+// Full middleware-level e2e test for the bincode->postcard migration path.
+// Simulates a user who had http-cache-reqwest 0.16.0 and upgrades to 1.0-alpha.4.
+#[cfg(all(
+    feature = "manager-cacache",
+    feature = "manager-cacache-bincode",
+    feature = "http-headers-compat"
+))]
+mod bincode_migration {
+    use super::*;
+
+    use http_cache::{HttpVersion, Url};
+    use serde::Serialize;
+    use std::collections::HashMap;
+    use std::str::FromStr;
+
+    // Local copies matching the exact serde layout from http-cache 0.21.0.
+    // This is intentional — it's a true black-box test mirroring what old
+    // code actually wrote via bincode.
+    #[derive(Serialize)]
+    struct LegacyStore {
+        response: LegacyTestResponse,
+        policy: http_cache_semantics::CachePolicy,
+    }
+
+    #[derive(Serialize)]
+    struct LegacyTestResponse {
+        body: Vec<u8>,
+        headers: HashMap<String, String>,
+        status: u16,
+        url: Url,
+        version: HttpVersion,
+    }
+
+    #[tokio::test]
+    async fn migration_from_bincode_cache() -> Result<()> {
+        let mock_server = MockServer::start().await;
+
+        // Set up a mock that we expect NOT to be called if the cache hit works.
+        // Use ForceCache mode so the stale policy doesn't trigger revalidation.
+        let m = build_mock(CACHEABLE_PUBLIC, b"fresh from server", 200, 0);
+        let _mock_guard = mock_server.register_as_scoped(m).await;
+
+        let url = format!("{}/legacy-endpoint", &mock_server.uri());
+        let parsed_url = Url::from_str(&url)?;
+
+        let cache_dir = tempfile::tempdir().unwrap();
+        let cache_path = cache_dir.path().to_path_buf();
+        let cache_key = format!("GET:{}", &parsed_url);
+
+        // Construct a legacy bincode payload
+        let mut headers = HashMap::new();
+        headers
+            .insert("content-type".to_string(), "application/json".to_string());
+        headers
+            .insert("cache-control".to_string(), CACHEABLE_PUBLIC.to_string());
+
+        let legacy_body = b"legacy bincode response";
+
+        let req = http::Request::get(url.as_str()).body(())?;
+        let res = http::Response::builder()
+            .status(200)
+            .header("cache-control", CACHEABLE_PUBLIC)
+            .body(legacy_body.to_vec())?;
+        let policy = http_cache_semantics::CachePolicy::new(&req, &res);
+
+        let legacy_store = LegacyStore {
+            response: LegacyTestResponse {
+                body: legacy_body.to_vec(),
+                headers,
+                status: 200,
+                url: parsed_url.clone(),
+                version: HttpVersion::Http11,
+            },
+            policy,
+        };
+
+        // Serialize with bincode and write to cacache
+        let bytes = bincode::serialize(&legacy_store).unwrap();
+        cacache::write(&cache_path, &cache_key, bytes).await.unwrap();
+
+        // Create a reqwest client pointing at the same cache directory
+        let manager = CACacheManager::new(cache_path.clone(), true);
+        let client = ClientBuilder::new(Client::new())
+            .with(Cache(HttpCache {
+                mode: CacheMode::ForceCache,
+                manager: manager.clone(),
+                options: Default::default(),
+            }))
+            .build();
+
+        // Request the same URL — should be served from the legacy cache
+        let res = client.get(&url).send().await?;
+        assert_eq!(res.status(), 200);
+        let body = res.bytes().await?;
+        assert_eq!(
+            body.as_ref(),
+            legacy_body,
+            "Response should come from the legacy bincode cache entry"
+        );
+
+        // The mock expects 0 calls, so WireMock will assert if it was hit
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn migration_new_entries_work_after_upgrade() -> Result<()> {
+        let mock_server = MockServer::start().await;
+        let m = build_mock(CACHEABLE_PUBLIC, b"new postcard data", 200, 1);
+        let _mock_guard = mock_server.register_as_scoped(m).await;
+        let url = format!("{}/new-endpoint", &mock_server.uri());
+
+        let cache_dir = tempfile::tempdir().unwrap();
+        let manager = CACacheManager::new(cache_dir.path().to_path_buf(), true);
+
+        let client = ClientBuilder::new(Client::new())
+            .with(Cache(HttpCache {
+                mode: CacheMode::Default,
+                manager: manager.clone(),
+                options: Default::default(),
+            }))
+            .build();
+
+        // First request: cache miss, goes to mock server
+        let res = client.get(&url).send().await?;
+        assert_eq!(res.status(), 200);
+        assert_eq!(res.bytes().await?, &b"new postcard data"[..]);
+
+        // Verify it was cached (written with postcard)
+        let data =
+            CacheManager::get(&manager, &format!("GET:{}", &url_parse(&url)?))
+                .await?;
+        assert!(data.is_some(), "New entry should be cached with postcard");
+
+        // Second request: should come from cache (mock expects only 1 call)
+        let res = client.get(&url).send().await?;
+        assert_eq!(res.status(), 200);
+        assert_eq!(res.bytes().await?, &b"new postcard data"[..]);
+
+        Ok(())
+    }
+}

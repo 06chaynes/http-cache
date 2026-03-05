@@ -464,7 +464,7 @@ pub use managers::cacache::CACacheManager;
 #[cfg(feature = "streaming")]
 pub use managers::streaming_cache::StreamingManager;
 
-#[cfg(feature = "manager-moka")]
+#[cfg(any(feature = "manager-moka", feature = "manager-moka-bincode"))]
 pub use managers::moka::MokaManager;
 
 #[cfg(feature = "manager-foyer")]
@@ -479,7 +479,7 @@ pub use rate_limiting::{
 pub use rate_limiting::Quota;
 
 // Exposing the moka cache for convenience, renaming to avoid naming conflicts
-#[cfg(feature = "manager-moka")]
+#[cfg(any(feature = "manager-moka", feature = "manager-moka-bincode"))]
 #[cfg_attr(docsrs, doc(cfg(feature = "manager-moka")))]
 pub use moka::future::{Cache as MokaCache, CacheBuilder as MokaCacheBuilder};
 

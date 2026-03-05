@@ -72,7 +72,7 @@ use http_body::Body;
 use http_body_util::{BodyExt, Empty};
 use http_cache_semantics::CachePolicy;
 use moka::future::Cache;
-use rand::Rng;
+use rand::RngExt;
 use serde::{Deserialize, Serialize};
 use tokio::io::AsyncWriteExt;
 use tokio::sync::mpsc;

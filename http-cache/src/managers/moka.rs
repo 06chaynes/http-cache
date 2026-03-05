@@ -27,10 +27,80 @@ impl Default for MokaManager {
     }
 }
 
+// Modern store format (postcard) - includes metadata field
+#[cfg(feature = "postcard")]
 #[derive(Debug, Deserialize, Serialize)]
 struct Store {
     response: HttpResponse,
     policy: CachePolicy,
+}
+
+// Legacy store format (bincode) - HttpResponse without metadata field
+#[cfg(feature = "bincode")]
+#[derive(Debug, Deserialize, Serialize)]
+struct BincodeStore {
+    response: LegacyHttpResponse,
+    policy: CachePolicy,
+}
+
+#[cfg(feature = "bincode")]
+use crate::{HttpHeaders, HttpVersion, Url};
+
+#[cfg(feature = "bincode")]
+#[derive(Debug, Clone, Deserialize, Serialize)]
+struct LegacyHttpResponse {
+    body: Vec<u8>,
+    #[cfg(feature = "http-headers-compat")]
+    headers: std::collections::HashMap<String, String>,
+    #[cfg(not(feature = "http-headers-compat"))]
+    headers: std::collections::HashMap<String, Vec<String>>,
+    status: u16,
+    url: Url,
+    version: HttpVersion,
+}
+
+#[cfg(feature = "bincode")]
+impl From<LegacyHttpResponse> for HttpResponse {
+    fn from(legacy: LegacyHttpResponse) -> Self {
+        #[cfg(feature = "http-headers-compat")]
+        let headers = HttpHeaders::Legacy(legacy.headers);
+        #[cfg(not(feature = "http-headers-compat"))]
+        let headers = HttpHeaders::Modern(legacy.headers);
+
+        HttpResponse {
+            body: legacy.body,
+            headers,
+            status: legacy.status,
+            url: legacy.url,
+            version: legacy.version,
+            metadata: None,
+        }
+    }
+}
+
+#[cfg(feature = "bincode")]
+impl From<HttpResponse> for LegacyHttpResponse {
+    fn from(response: HttpResponse) -> Self {
+        #[cfg(feature = "http-headers-compat")]
+        let headers = match response.headers {
+            HttpHeaders::Legacy(h) => h,
+            HttpHeaders::Modern(h) => {
+                h.into_iter().map(|(k, v)| (k, v.join(", "))).collect()
+            }
+        };
+        #[cfg(not(feature = "http-headers-compat"))]
+        let headers = match response.headers {
+            HttpHeaders::Modern(h) => h,
+        };
+
+        LegacyHttpResponse {
+            body: response.body,
+            headers,
+            status: response.status,
+            url: response.url,
+            version: response.version,
+        }
+    }
 }
 
 impl MokaManager {
@@ -52,20 +122,64 @@ impl CacheManager for MokaManager {
         &self,
         cache_key: &str,
     ) -> Result<Option<(HttpResponse, CachePolicy)>> {
-        let store: Store = match self.cache.get(cache_key).await {
-            Some(d) => {
-                #[cfg(feature = "postcard")]
-                {
-                    postcard::from_bytes(&d)?
-                }
-                #[cfg(all(feature = "bincode", not(feature = "postcard")))]
-                {
-                    bincode::deserialize(&d)?
-                }
-            }
+        let d = match self.cache.get(cache_key).await {
+            Some(d) => d,
             None => return Ok(None),
         };
-        Ok(Some((store.response, store.policy)))
+
+        // When both postcard and bincode are enabled, try postcard first
+        // then fall back to bincode (for reading legacy cache entries).
+        // When only one format is enabled, use that format directly.
+        #[cfg(feature = "postcard")]
+        {
+            match postcard::from_bytes::<Store>(&d) {
+                Ok(store) => return Ok(Some((store.response, store.policy))),
+                Err(_e) => {
+                    #[cfg(feature = "bincode")]
+                    {
+                        match bincode::deserialize::<BincodeStore>(&d) {
+                            Ok(store) => {
+                                return Ok(Some((
+                                    store.response.into(),
+                                    store.policy,
+                                )));
+                            }
+                            Err(e) => {
+                                log::warn!(
+                                    "Failed to deserialize cache entry for key '{}': {}",
+                                    cache_key,
+                                    e
+                                );
+                                return Ok(None);
+                            }
+                        }
+                    }
+                    #[cfg(not(feature = "bincode"))]
+                    {
+                        log::warn!(
+                            "Failed to deserialize cache entry for key '{}': {}",
+                            cache_key,
+                            _e
+                        );
+                        return Ok(None);
+                    }
+                }
+            }
+        }
+        #[cfg(all(feature = "bincode", not(feature = "postcard")))]
+        {
+            match bincode::deserialize::<BincodeStore>(&d) {
+                Ok(store) => Ok(Some((store.response.into(), store.policy))),
+                Err(e) => {
+                    log::warn!(
+                        "Failed to deserialize cache entry for key '{}': {}",
+                        cache_key,
+                        e
+                    );
+                    Ok(None)
+                }
+            }
+        }
     }
 
     async fn put(
@@ -74,14 +188,29 @@ impl CacheManager for MokaManager {
         response: HttpResponse,
         policy: CachePolicy,
     ) -> Result<HttpResponse> {
+        // Always write with postcard when available (modern format).
+        // Only use bincode when postcard is not enabled.
+        #[cfg(feature = "postcard")]
         let data = Store { response, policy };
+        #[cfg(all(feature = "bincode", not(feature = "postcard")))]
+        let data = BincodeStore { response: response.into(), policy };
+
         #[cfg(feature = "postcard")]
         let bytes = postcard::to_allocvec(&data)?;
         #[cfg(all(feature = "bincode", not(feature = "postcard")))]
         let bytes = bincode::serialize(&data)?;
+
         self.cache.insert(cache_key, Arc::new(bytes)).await;
         self.cache.run_pending_tasks().await;
-        Ok(data.response)
+
+        #[cfg(feature = "postcard")]
+        {
+            Ok(data.response)
+        }
+        #[cfg(all(feature = "bincode", not(feature = "postcard")))]
+        {
+            Ok(data.response.into())
+        }
     }
 
     async fn delete(&self, cache_key: &str) -> Result<()> {

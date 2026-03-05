@@ -9,3 +9,7 @@ members = [
     "http-cache-tower-server",
     "http-cache-ureq"
 ]
+exclude = [
+    "compat-tests/legacy-writer",
+    "compat-tests/read-legacy-cache",
+]

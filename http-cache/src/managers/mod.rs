@@ -4,7 +4,7 @@ pub mod cacache;
 #[cfg(feature = "manager-foyer")]
 pub mod foyer;
 
-#[cfg(feature = "manager-moka")]
+#[cfg(any(feature = "manager-moka", feature = "manager-moka-bincode"))]
 pub mod moka;
 
 // Streaming cache managers
