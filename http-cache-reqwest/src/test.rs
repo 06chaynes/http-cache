@@ -1,12 +1,14 @@
 use crate::{BadRequest, Cache, HttpCacheError};
 use std::sync::Arc;
-
+use std::time::{Duration, SystemTime};
 use http_cache::*;
 use reqwest::Client;
 use reqwest_middleware::ClientBuilder;
+use tokio::time::sleep;
 #[cfg(any(feature = "streaming", feature = "rate-limiting"))]
 use wiremock::matchers::path;
 use wiremock::{matchers::method, Mock, MockServer, ResponseTemplate};
+use wiremock::matchers::header;
 
 /// Helper function to create a temporary cache manager
 fn create_cache_manager() -> CACacheManager {
@@ -701,6 +703,49 @@ async fn revalidation_200() -> Result<()> {
     // Hot pass to make sure revalidation request was sent
     let res = client.get(url).send().await?;
     assert_eq!(res.bytes().await?, &b"updated"[..]);
+    Ok(())
+}
+
+#[tokio::test]
+async fn duplicate_header() -> Result<()> {
+    let now = SystemTime::now();
+    let expires = SystemTime::now() + Duration::from_secs(2);
+
+    let mock_server = MockServer::start().await;
+    let mock = Mock::given(method(GET)).and(header("x-test", "test"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("expires", httpdate::fmt_http_date(now))
+                .set_body_bytes("ok"),
+        )
+        .expect(2);
+    let mock_guard = mock_server.register_as_scoped(mock).await;
+    let url = format!("{}/", &mock_server.uri());
+    let manager = create_cache_manager();
+
+    // Construct reqwest client with cache defaults
+    let client = ClientBuilder::new(Client::new())
+        .with(Cache(HttpCache {
+            mode: CacheMode::Default,
+            manager: manager.clone(),
+            options: Default::default(),
+        }))
+        .build();
+
+    let resp1 = client.get(url.clone()).header("x-test", "test").send().await?;
+
+    let wait_until = expires + Duration::from_secs(2);
+    while SystemTime::now() < wait_until {
+        sleep(Duration::from_millis(100)).await;
+    }
+
+    let resp2 = client.get(url.clone()).header("x-test", "test").send().await?;
+
+    drop(mock_guard);
+
+    assert_eq!(resp1.text().await?, "ok");
+    assert_eq!(resp2.text().await?, "ok");
+
     Ok(())
 }
 
