@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.0.0-alpha.6] - 2026-04-04
+
+### Changed
+
+- Updated `http-cache` dependency to 1.0.0-alpha.6
+- Removed `async-trait` usage from `Middleware` trait implementation
+- Removed `httpdate` dependency
+
+### Fixed
+
+- Headers no longer duplicated on revalidation requests when using custom headers
+
 ## [1.0.0-alpha.5] - 2026-02-17
 
 ### Changed

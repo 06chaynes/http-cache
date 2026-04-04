@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.0.0-alpha.6] - 2026-04-04
+
+### Changed
+
+- Updated `http-cache` dependency to 1.0.0-alpha.6
+
 ## [1.0.0-alpha.5] - 2026-02-17
 
 ### Changed

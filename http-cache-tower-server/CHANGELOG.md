@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.3] - 2026-04-04
+
+### Changed
+
+- Updated `http-cache` dependency to 1.0.0-alpha.6
+- Removed `async-trait` dependency
+
 ## [0.2.2] - 2026-02-17
 
 ### Changed

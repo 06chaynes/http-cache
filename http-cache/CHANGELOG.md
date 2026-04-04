@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.0.0-alpha.6] - 2026-04-04
+
+### Changed
+
+- Replaced `async_trait` with native async functions in traits (RPITIT) for `CacheManager`, `StreamingCacheManager`, and `Middleware` traits
+- `CacheAwareRateLimiter::until_key_ready` now returns `Pin<Box<dyn Future>>` for dyn-compatibility
+- Removed `async-trait` dependency
+- Cache deserialization failure logs lowered from `warn` to `debug` level
+
 ## [1.0.0-alpha.5] - 2026-02-17
 
 ### Added
