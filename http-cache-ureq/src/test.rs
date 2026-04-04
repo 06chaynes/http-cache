@@ -1143,10 +1143,6 @@ mod rate_limiting_tests {
         fn new(delay: Duration) -> Self {
             Self { calls: Arc::new(Mutex::new(Vec::new())), delay }
         }
-
-        fn get_calls(&self) -> Vec<String> {
-            self.calls.lock().unwrap().clone()
-        }
     }
 
     impl CacheAwareRateLimiter for MockRateLimiter {
@@ -1201,8 +1197,7 @@ mod rate_limiting_tests {
         assert_eq!(res2.header("x-cache"), Some(HIT));
 
         // Verify rate limiter was only called once (for the cache miss)
-        let calls = rate_limiter.get_calls();
-        assert_eq!(calls.len(), 1);
+        assert_eq!(rate_limiter.calls.lock().unwrap().len(), 1);
     }
 
     #[tokio::test]
@@ -1237,8 +1232,7 @@ mod rate_limiting_tests {
         let elapsed = start.elapsed();
 
         // Verify rate limiter was called for both requests
-        let calls = rate_limiter.get_calls();
-        assert_eq!(calls.len(), 2);
+        assert_eq!(rate_limiter.calls.lock().unwrap().len(), 2);
 
         // Verify some delay was applied (at least some portion of our 200ms total)
         assert!(elapsed >= Duration::from_millis(100));

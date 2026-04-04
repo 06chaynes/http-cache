@@ -1942,7 +1942,6 @@ pub struct HttpStreamingCache<T: StreamingCacheManager> {
     pub options: HttpCacheOptions,
 }
 
-#[allow(dead_code)]
 impl<T: CacheManager> HttpCache<T> {
     /// Determines if the request should be cached
     pub fn can_cache_request(
@@ -2622,6 +2621,5 @@ impl<T: CacheManager> HttpCacheInterface for HttpCache<T> {
     }
 }
 
-#[allow(dead_code)]
 #[cfg(test)]
 mod test;

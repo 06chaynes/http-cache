@@ -98,7 +98,6 @@ impl From<HttpResponse> for LegacyHttpResponse {
     }
 }
 
-#[allow(dead_code)]
 impl CACacheManager {
     /// Creates a new [`CACacheManager`] with the given path.
     pub fn new(path: PathBuf, remove_fully: bool) -> Self {

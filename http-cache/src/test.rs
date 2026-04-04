@@ -1308,14 +1308,6 @@ mod rate_limiting_tests {
         fn new(delay: Duration) -> Self {
             Self { calls: Arc::new(Mutex::new(Vec::new())), delay }
         }
-
-        fn get_calls(&self) -> Vec<String> {
-            self.calls.lock().unwrap().clone()
-        }
-
-        fn call_count(&self) -> usize {
-            self.calls.lock().unwrap().len()
-        }
     }
 
     impl CacheAwareRateLimiter for MockRateLimiter {
