@@ -196,7 +196,6 @@ pub(crate) struct SurfMiddleware<'a> {
     pub next: Next<'a>,
 }
 
-#[async_trait::async_trait]
 impl Middleware for SurfMiddleware<'_> {
     fn is_method_get_head(&self) -> bool {
         self.req.method() == HttpTypesMethod::Get

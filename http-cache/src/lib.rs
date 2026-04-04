@@ -327,6 +327,7 @@ use std::{
     collections::HashMap,
     convert::TryFrom,
     fmt::{self, Debug},
+    future::Future,
     str::FromStr,
     sync::Arc,
     time::{Duration, SystemTime},
@@ -988,50 +989,52 @@ impl HttpResponse {
 }
 
 /// A trait providing methods for storing, reading, and removing cache records.
-#[async_trait::async_trait]
 pub trait CacheManager: Send + Sync + 'static {
     /// Attempts to pull a cached response and related policy from cache.
-    async fn get(
+    fn get(
         &self,
         cache_key: &str,
-    ) -> Result<Option<(HttpResponse, CachePolicy)>>;
+    ) -> impl Future<Output = Result<Option<(HttpResponse, CachePolicy)>>> + Send;
     /// Attempts to cache a response and related policy.
-    async fn put(
+    fn put(
         &self,
         cache_key: String,
         res: HttpResponse,
         policy: CachePolicy,
-    ) -> Result<HttpResponse>;
+    ) -> impl Future<Output = Result<HttpResponse>> + Send;
     /// Attempts to remove a record from cache.
-    async fn delete(&self, cache_key: &str) -> Result<()>;
+    fn delete(
+        &self,
+        cache_key: &str,
+    ) -> impl Future<Output = Result<()>> + Send;
 }
 
 /// A streaming cache manager that supports streaming request/response bodies
 /// without buffering them in memory. This is ideal for large responses.
-#[async_trait::async_trait]
 pub trait StreamingCacheManager: Send + Sync + 'static {
     /// The body type used by this cache manager
     type Body: http_body::Body + Send + 'static;
 
     /// Attempts to pull a cached response and related policy from cache with streaming body.
-    async fn get(
+    fn get(
         &self,
         cache_key: &str,
-    ) -> Result<Option<(Response<Self::Body>, CachePolicy)>>
+    ) -> impl Future<Output = Result<Option<(Response<Self::Body>, CachePolicy)>>>
+           + Send
     where
         <Self::Body as http_body::Body>::Data: Send,
         <Self::Body as http_body::Body>::Error:
             Into<StreamingError> + Send + Sync + 'static;
 
     /// Attempts to cache a response with a streaming body and related policy.
-    async fn put<B>(
+    fn put<B>(
         &self,
         cache_key: String,
         response: Response<B>,
         policy: CachePolicy,
         request_url: Url,
         metadata: Option<Vec<u8>>,
-    ) -> Result<Response<Self::Body>>
+    ) -> impl Future<Output = Result<Response<Self::Body>>> + Send
     where
         B: http_body::Body + Send + 'static,
         B::Data: Send,
@@ -1043,10 +1046,10 @@ pub trait StreamingCacheManager: Send + Sync + 'static {
     /// Converts a generic body to the manager's body type for non-cacheable responses.
     /// This is called when a response should not be cached but still needs to be returned
     /// with the correct body type.
-    async fn convert_body<B>(
+    fn convert_body<B>(
         &self,
         response: Response<B>,
-    ) -> Result<Response<Self::Body>>
+    ) -> impl Future<Output = Result<Response<Self::Body>>> + Send
     where
         B: http_body::Body + Send + 'static,
         B::Data: Send,
@@ -1056,7 +1059,10 @@ pub trait StreamingCacheManager: Send + Sync + 'static {
             Into<StreamingError> + Send + Sync + 'static;
 
     /// Attempts to remove a record from cache.
-    async fn delete(&self, cache_key: &str) -> Result<()>;
+    fn delete(
+        &self,
+        cache_key: &str,
+    ) -> impl Future<Output = Result<()>> + Send;
 
     /// Creates an empty body of the manager's body type.
     /// Used for returning 504 Gateway Timeout responses on OnlyIfCached cache misses.
@@ -1079,7 +1085,6 @@ pub trait StreamingCacheManager: Send + Sync + 'static {
 }
 
 /// Describes the functionality required for interfacing with HTTP client middleware
-#[async_trait::async_trait]
 pub trait Middleware: Send {
     /// Allows the cache mode to be overridden.
     ///
@@ -1108,7 +1113,9 @@ pub trait Middleware: Send {
     /// Attempts to determine the request method
     fn method(&self) -> Result<String>;
     /// Attempts to fetch an upstream resource and return an [`HttpResponse`]
-    async fn remote_fetch(&mut self) -> Result<HttpResponse>;
+    fn remote_fetch(
+        &mut self,
+    ) -> impl Future<Output = Result<HttpResponse>> + Send;
 }
 
 /// An interface for HTTP caching that works with composable middleware patterns

@@ -4,7 +4,9 @@
 //! in a cache-aware manner, where rate limits are only applied on cache misses.
 
 #[cfg(feature = "rate-limiting")]
-use async_trait::async_trait;
+use std::future::Future;
+#[cfg(feature = "rate-limiting")]
+use std::pin::Pin;
 
 #[cfg(feature = "rate-limiting")]
 pub use governor::{
@@ -15,11 +17,13 @@ pub use governor::{
 
 /// A trait for rate limiting that can be implemented by different rate limiting strategies
 #[cfg(feature = "rate-limiting")]
-#[async_trait]
 pub trait CacheAwareRateLimiter: Send + Sync + 'static {
     /// Wait until a request to the given key (typically a domain or URL) is allowed
     /// This method should block until the rate limit allows the request to proceed
-    async fn until_key_ready(&self, key: &str);
+    fn until_key_ready(
+        &self,
+        key: &str,
+    ) -> Pin<Box<dyn Future<Output = ()> + Send + '_>>;
 
     /// Check if a request to the given key would be allowed without blocking
     /// Returns true if the request can proceed immediately, false if it would be rate limited
@@ -53,10 +57,15 @@ impl DomainRateLimiter {
 }
 
 #[cfg(feature = "rate-limiting")]
-#[async_trait]
 impl CacheAwareRateLimiter for DomainRateLimiter {
-    async fn until_key_ready(&self, key: &str) {
-        self.limiter.until_key_ready(&key.to_string()).await;
+    fn until_key_ready(
+        &self,
+        key: &str,
+    ) -> Pin<Box<dyn Future<Output = ()> + Send + '_>> {
+        let key = key.to_string();
+        Box::pin(async move {
+            self.limiter.until_key_ready(&key).await;
+        })
     }
 
     fn check_key(&self, key: &str) -> bool {
@@ -91,10 +100,14 @@ impl DirectRateLimiter {
 }
 
 #[cfg(feature = "rate-limiting")]
-#[async_trait]
 impl CacheAwareRateLimiter for DirectRateLimiter {
-    async fn until_key_ready(&self, _key: &str) {
-        self.limiter.until_ready().await;
+    fn until_key_ready(
+        &self,
+        _key: &str,
+    ) -> Pin<Box<dyn Future<Output = ()> + Send + '_>> {
+        Box::pin(async move {
+            self.limiter.until_ready().await;
+        })
     }
 
     fn check_key(&self, _key: &str) -> bool {

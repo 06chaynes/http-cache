@@ -10,7 +10,7 @@ The [`CacheManager`](https://docs.rs/http-cache/latest/http_cache/trait.CacheMan
 - `put`: store a response and related policy object in the cache associated with the provided cache key
 - `delete`: remove a cached response from the cache associated with the provided cache key
 
-Because the methods are asynchronous, they currently require [`async_trait`](https://github.com/dtolnay/async-trait) to be derived. This may change in the future.
+The methods are asynchronous and use native Rust async functions in traits (AFIT), stabilized in Rust 1.75.
 
 ### The `get` method
 
@@ -121,7 +121,6 @@ impl CACacheManager {
     }
 }
 
-#[async_trait::async_trait]
 impl CacheManager for CACacheManager {
     async fn get(
         &self,
@@ -157,10 +156,9 @@ impl CacheManager for CACacheManager {
 
 ### Part Three: Implementing the `StreamingCacheManager` trait
 
-For streaming caching that handles large responses without buffering them entirely in memory, you implement the `StreamingCacheManager` trait. The `StreamingCacheManager` trait extends `CacheManager` with streaming-specific methods. We'll start with the implementation signature, but first we must make sure we derive async_trait.
+For streaming caching that handles large responses without buffering them entirely in memory, you implement the `StreamingCacheManager` trait. The `StreamingCacheManager` trait extends `CacheManager` with streaming-specific methods. We'll start with the implementation signature:
 
 ```rust
-#[async_trait::async_trait]
 impl StreamingCacheManager for StreamingManager {
     type Body = StreamingBody<Empty<Bytes>>;
     ...

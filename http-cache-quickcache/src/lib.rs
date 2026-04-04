@@ -204,7 +204,6 @@ impl QuickManager {
     }
 }
 
-#[async_trait::async_trait]
 impl CacheManager for QuickManager {
     async fn get(
         &self,

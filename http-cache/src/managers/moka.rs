@@ -116,7 +116,6 @@ impl MokaManager {
     }
 }
 
-#[async_trait::async_trait]
 impl CacheManager for MokaManager {
     async fn get(
         &self,
@@ -133,7 +132,7 @@ impl CacheManager for MokaManager {
         #[cfg(feature = "postcard")]
         {
             match postcard::from_bytes::<Store>(&d) {
-                Ok(store) => return Ok(Some((store.response, store.policy))),
+                Ok(store) => Ok(Some((store.response, store.policy))),
                 Err(_e) => {
                     #[cfg(feature = "bincode")]
                     {
@@ -145,7 +144,7 @@ impl CacheManager for MokaManager {
                                 )));
                             }
                             Err(e) => {
-                                log::warn!(
+                                log::debug!(
                                     "Failed to deserialize cache entry for key '{}': {}",
                                     cache_key,
                                     e
@@ -156,12 +155,12 @@ impl CacheManager for MokaManager {
                     }
                     #[cfg(not(feature = "bincode"))]
                     {
-                        log::warn!(
+                        log::debug!(
                             "Failed to deserialize cache entry for key '{}': {}",
                             cache_key,
                             _e
                         );
-                        return Ok(None);
+                        Ok(None)
                     }
                 }
             }
@@ -171,7 +170,7 @@ impl CacheManager for MokaManager {
             match bincode::deserialize::<BincodeStore>(&d) {
                 Ok(store) => Ok(Some((store.response.into(), store.policy))),
                 Err(e) => {
-                    log::warn!(
+                    log::debug!(
                         "Failed to deserialize cache entry for key '{}': {}",
                         cache_key,
                         e

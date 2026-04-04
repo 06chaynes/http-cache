@@ -1,14 +1,15 @@
 use crate::{BadRequest, Cache, HttpCacheError};
 use std::sync::Arc;
-use std::time::{Duration, SystemTime};
+
 use http_cache::*;
 use reqwest::Client;
 use reqwest_middleware::ClientBuilder;
-use tokio::time::sleep;
 #[cfg(any(feature = "streaming", feature = "rate-limiting"))]
 use wiremock::matchers::path;
-use wiremock::{matchers::method, Mock, MockServer, ResponseTemplate};
-use wiremock::matchers::header;
+use wiremock::{
+    matchers::{header, method},
+    Mock, MockServer, ResponseTemplate,
+};
 
 /// Helper function to create a temporary cache manager
 fn create_cache_manager() -> CACacheManager {
@@ -707,23 +708,27 @@ async fn revalidation_200() -> Result<()> {
 }
 
 #[tokio::test]
-async fn duplicate_header() -> Result<()> {
-    let now = SystemTime::now();
-    let expires = SystemTime::now() + Duration::from_secs(2);
-
+async fn no_duplicate_headers_on_revalidation() -> Result<()> {
     let mock_server = MockServer::start().await;
-    let mock = Mock::given(method(GET)).and(header("x-test", "test"))
+
+    // Both mocks require x-test: test exactly — wiremock will reject "test,test"
+    let m = Mock::given(method(GET))
+        .and(header("x-test", "test"))
         .respond_with(
             ResponseTemplate::new(200)
-                .insert_header("expires", httpdate::fmt_http_date(now))
-                .set_body_bytes("ok"),
+                .insert_header("cache-control", "max-age=0, must-revalidate")
+                .set_body_bytes(TEST_BODY),
         )
-        .expect(2);
-    let mock_guard = mock_server.register_as_scoped(mock).await;
+        .expect(1);
+    let m_revalidation = Mock::given(method(GET))
+        .and(header("x-test", "test"))
+        .respond_with(ResponseTemplate::new(304))
+        .expect(1);
+
+    let mock_guard = mock_server.register_as_scoped(m).await;
     let url = format!("{}/", &mock_server.uri());
     let manager = create_cache_manager();
 
-    // Construct reqwest client with cache defaults
     let client = ClientBuilder::new(Client::new())
         .with(Cache(HttpCache {
             mode: CacheMode::Default,
@@ -732,20 +737,15 @@ async fn duplicate_header() -> Result<()> {
         }))
         .build();
 
-    let resp1 = client.get(url.clone()).header("x-test", "test").send().await?;
-
-    let wait_until = expires + Duration::from_secs(2);
-    while SystemTime::now() < wait_until {
-        sleep(Duration::from_millis(100)).await;
-    }
-
-    let resp2 = client.get(url.clone()).header("x-test", "test").send().await?;
+    // Cold pass to load cache
+    client.get(url.clone()).header("x-test", "test").send().await?;
 
     drop(mock_guard);
+    let _mock_guard = mock_server.register_as_scoped(m_revalidation).await;
 
-    assert_eq!(resp1.text().await?, "ok");
-    assert_eq!(resp2.text().await?, "ok");
-
+    // Second request triggers revalidation — headers must not be duplicated
+    let res = client.get(url).header("x-test", "test").send().await?;
+    assert_eq!(res.bytes().await?, TEST_BODY);
     Ok(())
 }
 
@@ -1896,13 +1896,20 @@ mod streaming_tests {
             }
         }
 
-        #[async_trait::async_trait]
         impl CacheAwareRateLimiter for MockStreamingRateLimiter {
-            async fn until_key_ready(&self, key: &str) {
-                self.calls.lock().unwrap().push(key.to_string());
-                if self.delay > Duration::ZERO {
-                    tokio::time::sleep(self.delay).await;
-                }
+            fn until_key_ready(
+                &self,
+                key: &str,
+            ) -> std::pin::Pin<
+                Box<dyn std::future::Future<Output = ()> + Send + '_>,
+            > {
+                let key = key.to_string();
+                Box::pin(async move {
+                    self.calls.lock().unwrap().push(key);
+                    if self.delay > Duration::ZERO {
+                        tokio::time::sleep(self.delay).await;
+                    }
+                })
             }
 
             fn check_key(&self, _key: &str) -> bool {
@@ -1988,13 +1995,20 @@ mod streaming_tests {
             }
         }
 
-        #[async_trait::async_trait]
         impl CacheAwareRateLimiter for MockStreamingRateLimiter {
-            async fn until_key_ready(&self, key: &str) {
-                self.calls.lock().unwrap().push(key.to_string());
-                if self.delay > Duration::ZERO {
-                    tokio::time::sleep(self.delay).await;
-                }
+            fn until_key_ready(
+                &self,
+                key: &str,
+            ) -> std::pin::Pin<
+                Box<dyn std::future::Future<Output = ()> + Send + '_>,
+            > {
+                let key = key.to_string();
+                Box::pin(async move {
+                    self.calls.lock().unwrap().push(key);
+                    if self.delay > Duration::ZERO {
+                        tokio::time::sleep(self.delay).await;
+                    }
+                })
             }
 
             fn check_key(&self, _key: &str) -> bool {
@@ -2081,13 +2095,19 @@ mod rate_limiting_tests {
         }
     }
 
-    #[async_trait::async_trait]
     impl CacheAwareRateLimiter for MockRateLimiter {
-        async fn until_key_ready(&self, key: &str) {
-            self.calls.lock().unwrap().push(key.to_string());
-            if !self.delay.is_zero() {
-                std::thread::sleep(self.delay);
-            }
+        fn until_key_ready(
+            &self,
+            key: &str,
+        ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send + '_>>
+        {
+            let key = key.to_string();
+            Box::pin(async move {
+                self.calls.lock().unwrap().push(key);
+                if !self.delay.is_zero() {
+                    std::thread::sleep(self.delay);
+                }
+            })
         }
 
         fn check_key(&self, _key: &str) -> bool {

@@ -16,7 +16,6 @@ edition = "2021"
 rust-version = "1.88.0"
 
 [dependencies]
-async-trait = "0.1.85"
 http = "1.2.0"
 http-cache-semantics = "3.0.0"
 http-types = "2.12.0"

@@ -65,7 +65,6 @@ use crate::{
     error::{Result, StreamingError, StreamingErrorKind},
     HttpHeaders, StreamingCacheManager, Url,
 };
-use async_trait::async_trait;
 use bytes::Bytes;
 use http::{Response, Version};
 use http_body::Body;
@@ -388,7 +387,6 @@ impl StreamingManager {
     }
 }
 
-#[async_trait]
 impl StreamingCacheManager for StreamingManager {
     type Body = StreamingBody<Empty<Bytes>>;
 

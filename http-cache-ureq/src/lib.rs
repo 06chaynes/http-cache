@@ -206,8 +206,6 @@ use std::{
     collections::HashMap, result::Result, str::FromStr, time::SystemTime,
 };
 
-use async_trait::async_trait;
-
 pub use http::request::Parts;
 use http::{header::CACHE_CONTROL, Method};
 use http_cache::{
@@ -806,7 +804,6 @@ impl From<HttpResponse> for CachedResponse {
     }
 }
 
-#[async_trait]
 impl Middleware for UreqMiddleware<'_> {
     fn is_method_get_head(&self) -> bool {
         is_cacheable_method(&self.method)
@@ -839,8 +836,9 @@ impl Middleware for UreqMiddleware<'_> {
             let value_str = value.to_str().map_err(|e| {
                 BoxError::from(format!("Invalid header value: {}", e))
             })?;
-            self.headers
-                .push((name.as_str().to_string(), value_str.to_string()));
+            let name_str = name.as_str().to_string();
+            self.headers.retain(|(n, _)| n != &name_str);
+            self.headers.push((name_str, value_str.to_string()));
         }
         Ok(())
     }

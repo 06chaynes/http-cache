@@ -36,7 +36,6 @@
 //! #     }
 //! # }
 //! #
-//! # #[async_trait::async_trait]
 //! # impl CacheManager for MemoryCacheManager {
 //! #     async fn get(&self, cache_key: &str) -> http_cache::Result<Option<(HttpResponse, CachePolicy)>> {
 //! #         Ok(self.store.lock().unwrap().get(cache_key).cloned())

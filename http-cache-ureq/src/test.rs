@@ -3,7 +3,7 @@ use http_cache::{CacheKey, *};
 use std::{sync::Arc, time::Duration};
 use tempfile::TempDir;
 use wiremock::{
-    matchers::{method, path},
+    matchers::{header, method, path},
     Mock, MockServer, ResponseTemplate,
 };
 
@@ -622,6 +622,45 @@ async fn revalidation_500() {
 }
 
 #[tokio::test]
+async fn no_duplicate_headers_on_revalidation() {
+    let temp_dir = TempDir::new().unwrap();
+    let manager = CACacheManager::new(temp_dir.path().into(), true);
+    let mock_server = MockServer::start().await;
+
+    // Both mocks require x-test: test exactly — wiremock will reject "test,test"
+    let m = Mock::given(method(GET))
+        .and(header("x-test", "test"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("cache-control", MUST_REVALIDATE)
+                .set_body_bytes(TEST_BODY),
+        )
+        .expect(1);
+    let m_304 = Mock::given(method(GET))
+        .and(header("x-test", "test"))
+        .respond_with(ResponseTemplate::new(304))
+        .expect(1);
+
+    let mock_guard = mock_server.register_as_scoped(m).await;
+    let url = format!("{}/", &mock_server.uri());
+    let agent = CachedAgent::builder()
+        .cache_manager(manager.clone())
+        .cache_mode(CacheMode::Default)
+        .build()
+        .unwrap();
+
+    // Cold pass to load cache
+    agent.get(&url).set("x-test", "test").call().await.unwrap();
+
+    drop(mock_guard);
+    let _mock_guard = mock_server.register_as_scoped(m_304).await;
+
+    // Second request triggers revalidation — headers must not be duplicated
+    let res = agent.get(&url).set("x-test", "test").call().await.unwrap();
+    assert_eq!(res.as_bytes(), TEST_BODY);
+}
+
+#[tokio::test]
 async fn custom_cache_mode_fn() {
     let temp_dir = TempDir::new().unwrap();
     let manager = CACacheManager::new(temp_dir.path().into(), true);
@@ -1110,13 +1149,19 @@ mod rate_limiting_tests {
         }
     }
 
-    #[async_trait::async_trait]
     impl CacheAwareRateLimiter for MockRateLimiter {
-        async fn until_key_ready(&self, key: &str) {
-            self.calls.lock().unwrap().push(key.to_string());
-            if !self.delay.is_zero() {
-                std::thread::sleep(self.delay);
-            }
+        fn until_key_ready(
+            &self,
+            key: &str,
+        ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send + '_>>
+        {
+            let key = key.to_string();
+            Box::pin(async move {
+                self.calls.lock().unwrap().push(key);
+                if !self.delay.is_zero() {
+                    std::thread::sleep(self.delay);
+                }
+            })
         }
 
         fn check_key(&self, _key: &str) -> bool {

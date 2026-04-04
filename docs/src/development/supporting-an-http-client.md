@@ -18,7 +18,7 @@ The [`Middleware`](https://docs.rs/http-cache/latest/http_cache/trait.Middleware
 - `method`: returns the method of the request as a `String`
 - `remote_fetch`: performs the request and returns the `HttpResponse`
 
-Because the `remote_fetch` method is asynchronous, it currently requires [`async_trait`](https://github.com/dtolnay/async-trait) to be derived. This may change in the future.
+The `remote_fetch` method is asynchronous and uses native Rust async functions in traits (AFIT), stabilized in Rust 1.75.
 
 ### The `is_method_get_head` method
 
@@ -79,10 +79,9 @@ pub(crate) struct SurfMiddleware<'a> {
 
 ### Part Two: Implementing the `Middleware` trait
 
-Now that we have our base structs, we can implement the `Middleware` trait for our `SurfMiddleware` struct. We'll start with the `is_method_get_head` method, but first we must make sure we derive async_trait.
+Now that we have our base structs, we can implement the `Middleware` trait for our `SurfMiddleware` struct. We'll start with the `is_method_get_head` method.
 
 ```rust
-#[async_trait::async_trait]
 impl Middleware for SurfMiddleware<'_> {
     ...
 ```

@@ -96,7 +96,6 @@ impl FoyerManager {
     }
 }
 
-#[async_trait::async_trait]
 impl CacheManager for FoyerManager {
     async fn get(
         &self,
@@ -107,7 +106,7 @@ impl CacheManager for FoyerManager {
                 match postcard::from_bytes::<Store>(entry.value()) {
                     Ok(store) => Ok(Some((store.response, store.policy))),
                     Err(e) => {
-                        log::warn!(
+                        log::debug!(
                             "Failed to deserialize cache entry for key '{}': {}",
                             cache_key,
                             e

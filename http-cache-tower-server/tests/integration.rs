@@ -29,7 +29,6 @@ impl MemoryCacheManager {
     }
 }
 
-#[async_trait::async_trait]
 impl CacheManager for MemoryCacheManager {
     async fn get(
         &self,

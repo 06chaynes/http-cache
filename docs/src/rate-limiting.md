@@ -55,17 +55,19 @@ You can implement your own rate limiting strategy by implementing the `CacheAwar
 
 ```rust
 use http_cache::rate_limiting::CacheAwareRateLimiter;
-use async_trait::async_trait;
+use std::future::Future;
+use std::pin::Pin;
 
 struct CustomRateLimiter {
     // Your custom rate limiting logic
 }
 
-#[async_trait]
 impl CacheAwareRateLimiter for CustomRateLimiter {
-    async fn until_key_ready(&self, key: &str) {
-        // Implement your rate limiting logic here
-        // This method should block until it's safe to make a request
+    fn until_key_ready(&self, key: &str) -> Pin<Box<dyn Future<Output = ()> + Send + '_>> {
+        Box::pin(async move {
+            // Implement your rate limiting logic here
+            // This method should block until it's safe to make a request
+        })
     }
 
     fn check_key(&self, key: &str) -> bool {
