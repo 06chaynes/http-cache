@@ -403,7 +403,7 @@ impl Middleware for ReqwestMiddleware<'_> {
     }
     fn update_headers(&mut self, parts: &Parts) -> Result<()> {
         for header in parts.headers.iter() {
-            self.req.headers_mut().append(header.0.clone(), header.1.clone());
+            self.req.headers_mut().insert(header.0.clone(), header.1.clone());
         }
         Ok(())
     }
