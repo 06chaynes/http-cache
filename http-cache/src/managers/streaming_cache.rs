@@ -76,6 +76,8 @@ use serde::{Deserialize, Serialize};
 use tokio::io::AsyncWriteExt;
 use tokio::sync::mpsc;
 
+use crate::CachedUserMetadata;
+
 /// Default maximum body size for cached responses (100MB).
 ///
 /// Responses larger than this will be rejected during caching to prevent
@@ -443,11 +445,18 @@ impl StreamingCacheManager for StreamingManager {
         let body =
             StreamingBody::from_reader_with_size(reader, metadata.body_size);
 
-        let response = response_builder.body(body).map_err(|e| {
+        let mut response = response_builder.body(body).map_err(|e| {
             crate::HttpCacheError::cache(format!(
                 "Failed to build response: {e}"
             ))
         })?;
+
+        // Store user metadata in extensions for preservation on 304 re-cache.
+        // This avoids regenerating metadata (which may produce different or
+        // empty results) when re-caching after a 304 Not Modified response.
+        response
+            .extensions_mut()
+            .insert(CachedUserMetadata(metadata.user_metadata));
 
         Ok(Some((response, metadata.policy)))
     }
@@ -546,12 +555,15 @@ impl StreamingCacheManager for StreamingManager {
         }
 
         let return_body = StreamingBody::buffered(body_bytes);
-        let return_response =
+        let mut return_response =
             response_builder.body(return_body).map_err(|e| {
                 crate::HttpCacheError::cache(format!(
                     "Failed to build response: {e}"
                 ))
             })?;
+
+        // Preserve extensions from the original response
+        *return_response.extensions_mut() = parts.extensions;
 
         Ok(return_response)
     }
@@ -586,11 +598,15 @@ impl StreamingCacheManager for StreamingManager {
         }
 
         let streaming_body = StreamingBody::buffered(body_bytes);
-        let response = response_builder.body(streaming_body).map_err(|e| {
-            crate::HttpCacheError::cache(format!(
-                "Failed to build response: {e}"
-            ))
-        })?;
+        let mut response =
+            response_builder.body(streaming_body).map_err(|e| {
+                crate::HttpCacheError::cache(format!(
+                    "Failed to build response: {e}"
+                ))
+            })?;
+
+        // Preserve extensions from the original response
+        *response.extensions_mut() = parts.extensions;
 
         Ok(response)
     }

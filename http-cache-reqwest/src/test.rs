@@ -433,6 +433,13 @@ async fn delete_after_non_get_head_method_request() -> Result<()> {
     let mock_server = MockServer::start().await;
     let m = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 1);
     let _mock_guard = mock_server.register_as_scoped(m).await;
+
+    // Register a POST mock that returns 200 so invalidation triggers (RFC 7234 s4.4)
+    let post_mock = Mock::given(method("POST"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(TEST_BODY))
+        .expect(1);
+    let _post_guard = mock_server.register_as_scoped(post_mock).await;
+
     let url = format!("{}/", &mock_server.uri());
     let manager = create_cache_manager();
 
@@ -455,6 +462,7 @@ async fn delete_after_non_get_head_method_request() -> Result<()> {
     assert!(data.is_some());
 
     // Post request to make sure the cache object at the same resource was deleted
+    // Invalidation only happens on successful response (RFC 7234 s4.4)
     client.post(url.clone()).send().await?;
 
     let data =

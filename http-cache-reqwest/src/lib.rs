@@ -512,46 +512,6 @@ async fn convert_reqwest_response_to_http_full_body(
 }
 
 #[cfg(feature = "streaming")]
-// Converts reqwest Response to http response parts (for 304 handling)
-fn convert_reqwest_response_to_http_parts(
-    response: Response,
-) -> Result<(http::response::Parts, ())> {
-    let status = response.status();
-    let version = response.version();
-    let headers = response.headers();
-
-    let mut http_response =
-        http::Response::builder().status(status).version(version);
-
-    for (name, value) in headers.iter() {
-        http_response = http_response.header(name, value);
-    }
-
-    let response = http_response.body(()).map_err(BoxError::from)?;
-    Ok(response.into_parts())
-}
-
-#[cfg(feature = "streaming")]
-// Helper function to add cache status headers to a streaming response
-fn add_cache_status_headers_to_response<T>(
-    mut response: http::Response<T>,
-    hit_or_miss: &str,
-    cache_lookup: &str,
-) -> http::Response<T> {
-    use http::HeaderValue;
-    use http_cache::{XCACHE, XCACHELOOKUP};
-
-    let headers = response.headers_mut();
-    if let Ok(value1) = HeaderValue::from_str(hit_or_miss) {
-        headers.insert(XCACHE, value1);
-    }
-    if let Ok(value2) = HeaderValue::from_str(cache_lookup) {
-        headers.insert(XCACHELOOKUP, value2);
-    }
-    response
-}
-
-#[cfg(feature = "streaming")]
 // Converts a streaming response to reqwest Response using the StreamingCacheManager's method
 async fn convert_streaming_body_to_reqwest<T>(
     response: http::Response<T::Body>,
@@ -576,7 +536,12 @@ where
         http_response = http_response.header(name, value);
     }
 
-    let response = http_response.body(reqwest_body)?;
+    let mut response = http_response.body(reqwest_body)?;
+
+    // Transfer extensions from the original response (preserves URL,
+    // HttpCacheMetadata, and any other data stored in extensions)
+    *response.extensions_mut() = parts.extensions;
+
     Ok(Response::from(response))
 }
 
@@ -596,7 +561,7 @@ impl<T: CacheManager> reqwest_middleware::Middleware for Cache<T> {
         extensions: &mut Extensions,
         next: Next<'_>,
     ) -> std::result::Result<Response, Error> {
-        let mut middleware = ReqwestMiddleware { req, next, extensions };
+        let middleware = ReqwestMiddleware { req, next, extensions };
         let can_cache =
             self.0.can_cache_request(&middleware).map_err(from_box_error)?;
 
@@ -607,20 +572,29 @@ impl<T: CacheManager> reqwest_middleware::Middleware for Cache<T> {
             })?;
             Ok(converted)
         } else {
-            self.0
-                .run_no_cache(&mut middleware)
-                .await
-                .map_err(from_box_error)?;
+            let parts = middleware.parts().map_err(from_box_error)?;
             let mut res = middleware
                 .next
                 .run(middleware.req, middleware.extensions)
                 .await?;
 
-            let miss =
-                HeaderValue::from_str(HitOrMiss::MISS.to_string().as_ref())
-                    .map_err(bad_header)?;
-            res.headers_mut().insert(XCACHE, miss.clone());
-            res.headers_mut().insert(XCACHELOOKUP, miss);
+            // Only invalidate for unsafe methods after successful response (RFC 7234 s4.4)
+            if !parts.method.is_safe()
+                && (res.status().is_success() || res.status().is_redirection())
+            {
+                self.0
+                    .run_no_cache_from_parts(&parts)
+                    .await
+                    .map_err(from_box_error)?;
+            }
+
+            if self.0.options.cache_status_headers {
+                let miss =
+                    HeaderValue::from_str(HitOrMiss::MISS.to_string().as_ref())
+                        .map_err(bad_header)?;
+                res.headers_mut().insert(XCACHE, miss.clone());
+                res.headers_mut().insert(XCACHELOOKUP, miss);
+            }
             Ok(res)
         }
     }
@@ -642,261 +616,84 @@ where
         extensions: &mut Extensions,
         next: Next<'_>,
     ) -> std::result::Result<Response, Error> {
-        use http_cache::HttpCacheStreamInterface;
+        use http_cache::FetchRequest;
 
-        // Convert reqwest Request to http::Request for analysis
-        // If the request can't be cloned (e.g., streaming body), bypass cache gracefully
+        // Convert reqwest Request to http::Request for analysis.
+        // If the request can't be cloned (e.g., streaming body),
+        // bypass the cache gracefully.
         let copied_req = match clone_req(&req) {
-            Ok(req) => req,
-            Err(_) => {
-                // Request has non-cloneable body (streaming/multipart), bypass cache
-                let response = next.run(req, extensions).await?;
-                return Ok(response);
-            }
-        };
-        let http_req = match http::Request::try_from(copied_req) {
             Ok(r) => r,
-            Err(e) => {
-                return Err(to_middleware_error(HttpCacheError::Cache(
-                    e.to_string(),
-                )))
-            }
+            Err(_) => return next.run(req, extensions).await,
         };
+        let http_req = http::Request::try_from(copied_req).map_err(|e| {
+            to_middleware_error(HttpCacheError::Cache(e.to_string()))
+        })?;
         let (parts, _) = http_req.into_parts();
-
-        // Check for mode override from extensions
         let mode_override = extensions.get::<CacheMode>().cloned();
 
-        // Analyze the request for caching behavior
-        let analysis = match self.cache.analyze_request(&parts, mode_override) {
-            Ok(a) => a,
-            Err(e) => {
-                return Err(to_middleware_error(HttpCacheError::Cache(
-                    e.to_string(),
-                )))
-            }
-        };
-
-        // Check if we should bypass cache entirely
-        if !analysis.should_cache {
-            let response = next.run(req, extensions).await?;
-            return Ok(response);
-        }
-
-        // Look up cached response
-        if let Some((cached_response, policy)) = self
+        let can_cache = self
             .cache
-            .lookup_cached_response(&analysis.cache_key)
-            .await
-            .map_err(|e| {
-                to_middleware_error(HttpCacheError::Cache(e.to_string()))
-            })?
-        {
-            // Check if cached response is still fresh
-            use http_cache_semantics::BeforeRequest;
-            let before_req = policy.before_request(&parts, SystemTime::now());
-            match before_req {
-                BeforeRequest::Fresh(_fresh_parts) => {
-                    // Convert cached streaming response back to reqwest Response
-                    // Now using streaming instead of buffering!
-                    let mut cached_response = cached_response;
+            .can_cache_request(&parts, mode_override)
+            .map_err(from_box_error)?;
 
-                    // Add cache status headers if enabled
-                    if self.cache.options.cache_status_headers {
-                        cached_response = add_cache_status_headers_to_response(
-                            cached_response,
-                            "HIT",
-                            "HIT",
-                        );
+        if can_cache {
+            let result = self
+                .cache
+                .run(&parts, mode_override, |fetch_req| {
+                    let mut req = req;
+                    let next = next.clone();
+
+                    match fetch_req {
+                        FetchRequest::Fresh => {}
+                        FetchRequest::FreshNoCache => {
+                            req.headers_mut().insert(
+                                CACHE_CONTROL,
+                                HeaderValue::from_static("no-cache"),
+                            );
+                        }
+                        FetchRequest::Conditional(cond_parts) => {
+                            for (name, value) in cond_parts.headers.iter() {
+                                req.headers_mut()
+                                    .insert(name.clone(), value.clone());
+                            }
+                        }
                     }
 
-                    return convert_streaming_body_to_reqwest::<T>(
-                        cached_response,
-                    )
+                    async move {
+                        let resp = next.run(req, extensions).await.map_err(
+                            |e| -> BoxError { e.to_string().into() },
+                        )?;
+                        convert_reqwest_response_to_http_full_body(resp).await
+                    }
+                })
+                .await
+                .map_err(from_box_error)?;
+
+            convert_streaming_body_to_reqwest::<T>(result).await.map_err(|e| {
+                to_middleware_error(HttpCacheError::Cache(e.to_string()))
+            })
+        } else {
+            let mut res = next.run(req, extensions).await?;
+
+            // Only invalidate for unsafe methods after successful response (RFC 7234 s4.4)
+            if !parts.method.is_safe()
+                && (res.status().is_success() || res.status().is_redirection())
+            {
+                self.cache
+                    .run_no_cache(&parts)
                     .await
-                    .map_err(|e| {
-                        to_middleware_error(HttpCacheError::Cache(
-                            e.to_string(),
-                        ))
-                    });
-                }
-                BeforeRequest::Stale { request: conditional_parts, .. } => {
-                    // Apply rate limiting before revalidation request
-                    #[cfg(feature = "rate-limiting")]
-                    if let Some(rate_limiter) = &self.cache.options.rate_limiter
-                    {
-                        let url = req.url().clone();
-                        let rate_limit_key =
-                            url.host_str().unwrap_or("unknown");
-                        rate_limiter.until_key_ready(rate_limit_key).await;
-                    }
-
-                    // Create conditional request
-                    let mut conditional_req = req;
-                    for (name, value) in conditional_parts.headers.iter() {
-                        conditional_req
-                            .headers_mut()
-                            .insert(name.clone(), value.clone());
-                    }
-
-                    let conditional_response =
-                        next.run(conditional_req, extensions).await?;
-
-                    if conditional_response.status() == 304 {
-                        // Convert reqwest response parts for handling not modified
-                        let (fresh_parts, _) =
-                            convert_reqwest_response_to_http_parts(
-                                conditional_response,
-                            )
-                            .map_err(|e| {
-                                to_middleware_error(HttpCacheError::Cache(
-                                    e.to_string(),
-                                ))
-                            })?;
-                        let updated_response = self
-                            .cache
-                            .handle_not_modified(cached_response, &fresh_parts)
-                            .await
-                            .map_err(|e| {
-                                to_middleware_error(HttpCacheError::Cache(
-                                    e.to_string(),
-                                ))
-                            })?;
-
-                        let mut final_response = updated_response;
-
-                        // Add cache status headers if enabled
-                        if self.cache.options.cache_status_headers {
-                            final_response =
-                                add_cache_status_headers_to_response(
-                                    final_response,
-                                    "HIT",
-                                    "HIT",
-                                );
-                        }
-
-                        return convert_streaming_body_to_reqwest::<T>(
-                            final_response,
-                        )
-                        .await
-                        .map_err(|e| {
-                            to_middleware_error(HttpCacheError::Cache(
-                                e.to_string(),
-                            ))
-                        });
-                    } else {
-                        // Fresh response received, process it through the cache
-                        let http_response =
-                            convert_reqwest_response_to_http_full_body(
-                                conditional_response,
-                            )
-                            .await
-                            .map_err(|e| {
-                                to_middleware_error(HttpCacheError::Cache(
-                                    e.to_string(),
-                                ))
-                            })?;
-                        let cached_response = self
-                            .cache
-                            .process_response(analysis, http_response, None)
-                            .await
-                            .map_err(|e| {
-                                to_middleware_error(HttpCacheError::Cache(
-                                    e.to_string(),
-                                ))
-                            })?;
-
-                        let mut final_response = cached_response;
-
-                        // Add cache status headers if enabled
-                        if self.cache.options.cache_status_headers {
-                            final_response =
-                                add_cache_status_headers_to_response(
-                                    final_response,
-                                    "MISS",
-                                    "MISS",
-                                );
-                        }
-
-                        return convert_streaming_body_to_reqwest::<T>(
-                            final_response,
-                        )
-                        .await
-                        .map_err(|e| {
-                            to_middleware_error(HttpCacheError::Cache(
-                                e.to_string(),
-                            ))
-                        });
-                    }
-                }
+                    .map_err(from_box_error)?;
             }
-        }
 
-        // Handle OnlyIfCached mode: return 504 Gateway Timeout on cache miss
-        if analysis.cache_mode == CacheMode::OnlyIfCached {
-            let http_response = http::Response::builder()
-                .status(504)
-                .body(self.cache.manager.empty_body())
-                .map_err(|e| {
-                    to_middleware_error(HttpCacheError::Cache(e.to_string()))
-                })?;
-
-            let mut final_response = http_response;
             if self.cache.options.cache_status_headers {
-                final_response = add_cache_status_headers_to_response(
-                    final_response,
-                    "MISS",
-                    "MISS",
-                );
+                let miss =
+                    HeaderValue::from_str(HitOrMiss::MISS.to_string().as_ref())
+                        .map_err(bad_header)?;
+                res.headers_mut().insert(XCACHE, miss.clone());
+                res.headers_mut().insert(XCACHELOOKUP, miss);
             }
-
-            return convert_streaming_body_to_reqwest::<T>(final_response)
-                .await
-                .map_err(|e| {
-                    to_middleware_error(HttpCacheError::Cache(e.to_string()))
-                });
+            Ok(res)
         }
-
-        // Apply rate limiting before fresh request
-        #[cfg(feature = "rate-limiting")]
-        if let Some(rate_limiter) = &self.cache.options.rate_limiter {
-            let url = req.url().clone();
-            let rate_limit_key = url.host_str().unwrap_or("unknown");
-            rate_limiter.until_key_ready(rate_limit_key).await;
-        }
-
-        // Fetch fresh response from upstream
-        let response = next.run(req, extensions).await?;
-        let http_response =
-            convert_reqwest_response_to_http_full_body(response)
-                .await
-                .map_err(|e| {
-                    to_middleware_error(HttpCacheError::Cache(e.to_string()))
-                })?;
-
-        // Process and potentially cache the response
-        let cached_response = self
-            .cache
-            .process_response(analysis, http_response, None)
-            .await
-            .map_err(|e| {
-                to_middleware_error(HttpCacheError::Cache(e.to_string()))
-            })?;
-
-        let mut final_response = cached_response;
-
-        // Add cache status headers if enabled
-        if self.cache.options.cache_status_headers {
-            final_response = add_cache_status_headers_to_response(
-                final_response,
-                "MISS",
-                "MISS",
-            );
-        }
-
-        convert_streaming_body_to_reqwest::<T>(final_response).await.map_err(
-            |e| to_middleware_error(HttpCacheError::Cache(e.to_string())),
-        )
     }
 }
 
