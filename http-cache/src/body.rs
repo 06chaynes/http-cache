@@ -8,7 +8,7 @@
 //!
 //! - **Buffered**: Contains cached response data that can be sent immediately
 //! - **Streaming**: Wraps an upstream body for streaming responses
-//! - **File**: Streams from a cacache Reader in 64KB chunks (only with `streaming` feature)
+//! - **File**: Streams from a [`tokio::fs::File`] in 64KB chunks (only with `streaming` feature)
 //!
 //! # Example
 //!
@@ -65,7 +65,7 @@ pin_project! {
     ///
     /// - **Buffered**: Contains cached response data that can be sent immediately
     /// - **Streaming**: Wraps an upstream body for streaming responses
-    /// - **File**: Streams from a cacache Reader in 64KB chunks (only with `streaming` feature)
+    /// - **File**: Streams from a [`tokio::fs::File`] in 64KB chunks (only with `streaming` feature)
     #[project = StreamingBodyProj]
     pub enum StreamingBody<B> {
         Buffered {
@@ -77,10 +77,10 @@ pin_project! {
         },
         File {
             #[pin]
-            reader: cacache::Reader,
+            reader: tokio::fs::File,
             buffer: BytesMut,
             done: bool,
-            size: Option<u64>,
+            size: u64,
         },
     }
 }
@@ -127,38 +127,29 @@ impl<B> StreamingBody<B> {
         Self::Streaming { inner: body }
     }
 
-    /// Create a new file-streaming body from a cacache Reader.
+    /// Create a new file-streaming body from a [`tokio::fs::File`] with known size.
     ///
     /// This allows streaming large cached responses from disk without
     /// loading the entire body into memory. Data is read in 64KB chunks.
     ///
-    /// Use [`from_reader_with_size`](Self::from_reader_with_size) if the
-    /// file size is known for accurate size hints.
+    /// # Cursor contract
+    ///
+    /// The caller must position `file` at the start of the body bytes before
+    /// calling this function. Streaming uses the current cursor position and
+    /// reads until EOF — correctness relies on the caller having already
+    /// advanced past any file header (e.g. the 16-byte nonce header written
+    /// by `StreamingManager`) and on the file length exactly matching
+    /// `16 + size` so EOF lands on the body boundary.
+    ///
+    /// `size` is used to provide accurate size hints to downstream consumers.
     #[cfg(feature = "streaming")]
     #[must_use]
-    pub fn from_reader(reader: cacache::Reader) -> Self {
+    pub fn from_file_with_size(file: tokio::fs::File, size: u64) -> Self {
         Self::File {
-            reader,
+            reader: file,
             buffer: BytesMut::with_capacity(STREAM_BUFFER_SIZE),
             done: false,
-            size: None,
-        }
-    }
-
-    /// Create a new file-streaming body from a cacache Reader with known size.
-    ///
-    /// This allows streaming large cached responses from disk without
-    /// loading the entire body into memory. Data is read in 64KB chunks.
-    ///
-    /// The size is used to provide accurate size hints to downstream consumers.
-    #[cfg(feature = "streaming")]
-    #[must_use]
-    pub fn from_reader_with_size(reader: cacache::Reader, size: u64) -> Self {
-        Self::File {
-            reader,
-            buffer: BytesMut::with_capacity(STREAM_BUFFER_SIZE),
-            done: false,
-            size: Some(size),
+            size,
         }
     }
 }
@@ -254,12 +245,7 @@ where
             }
             StreamingBody::Streaming { inner } => inner.size_hint(),
             StreamingBody::File { size, .. } => {
-                // Return exact size if known, otherwise unknown
-                if let Some(s) = size {
-                    http_body::SizeHint::with_exact(*s)
-                } else {
-                    http_body::SizeHint::default()
-                }
+                http_body::SizeHint::with_exact(*size)
             }
         }
     }
@@ -346,7 +332,7 @@ impl<B: fmt::Debug> fmt::Debug for StreamingBody<B> {
             Self::File { done, size, .. } => f
                 .debug_struct("StreamingBody::File")
                 .field("done", done)
-                .field("size", size)
+                .field("size", &size)
                 .finish_non_exhaustive(),
         }
     }

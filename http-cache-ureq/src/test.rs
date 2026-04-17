@@ -363,6 +363,7 @@ async fn only_if_cached_mode_miss() {
         .build()
         .unwrap();
     let res = agent.get(&url).call().await.unwrap();
+    assert_eq!(res.status(), 504);
     assert_eq!(res.header("x-cache-lookup"), Some(MISS));
     assert_eq!(res.header("x-cache"), Some(MISS));
     let data = manager.get(&format!("{}:{}", GET, &url)).await.unwrap();
@@ -921,7 +922,7 @@ async fn content_type_based_caching() {
     let manager = CACacheManager::new(temp_dir.path().into(), true);
     let mock_server = MockServer::start().await;
 
-    // Mock JSON API endpoint - should be force cached
+    // Mock JSON API endpoint - should be cached with default rules
     let json_mock = Mock::given(method(GET))
         .and(path("/api/data.json"))
         .respond_with(
@@ -1028,7 +1029,7 @@ async fn content_type_based_caching() {
         .build()
         .unwrap();
 
-    // Test JSON API - should be cached despite no-cache header (ForceCache)
+    // Test JSON API - should be cached with CacheMode::Default and cache-control: public, max-age=300
     let json_url = format!("{}/api/data.json", mock_server.uri());
     let res1 = agent.get(&json_url).call().await.unwrap();
     assert_eq!(res1.status(), 200);
@@ -1123,7 +1124,7 @@ async fn content_type_based_caching() {
     );
 }
 
-#[cfg(feature = "rate-limiting")]
+#[cfg(all(feature = "rate-limiting", feature = "manager-moka"))]
 mod rate_limiting_tests {
     use super::*;
     use http_cache::rate_limiting::{
@@ -1155,7 +1156,7 @@ mod rate_limiting_tests {
             Box::pin(async move {
                 self.calls.lock().unwrap().push(key);
                 if !self.delay.is_zero() {
-                    std::thread::sleep(self.delay);
+                    tokio::time::sleep(self.delay).await;
                 }
             })
         }

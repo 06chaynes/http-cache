@@ -306,7 +306,7 @@ where
             .uri(req.uri())
             .version(req.version())
             .body(())
-            .unwrap();
+            .expect("request built from valid parts");
 
         // Copy headers for content negotiation support
         *temp_req.headers_mut() = req.headers().clone();
@@ -375,8 +375,8 @@ pub struct CachedResponse {
     /// Response status code.
     pub status: u16,
 
-    /// Response headers.
-    pub headers: HashMap<String, String>,
+    /// Response headers (multiple values per key to preserve multi-valued headers).
+    pub headers: HashMap<String, Vec<String>>,
 
     /// Response body bytes.
     pub body: Vec<u8>,
@@ -401,16 +401,20 @@ impl CachedResponse {
     }
 
     /// Convert to an HTTP response.
-    pub fn into_response(self) -> Response<Bytes> {
+    pub fn into_response(
+        self,
+    ) -> Result<Response<Bytes>, Box<dyn std::error::Error + Send + Sync>> {
         let mut builder = Response::builder().status(self.status);
 
-        for (key, value) in self.headers {
-            if let Ok(header_value) = HeaderValue::from_str(&value) {
-                builder = builder.header(key, header_value);
+        for (key, values) in self.headers {
+            for value in values {
+                if let Ok(header_value) = HeaderValue::from_str(&value) {
+                    builder = builder.header(&key, header_value);
+                }
             }
         }
 
-        builder.body(Bytes::from(self.body)).unwrap()
+        Ok(builder.body(Bytes::from(self.body))?)
     }
 }
 
@@ -639,9 +643,14 @@ where
                     // Determine if response had explicit freshness directives
                     // (max-age or s-maxage). If it only has "public" or other directives
                     // without explicit TTL, we use our own TTL tracking.
-                    let has_explicit_ttl =
-                        cached.headers.get("cache-control").is_some_and(|cc| {
-                            cc.contains("max-age") || cc.contains("s-maxage")
+                    let has_explicit_ttl = cached
+                        .headers
+                        .get("cache-control")
+                        .is_some_and(|cc_values| {
+                            cc_values.iter().any(|cc| {
+                                cc.contains("max-age")
+                                    || cc.contains("s-maxage")
+                            })
                         });
 
                     let is_fresh = match before_req {
@@ -670,7 +679,7 @@ where
                     if is_fresh {
                         // Cache hit
                         metrics.hits.fetch_add(1, Ordering::Relaxed);
-                        let mut response = cached.into_response();
+                        let mut response = cached.into_response()?;
 
                         if options.cache_status_headers {
                             response.headers_mut().insert(
@@ -711,15 +720,18 @@ where
                     // Create cached response
                     let cached = CachedResponse {
                         status: res_parts.status.as_u16(),
-                        headers: res_parts
-                            .headers
-                            .iter()
-                            .filter_map(|(k, v)| {
-                                v.to_str()
-                                    .ok()
-                                    .map(|s| (k.to_string(), s.to_string()))
-                            })
-                            .collect(),
+                        headers: {
+                            let mut map: HashMap<String, Vec<String>> =
+                                HashMap::new();
+                            for (k, v) in res_parts.headers.iter() {
+                                if let Ok(s) = v.to_str() {
+                                    map.entry(k.to_string())
+                                        .or_default()
+                                        .push(s.to_string());
+                                }
+                            }
+                            map
+                        },
                         body: body_bytes.to_vec(),
                         cached_at: SystemTime::now(),
                         ttl,

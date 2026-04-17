@@ -99,8 +99,8 @@ use bytes::Bytes;
 # #[cfg(feature = "streaming")]
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // StreamingManager uses cacache + moka for streaming from disk
-    let streaming_manager = StreamingManager::in_memory(1000).await?;
+    // StreamingManager uses redb (metadata) + raw files on disk (bodies), fronted by moka as a hot cache
+    let streaming_manager = StreamingManager::with_temp_dir(1000).await?;
 
     // Create the streaming cache layer
     let cache_layer = HttpCacheStreamingLayer::new(streaming_manager);

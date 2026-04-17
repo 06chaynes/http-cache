@@ -22,12 +22,17 @@ Add the dependency to your `Cargo.toml`:
 http-cache-ureq = "1.0"
 ```
 
-Use the `CachedAgent` builder to create a cached HTTP client:
+Use the `CachedAgent` builder to create a cached HTTP client.
+
+> **Note:** `CACacheManager` delegates to the `cacache` crate, which uses `tokio::fs` internally and requires a tokio reactor. Install a tokio runtime alongside the smol executor as shown below. (If you are using a pure in-memory backend like `MokaManager`, the tokio runtime setup is unnecessary — see [In-Memory Caching](#in-memory-caching) below.)
 
 ```rust
 use http_cache_ureq::{CachedAgent, CACacheManager, CacheMode};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Install a tokio runtime so cacache's tokio::fs operations find a reactor.
+    let tokio_rt = tokio::runtime::Runtime::new()?;
+    let _tokio_guard = tokio_rt.enter();
     smol::block_on(async {
         let agent = CachedAgent::builder()
             .cache_manager(CACacheManager::new("./cache".into(), true))
@@ -65,21 +70,23 @@ use http_cache_ureq::{CachedAgent, CACacheManager, CacheMode};
 use serde_json::json;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let tokio_rt = tokio::runtime::Runtime::new()?;
+    let _tokio_guard = tokio_rt.enter();
     smol::block_on(async {
         let agent = CachedAgent::builder()
             .cache_manager(CACacheManager::new("./cache".into(), true))
             .cache_mode(CacheMode::Default)
             .build()?;
-        
+
         // Send JSON data
         let response = agent.post("https://httpbin.org/post")
             .send_json(json!({"key": "value"}))
             .await?;
-        
+
         // Parse JSON response
         let json: serde_json::Value = response.into_json()?;
         println!("Response: {}", json);
-        
+
         Ok(())
     })
 }
@@ -93,16 +100,18 @@ Control caching behavior with different modes:
 use http_cache_ureq::{CachedAgent, CACacheManager, CacheMode};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let tokio_rt = tokio::runtime::Runtime::new()?;
+    let _tokio_guard = tokio_rt.enter();
     smol::block_on(async {
         let agent = CachedAgent::builder()
             .cache_manager(CACacheManager::new("./cache".into(), true))
             .cache_mode(CacheMode::ForceCache) // Cache everything, ignore headers
             .build()?;
-        
+
         // This will be cached even if headers say not to cache
         let response = agent.get("https://httpbin.org/uuid").call().await?;
         println!("Response: {}", response.into_string()?);
-        
+
         Ok(())
     })
 }
@@ -117,22 +126,24 @@ use http_cache_ureq::{CachedAgent, CACacheManager, CacheMode};
 use std::time::Duration;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let tokio_rt = tokio::runtime::Runtime::new()?;
+    let _tokio_guard = tokio_rt.enter();
     smol::block_on(async {
         // Create custom ureq configuration
         let config = ureq::config::Config::builder()
             .timeout_global(Some(Duration::from_secs(30)))
             .user_agent("MyApp/1.0")
             .build();
-        
+
         let agent = CachedAgent::builder()
             .agent_config(config)
             .cache_manager(CACacheManager::new("./cache".into(), true))
             .cache_mode(CacheMode::Default)
             .build()?;
-        
+
         let response = agent.get("https://httpbin.org/cache/60").call().await?;
         println!("Response: {}", response.into_string()?);
-        
+
         Ok(())
     })
 }
@@ -174,6 +185,8 @@ use http_cache_ureq::{CachedAgent, CACacheManager, CacheMode, HttpCacheOptions};
 use std::time::Duration;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let tokio_rt = tokio::runtime::Runtime::new()?;
+    let _tokio_guard = tokio_rt.enter();
     smol::block_on(async {
         let agent = CachedAgent::builder()
             .cache_manager(CACacheManager::new("./cache".into(), true))

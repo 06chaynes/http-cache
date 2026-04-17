@@ -9,7 +9,7 @@
 - **Traditional Caching**: Standard HTTP response caching with full buffering
 - **Streaming Support**: Memory-efficient caching for large responses without full buffering
 - **Cache-Aware Rate Limiting**: Intelligent rate limiting that only applies on cache misses
-- **Multiple Backends**: Support for disk-based (cacache) and in-memory (moka, quick-cache) storage
+- **Multiple Backends**: Disk-based (cacache), in-memory (moka, quick-cache), hybrid in-memory + disk (foyer), and a persistent streaming manager (redb + raw files on disk)
 - **Client Integrations**: Support for reqwest, surf, tower, and ureq HTTP clients
 - **Server Framework Support**: Tower-based servers (Axum, Hyper, Tonic)
 - **RFC 7234 Compliance**: Proper HTTP cache semantics with respect for cache-control headers
@@ -21,10 +21,15 @@
 Cache responses from external APIs your application calls:
 
 ```rust
-// Example: Caching API responses you fetch
-let client = reqwest::Client::new();
-let cached_client = HttpCache::new(client, cache_manager);
-let response = cached_client.get("https://api.example.com/users").send().await?;
+// Example: Caching API responses you fetch (reqwest + reqwest-middleware)
+let client = ClientBuilder::new(reqwest::Client::new())
+    .with(Cache(HttpCache {
+        mode: CacheMode::Default,
+        manager: cache_manager,
+        options: HttpCacheOptions::default(),
+    }))
+    .build();
+let response = client.get("https://api.example.com/users").send().await?;
 ```
 
 **Use cases:**

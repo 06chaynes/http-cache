@@ -17,7 +17,7 @@ jobs:
     name: Code coverage
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: llvm-tools
@@ -33,7 +33,7 @@ jobs:
           cargo llvm-cov --no-report --package http-cache-tower --no-default-features --features manager-cacache,manager-moka,manager-foyer,streaming,rate-limiting,http-headers-compat,url-standard
           cargo llvm-cov --no-report --package http-cache-quickcache --no-default-features --features http-headers-compat,url-standard
           cargo llvm-cov report --lcov --output-path lcov.info
-      - uses: codecov/codecov-action@v5
+      - uses: codecov/codecov-action@v6
         with:
           files: lcov.info
           fail_ci_if_error: false

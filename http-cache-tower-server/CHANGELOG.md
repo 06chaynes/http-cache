@@ -1,11 +1,13 @@
 # Changelog
 
-## [0.2.3] - 2026-04-04
+## [0.2.3] - 2026-04-17
 
 ### Changed
 
 - Updated `http-cache` dependency to 1.0.0-alpha.6
 - Removed `async-trait` dependency
+- `CachedResponse.headers` now stores `HashMap<String, Vec<String>>` instead of `HashMap<String, String>` to preserve multi-valued headers (e.g. `Set-Cookie`). **Breaking serialization change**: cache entries written by 0.2.2 and earlier cannot be deserialized by 0.2.3; they fall back to cache miss on read (no data corruption) and will be re-populated on the next upstream request. Operators with persistent caches should expect a one-time warm-up after upgrade.
+- `CachedResponse::into_response` now returns `Result<Response<Bytes>, BoxError>` instead of panicking on malformed header state.
 
 ## [0.2.2] - 2026-02-17
 

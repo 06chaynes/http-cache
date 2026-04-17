@@ -13,6 +13,8 @@ cargo add http-cache-surf
 - `manager-cacache`: (default) Enables the [`CACacheManager`](https://docs.rs/http-cache/latest/http_cache/struct.CACacheManager.html) backend cache manager.
 - `manager-moka`: Enables the [`MokaManager`](https://docs.rs/http-cache/latest/http_cache/struct.MokaManager.html) backend cache manager.
 - `manager-foyer`: Enables the [`FoyerManager`](https://docs.rs/http-cache/latest/http_cache/struct.FoyerManager.html) backend cache manager.
+- `rate-limiting`: Enables cache-aware rate limiting functionality.
+- `url-ada`: Enables ada-url for URL parsing (mutually exclusive with the default `url-standard`).
 
 ## Usage
 
@@ -20,14 +22,14 @@ In the following example we will construct our client with our cache struct from
 
 After constructing our client, we will make a request to the [MDN Caching Docs](https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching) which should result in an object stored in cache on disk.
 
+`CACacheManager` delegates to the `cacache` crate, which uses `tokio::fs` internally and therefore requires a tokio reactor. Surf itself is runtime-agnostic when using the `curl-client` backend, so the simplest pattern is to run the surf client inside a tokio runtime.
+
 ```rust
 use http_cache_surf::{Cache, CacheMode, CACacheManager, HttpCache, HttpCacheOptions};
 use surf::Client;
-use macro_rules_attribute::apply;
-use smol_macros::main;
 use std::path::PathBuf;
 
-#[apply(main!)]
+#[tokio::main(flavor = "current_thread")]
 async fn main() -> surf::Result<()> {
     let client = Client::new()
         .with(Cache(HttpCache {

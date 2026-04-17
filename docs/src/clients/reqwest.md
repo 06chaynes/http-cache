@@ -68,8 +68,8 @@ use futures_util::StreamExt;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    // Create streaming cache manager (in-memory with 1000 entry capacity)
-    let cache_manager = StreamingManager::in_memory(1000).await?;
+    // Create streaming cache manager (disk-backed; uses a temp dir here)
+    let cache_manager = StreamingManager::with_temp_dir(1000).await?;
     let streaming_cache = StreamingCache::new(cache_manager, CacheMode::Default);
 
     // Build client with streaming cache
@@ -100,9 +100,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
 ### Key Benefits of Streaming Cache
 
-- **Memory Efficiency**: Large responses are streamed directly to/from disk cache without buffering in memory
+- **Memory Efficiency**: Cache hits stream from disk in 64KB chunks without loading the full body into memory. Writes buffer the full body in memory before committing (bounded by `max_body_size`, default 100MB).
 - **Performance**: Cached responses can be streamed immediately without waiting for complete download
-- **Scalability**: Handle responses of any size without memory constraints
+- **Scalability**: Read-heavy workloads handle arbitrarily large cached bodies; bound write-path memory with `max_body_size`
 
 ## Non-Cloneable Request Handling
 
@@ -154,7 +154,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 use reqwest::Client;
 use reqwest_middleware::ClientBuilder;
 use http_cache_reqwest::{Cache, CacheMode, CACacheManager, HttpCache, HttpCacheOptions};
-use futures_util::stream;
+use futures_util::{stream, StreamExt};
 use bytes::Bytes;
 use std::path::PathBuf;
 

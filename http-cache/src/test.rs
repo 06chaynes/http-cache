@@ -1289,7 +1289,7 @@ mod metadata_provider_tests {
 mod rate_limiting_tests {
     use super::*;
     use crate::rate_limiting::{
-        CacheAwareRateLimiter, DomainRateLimiter, Quota,
+        CacheAwareRateLimiter, DirectRateLimiter, DomainRateLimiter, Quota,
     };
     use crate::url_hostname;
     use crate::HttpCacheOptions;
@@ -1320,8 +1320,7 @@ mod rate_limiting_tests {
             Box::pin(async move {
                 self.calls.lock().unwrap().push(key);
                 if !self.delay.is_zero() {
-                    // Use std::thread::sleep for simplicity in tests
-                    std::thread::sleep(self.delay);
+                    tokio::time::sleep(self.delay).await;
                 }
             })
         }
@@ -1344,11 +1343,11 @@ mod rate_limiting_tests {
     #[test]
     fn test_direct_rate_limiter_creation() {
         let quota = Quota::per_second(NonZero::new(10).unwrap()); // Higher quota for testing
-        let limiter = DomainRateLimiter::new(quota);
+        let limiter = DirectRateLimiter::direct(quota);
 
         // Test that we can check keys (key is ignored for direct limiter)
         // Use the same key since it's a direct limiter
-        assert!(limiter.check_key("any-key"));
+        assert!(limiter.check_key("any_key"));
     }
 
     #[tokio::test]
@@ -1405,17 +1404,17 @@ mod rate_limiting_tests {
     async fn test_direct_rate_limiter_behavior() {
         // Test direct rate limiter that applies globally
         let quota = Quota::per_second(NonZero::new(10).unwrap()); // Higher quota for testing
-        let limiter = DomainRateLimiter::new(quota);
+        let limiter = DirectRateLimiter::direct(quota);
 
         let start = Instant::now();
 
         // First request should be immediate
-        limiter.until_key_ready("any-domain").await;
+        limiter.until_key_ready("any_key").await;
         let first_duration = start.elapsed();
         assert!(first_duration < Duration::from_millis(100));
 
         // Test that check_key works (should still have quota)
-        assert!(limiter.check_key("any-domain"));
+        assert!(limiter.check_key("any_key"));
     }
 
     #[test]

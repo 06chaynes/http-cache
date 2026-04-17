@@ -1,10 +1,24 @@
 # Changelog
 
-## [1.0.0-alpha.6] - 2026-04-04
+## [1.0.0-alpha.6] - 2026-04-17
 
 ### Changed
 
 - Updated `http-cache` dependency to 1.0.0-alpha.6
+- Non-streaming service refactored to delegate to `HttpCache::run` via `TowerMiddleware` adapter
+- Streaming service delegates to `HttpStreamingCache::run` orchestrator
+- Removed inline cache orchestration (~500 lines replaced with core delegation)
+
+### Fixed
+
+- All cache modes now handled correctly (ForceCache, OnlyIfCached, IgnoreRules, NoCache were previously missing)
+- `must-revalidate` + 5xx now returns stale cached response with Warning 111 instead of forwarding error
+- `OnlyIfCached` cache miss now correctly returns 504 Gateway Timeout
+- 304 revalidation now calls `policy.after_response`, updates headers, and re-caches with new policy
+- `modify_response_before_caching` now applied in all caching paths
+- Warning header cleanup (1xx removal) on cached responses
+- `hyper::service::Service` impl no longer causes infinite recursion
+- Removed `unwrap()` calls from header value construction
 
 ## [1.0.0-alpha.5] - 2026-02-17
 

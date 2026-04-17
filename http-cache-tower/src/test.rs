@@ -371,8 +371,13 @@ mod tests {
 
         // Verify the body type
         match response.into_body() {
-            HttpCacheBody::Original(_) => {} // Expected for current implementation
-            HttpCacheBody::Buffered(_) => {}
+            HttpCacheBody::Original(body) => {
+                let collected = BodyExt::collect(body).await?.to_bytes();
+                assert!(!collected.is_empty());
+            }
+            HttpCacheBody::Buffered(data) => {
+                assert!(!data.is_empty());
+            }
         }
 
         Ok(())
@@ -654,13 +659,12 @@ mod tests {
         let response2 = cached_service.ready().await?.call(request2).await?;
         assert_eq!(response2.status(), StatusCode::OK);
 
+        // The cached response should have the warning header removed
+        assert!(response2.headers().get("warning").is_none());
+
         // Check that the body is correct (from cache)
         let body2 = BodyExt::collect(response2.into_body()).await?.to_bytes();
         assert_eq!(body2, TEST_BODY);
-
-        // Note: The warning header test might not work as expected since
-        // our current Tower implementation doesn't have the same header filtering
-        // as reqwest middleware. This is implementation-specific behavior.
 
         Ok(())
     }
@@ -978,6 +982,7 @@ mod tests {
 
         let response2 = cached_service.ready().await?.call(request2).await?;
         assert_eq!(response2.status(), StatusCode::OK);
+        assert!(response2.headers().get("warning").is_some());
 
         Ok(())
     }

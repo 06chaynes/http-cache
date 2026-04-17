@@ -1,13 +1,41 @@
 # Changelog
 
-## [1.0.0-alpha.6] - 2026-04-04
+## [1.0.0-alpha.6] - 2026-04-17
+
+### Added
+
+- `HttpStreamingCache::run` orchestrator for streaming cache operations, eliminating duplicated logic in downstream middleware crates
+- `FetchRequest` enum for callback-based fetch dispatch in streaming paths
+- `run_no_cache_from_parts` public method on `HttpCache` for cache-busting with pre-extracted request parts
+- `CachedUserMetadata` for preserving user metadata through 304 re-cache operations
+- `response_cache_mode_fn` evaluation in `conditional_fetch` 200 branch (both paths)
 
 ### Changed
 
+- `StreamingManager` storage backend replaced with an embedded `redb` database (for metadata) plus raw `tokio::fs` files (for response bodies), fronted by `moka` as an in-memory hot cache. This replaces the previous `cacache`-based backend. Overwrites atomically replace prior content; there is no longer any background eviction-driven disk cleanup. Disk state is managed explicitly by `put`, `delete`, and `clear`. The on-disk format is not compatible with previous releases — users upgrading should delete the `metadata.redb` file, the `bodies/` subdirectory, and the `tmp/` subdirectory from their cache directory before the first run on this version.
+- Only one `StreamingManager` instance may point at a given cache directory at a time (enforced via the database file lock on `metadata.redb`). Attempting to construct a second instance while another is alive returns an error.
+- `StreamingManager::entry_count()` now returns the count of entries currently warm in the in-memory hot cache, not the total number of entries persisted on disk. When the cache has fewer entries than the configured capacity, this equals the previous value; once capacity is exceeded, cold entries remain reachable via `get` but are not counted here.
 - Replaced `async_trait` with native async functions in traits (RPITIT) for `CacheManager`, `StreamingCacheManager`, and `Middleware` traits
 - `CacheAwareRateLimiter::until_key_ready` now returns `Pin<Box<dyn Future>>` for dyn-compatibility
 - Removed `async-trait` dependency
 - Cache deserialization failure logs lowered from `warn` to `debug` level
+- `modify_response_before_caching` is now `pub` on `HttpCacheOptions`
+
+### Fixed
+
+- `StreamingManager` now persists cache entries across service restarts (#159). Previously the key→content mapping was only kept in memory, so cached bodies on disk became unreachable orphans after restart.
+- Multi-valued response headers (e.g. `Set-Cookie`, `Via`, `Link`) are now preserved correctly when merging headers from revalidation responses. Previously `HttpResponse::update_headers`, the streaming `conditional_fetch` Fresh/304 merges, and the streaming `handle_not_modified` path all lost or duplicated values for same-named headers.
+- RFC 7234 s4.4: cache invalidation now gated on successful response status (2xx/3xx) for unsafe methods
+- RFC 7234 s4.4: HEAD cache entries now invalidated alongside GET entries
+- `conditional_fetch` 200 branch now checks `should_cache_response` before caching
+- Streaming path now respects `matches` flag from `BeforeRequest::Stale`
+- Streaming path now handles all cache modes (NoCache, ForceCache, OnlyIfCached, IgnoreRules)
+- Streaming 304 path preserves original user metadata instead of regenerating
+- `modify_response_before_caching` now called at correct point in streaming cache paths
+- Cache status headers set in correct order relative to `modify_response` and `manager.put`
+- Warning header cleanup (1xx removal) on cached responses in streaming path
+- 5xx stale fallback with Warning 111 in streaming conditional fetch
+- `OnlyIfCached` 504 body now empty (consistent between streaming and non-streaming)
 
 ## [1.0.0-alpha.5] - 2026-02-17
 

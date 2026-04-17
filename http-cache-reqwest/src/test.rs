@@ -809,7 +809,7 @@ mod only_if_cached_mode {
         let manager = create_cache_manager();
 
         // Construct reqwest client with OnlyIfCached mode
-        let _client = ClientBuilder::new(Client::new())
+        let client = ClientBuilder::new(Client::new())
             .with(Cache(HttpCache {
                 mode: CacheMode::OnlyIfCached,
                 manager: manager.clone(),
@@ -817,12 +817,11 @@ mod only_if_cached_mode {
             }))
             .build();
 
-        // Should result in a cache miss and no remote request
-        // In OnlyIfCached mode, this should fail or return a 504 but current implementation
-        // doesn't fully support this yet, so we skip the request part for now
-        // client.get(url.clone()).send().await?;
+        // OnlyIfCached mode with no cached entry should return 504 Gateway Timeout
+        let res = client.get(url.clone()).send().await?;
+        assert_eq!(res.status(), 504);
 
-        // Try to load cached object
+        // Verify no entry was cached
         let data = CacheManager::get(
             &manager,
             &format!("{}:{}", GET, &url_parse(&url)?),
@@ -2113,7 +2112,7 @@ mod rate_limiting_tests {
             Box::pin(async move {
                 self.calls.lock().unwrap().push(key);
                 if !self.delay.is_zero() {
-                    std::thread::sleep(self.delay);
+                    tokio::time::sleep(self.delay).await;
                 }
             })
         }

@@ -71,7 +71,7 @@
 //!
 //! For handling large responses without buffering, use `StreamingManager`:
 //!
-//! ```rust
+//! ```rust,ignore
 //! use http_cache_tower::HttpCacheStreamingLayer;
 //! use http_cache::StreamingManager;
 //!
@@ -172,7 +172,6 @@ use http_cache::{
 use http_cache::{HttpStreamingCache, StreamingCacheManager};
 use http_cache_semantics::CachePolicy;
 use std::{
-    convert::TryInto,
     pin::Pin,
     sync::Arc,
     task::{Context, Poll},
@@ -363,10 +362,10 @@ fn add_cache_status_headers_streaming<B>(
 ) -> Response<B> {
     let headers = response.headers_mut();
     if let Ok(hv) = HeaderValue::from_str(hit_or_miss) {
-        headers.insert(http_cache::XCACHE, hv);
+        headers.insert(XCACHE, hv);
     }
     if let Ok(hv) = HeaderValue::from_str(cache_lookup) {
-        headers.insert(http_cache::XCACHELOOKUP, hv);
+        headers.insert(XCACHELOOKUP, hv);
     }
     response
 }
@@ -757,11 +756,7 @@ where
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<Result<(), Self::Error>> {
-        self.inner.poll_ready(cx).map_err(|_e| {
-            HttpCacheError::http(Box::new(std::io::Error::other(
-                "service error".to_string(),
-            )))
-        })
+        self.inner.poll_ready(cx).map_err(|e| HttpCacheError::http(e.into()))
     }
 
     fn call(&mut self, req: Request<ReqBody>) -> Self::Future {
@@ -903,11 +898,7 @@ where
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<Result<(), Self::Error>> {
-        self.inner.poll_ready(cx).map_err(|_e| {
-            HttpCacheError::http(Box::new(std::io::Error::other(
-                "service error".to_string(),
-            )))
-        })
+        self.inner.poll_ready(cx).map_err(|e| HttpCacheError::http(e.into()))
     }
 
     fn call(&mut self, req: Request<ReqBody>) -> Self::Future {
@@ -969,7 +960,7 @@ where
                             http_cache::FetchRequest::FreshNoCache => {
                                 let mut p = parts_ref;
                                 p.headers.insert(
-                                    http::header::CACHE_CONTROL,
+                                    CACHE_CONTROL,
                                     HeaderValue::from_static("no-cache"),
                                 );
                                 p

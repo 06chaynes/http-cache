@@ -6,22 +6,24 @@
 
 The `moka` backend cache manager is provided by the `http-cache` crate but is not enabled by default. The `http-cache-reqwest`, `http-cache-surf`, and `http-cache-tower` crates all expose the types so no need to pull in the `http-cache` directly unless you need to implement your own client.
 
+Because `url-standard` and `url-ada` are mutually exclusive and exactly one must be enabled, pick the URL backend alongside the manager. The examples below use `url-standard`; substitute `url-ada` if you need to avoid the Unicode/IDNA license.
+
 ### reqwest
 
 ```sh
-cargo add http-cache-reqwest --no-default-features -F manager-moka
+cargo add http-cache-reqwest --no-default-features -F manager-moka,url-standard
 ```
 
 ### surf
 
 ```sh
-cargo add http-cache-surf --no-default-features -F manager-moka
+cargo add http-cache-surf --no-default-features -F manager-moka,url-standard
 ```
 
 ### tower
 
 ```sh
-cargo add http-cache-tower --no-default-features -F manager-moka
+cargo add http-cache-tower --no-default-features -F manager-moka,url-standard
 ```
 
 ## Working with the manager directly
@@ -54,6 +56,7 @@ let response = HttpResponse {
     status: 200,
     url: url.clone(),
     version: HttpVersion::Http11,
+    metadata: None,
 };
 let req = http::Request::get("http://example.com").body(())?;
 let res = http::Response::builder()

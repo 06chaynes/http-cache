@@ -26,17 +26,23 @@ The `delete` method is used to remove a cached response from the cache associate
 
 ## The `StreamingCacheManager` trait
 
-The [`StreamingCacheManager`](https://docs.rs/http-cache/latest/http_cache/trait.StreamingCacheManager.html) trait extends the traditional `CacheManager` to support streaming operations for memory-efficient handling of large responses. It includes all the methods from `CacheManager` plus additional streaming-specific methods:
+The [`StreamingCacheManager`](https://docs.rs/http-cache/latest/http_cache/trait.StreamingCacheManager.html) trait supports memory-efficient handling of large responses. Rather than collecting bodies into memory, `get` returns a `Response<Self::Body>` whose body streams from the underlying storage.
 
-- `get_stream`: retrieve a cached response as a stream given the provided cache key
-- `put_stream`: store a streaming response in the cache associated with the provided cache key
-- `stream_response`: create a streaming response body from cached data
+Required items:
 
-The streaming approach is particularly useful for large responses where you don't want to buffer the entire response body in memory.
+- `type Body` — the body type returned by `get`; must implement `http_body::Body`
+- `get` — retrieve a cached response, body-as-stream
+- `put` — store a response, consuming its body
+- `convert_body` — produce a `Self::Body` from a generic upstream body for responses that are not being cached
+- `delete` — remove a cached entry
+- `empty_body` — produce an empty `Self::Body` (used for 504 responses on `OnlyIfCached` misses)
+- `body_to_bytes_stream` (behind the `streaming` feature) — adapt `Self::Body` into a `futures_util::Stream` for clients that prefer a bytes stream
+
+The streaming approach is particularly useful for large responses where you do not want to buffer the entire body in memory on a cache hit.
 
 ## How to implement a custom backend cache manager
 
-This guide shows examples of implementing both traditional and streaming cache managers. We'll use the [`CACacheManager`](https://github.com/06chaynes/http-cache/blob/main/http-cache/src/managers/cacache.rs) as an example of implementing the `CacheManager` trait for traditional disk-based caching, and the [`StreamingManager`](https://github.com/06chaynes/http-cache/blob/main/http-cache/src/managers/streaming_cache.rs) as an example of implementing the `StreamingManager` trait for streaming support that stores response metadata and body content separately to enable memory-efficient handling of large responses. There are several ways to accomplish this, so feel free to experiment!
+This guide shows examples of implementing both traditional and streaming cache managers. The traditional example is based on [`CACacheManager`](https://github.com/06chaynes/http-cache/blob/main/http-cache/src/managers/cacache.rs). The streaming example below is a **simplified illustrative implementation** to demonstrate the shape of the trait — the real [`StreamingManager`](https://github.com/06chaynes/http-cache/blob/main/http-cache/src/managers/streaming_cache.rs) uses a different design (redb for metadata, raw files for bodies with a nonce header for crash-detection, moka as an in-memory hot cache). Read that source for a production reference; there are several ways to satisfy the trait.
 
 ### Part One: The base structs
 
@@ -58,23 +64,14 @@ pub struct CACacheManager {
 For streaming caching, we'll use a struct that stores the root path for the cache directory and organizes content separately:
 
 ```rust
-/// File-based streaming cache manager
+/// File-based streaming cache manager (illustrative)
 #[derive(Debug, Clone)]
 pub struct StreamingManager {
     root_path: PathBuf,
-    ref_counter: ContentRefCounter,
-    config: StreamingCacheConfig,
 }
 ```
 
-The `StreamingManager` follows a **"simple and reliable"** design philosophy:
-
-- **Focused functionality**: Core streaming operations without unnecessary complexity
-- **Simple configuration**: Minimal options with sensible defaults
-- **Predictable behavior**: Straightforward LRU eviction and error handling
-- **Easy maintenance**: Clean code paths for debugging and troubleshooting
-
-This approach prioritizes maintainability and reliability over feature completeness, making it easier to understand, debug, and extend.
+This illustrative implementation favors simplicity: metadata stored as JSON, content hashed and stored in a separate directory, no eviction logic. A production implementation — like the real `StreamingManager` — may add concerns such as crash-safety (atomic rename + fsync), an in-memory hot cache, and bounded memory use on reads. Start simple; layer concerns in as you need them.
 
 For traditional caching, we use a simple `Store` struct that contains both the response and policy together:
 
@@ -97,6 +94,7 @@ pub struct CacheMetadata {
     pub version: u8,
     pub headers: HashMap<String, String>,
     pub content_digest: String,
+    pub body_size: u64,
     pub policy: CachePolicy,
     pub created_at: u64,
 }
@@ -156,7 +154,7 @@ impl CacheManager for CACacheManager {
 
 ### Part Three: Implementing the `StreamingCacheManager` trait
 
-For streaming caching that handles large responses without buffering them entirely in memory, you implement the `StreamingCacheManager` trait. The `StreamingCacheManager` trait extends `CacheManager` with streaming-specific methods. We'll start with the implementation signature:
+For streaming caching that handles large responses without buffering them entirely in memory, you implement the `StreamingCacheManager` trait. It is a **separate** trait from `CacheManager` (not a supertrait extension) — a type typically implements either one or the other, not both. We'll start with the implementation signature:
 
 ```rust
 impl StreamingCacheManager for StreamingManager {
@@ -170,21 +168,9 @@ First, let's implement some helper methods that our cache will need:
 
 ```rust
 impl StreamingManager {
-    /// Create a new streaming cache manager with default configuration
+    /// Create a new streaming cache manager.
     pub fn new(root_path: PathBuf) -> Self {
-        Self::new_with_config(root_path, StreamingCacheConfig::default())
-    }
-
-    /// Create a new streaming cache manager with custom configuration
-    pub fn new_with_config(
-        root_path: PathBuf,
-        config: StreamingCacheConfig,
-    ) -> Self {
-        Self { 
-            root_path, 
-            ref_counter: ContentRefCounter::new(), 
-            config 
-        }
+        Self { root_path }
     }
 
     /// Get the path for storing metadata
@@ -254,8 +240,11 @@ async fn get(
         }
     }
 
-    // Create streaming body from file
-    let body = StreamingBody::from_file(file);
+    // Create streaming body from file. The `from_file_with_size` constructor
+    // requires the caller to have already positioned the file cursor at the
+    // start of the body bytes and to supply the exact body length.
+    let body_size = metadata.body_size;
+    let body = StreamingBody::from_file_with_size(file, body_size);
     let response = response_builder.body(body)?;
 
     Ok(Some((response, metadata.policy)))
@@ -313,6 +302,7 @@ where
             })
             .collect(),
         content_digest: content_digest.clone(),
+        body_size: body_bytes.len() as u64,
         policy,
         created_at: std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -357,4 +347,4 @@ async fn delete(&self, cache_key: &str) -> Result<()> {
 }
 ```
 
-Our `StreamingManager` struct now meets the requirements of both the `CacheManager` and `StreamingCacheManager` traits and provides streaming support without buffering large response bodies in memory!
+Our `StreamingManager` struct now meets the requirements of the `StreamingCacheManager` trait and provides streaming support without buffering large response bodies in memory on read.

@@ -7,7 +7,7 @@ jobs:
     name: Build and deploy site
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
       - uses: dtolnay/rust-toolchain@stable
@@ -19,7 +19,7 @@ jobs:
           oranda build
 
       - name: Deploy to Github Pages
-        uses: JamesIves/github-pages-deploy-action@v4.7.3
+        uses: JamesIves/github-pages-deploy-action@v4
         if: ${{ github.ref == 'refs/heads/main' }}
         with:
           branch: gh-pages

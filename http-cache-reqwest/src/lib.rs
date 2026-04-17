@@ -281,7 +281,7 @@ pub type ReqwestStreamingError = http_cache::ClientStreamingError;
 #[cfg(feature = "streaming")]
 use http_cache::StreamingCacheManager;
 
-use std::{convert::TryInto, str::FromStr, time::SystemTime};
+use std::{str::FromStr, time::SystemTime};
 
 pub use http::request::Parts;
 use http::{

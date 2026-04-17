@@ -1,16 +1,21 @@
 //! Basic HTTP caching with surf
 //!
 //! Run with: cargo run --example surf_basic --features manager-cacache
+//!
+//! This example runs the surf middleware inside a tokio runtime so that
+//! `CACacheManager` (which delegates to `cacache` compiled with its
+//! `tokio-runtime` feature) has a reactor available for its internal
+//! `tokio::fs` operations. Surf is runtime-agnostic when using the
+//! `curl-client` backend (curl maintains its own I/O thread), so running
+//! it inside tokio works fine.
 
 use http_cache::{CacheMode, HttpCache, HttpCacheOptions};
 use http_cache_surf::{CACacheManager, Cache};
-use macro_rules_attribute::apply;
-use smol_macros::main;
 use std::time::Instant;
 use surf::Client;
 use wiremock::{matchers::method, Mock, MockServer, ResponseTemplate};
 
-#[apply(main!)]
+#[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Setup mock server with cacheable response
     let mock_server = MockServer::start().await;

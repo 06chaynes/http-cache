@@ -79,8 +79,8 @@ use bytes::Bytes;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Create a streaming cache manager (in-memory with 1000 entry capacity)
-    let streaming_manager = StreamingManager::in_memory(1000).await?;
+    // Create a streaming cache manager (disk-backed; uses a temp dir here)
+    let streaming_manager = StreamingManager::with_temp_dir(1000).await?;
 
     // Create the streaming cache layer
     let cache_layer = HttpCacheStreamingLayer::new(streaming_manager);
@@ -94,7 +94,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             )
         });
 
-    // Use the service - responses are streamed without buffering entire body
+    // Cache hits stream from disk without loading the full body into memory.
+    // Writes buffer the body up to max_body_size before committing to disk.
     let request = Request::builder()
         .uri("https://example.com/large-file")
         .body(Full::new(Bytes::new()))?;

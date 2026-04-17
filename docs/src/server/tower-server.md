@@ -19,6 +19,9 @@ cargo add http-cache-tower-server
 
 - `manager-cacache`: (default) Enables the [`CACacheManager`](https://docs.rs/http-cache/latest/http_cache/struct.CACacheManager.html) backend cache manager.
 - `manager-moka`: Enables the [`MokaManager`](https://docs.rs/http-cache/latest/http_cache/struct.MokaManager.html) backend cache manager.
+- `manager-foyer`: Enables the [`FoyerManager`](https://docs.rs/http-cache/latest/http_cache/struct.FoyerManager.html) backend cache manager.
+- `rate-limiting`: Enables cache-aware rate limiting.
+- `url-ada`: URL parsing via the `ada-url` crate (avoids Unicode/IDNA license). Mutually exclusive with the default `url-standard`.
 
 ## Basic Usage with Axum
 

@@ -187,9 +187,9 @@ async fn remote_fetch(&mut self) -> Result<HttpResponse> {
     let url = self.req.url().clone();
     let mut res =
         self.next.run(self.req.clone(), self.client.clone()).await?;
-    let mut headers = HashMap::new();
+    let mut headers = HttpHeaders::new();
     for header in res.iter() {
-        headers.insert(
+        headers.append(
             header.0.as_str().to_owned(),
             header.1.as_str().to_owned(),
         );
@@ -203,6 +203,7 @@ async fn remote_fetch(&mut self) -> Result<HttpResponse> {
         status,
         url,
         version: version.try_into()?,
+        metadata: None,
     })
 }
 ```

@@ -777,6 +777,7 @@ mod with_moka {
 
             // Should result in a cache miss and no remote request
             let res = client.send(req).await?;
+            assert_eq!(res.status(), 504);
             assert_eq!(res.header(XCACHELOOKUP).unwrap(), MISS);
             assert_eq!(res.header(XCACHE).unwrap(), MISS);
 
@@ -847,7 +848,7 @@ mod with_moka {
                     .insert_header("content-type", "text/plain")
                     // HEAD responses should not have a body
             )
-            .expect(2); // Expect 2 calls to verify the second one is cached
+            .expect(1); // Expect 1 call since the second one should be cached
         let _mock_guard = mock_server.register_as_scoped(m).await;
         let url = format!("{}/", &mock_server.uri());
         let manager = MokaManager::default();
@@ -1095,7 +1096,7 @@ mod with_moka {
                 Box::pin(async move {
                     self.calls.lock().unwrap().push(key);
                     if !self.delay.is_zero() {
-                        std::thread::sleep(self.delay);
+                        tokio::time::sleep(self.delay).await;
                     }
                 })
             }

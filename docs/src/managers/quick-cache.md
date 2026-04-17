@@ -82,6 +82,7 @@ let response = HttpResponse {
     status: 200,
     url: url.clone(),
     version: HttpVersion::Http11,
+    metadata: None,
 };
 let req = http::Request::get("http://example.com").body(())?;
 let res = http::Response::builder()

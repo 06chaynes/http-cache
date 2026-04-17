@@ -37,7 +37,7 @@ The following features are available. By default `manager-cacache` and `url-stan
 - `manager-cacache` (default): enable [cacache](https://github.com/zkat/cacache-rs), a high-performance disk cache, backend manager.
 - `manager-moka` (disabled): enable [moka](https://github.com/moka-rs/moka), a high-performance in-memory cache, backend manager.
 - `manager-foyer` (disabled): enable [foyer](https://github.com/foyer-rs/foyer), a hybrid in-memory + disk cache, backend manager.
-- `streaming` (disabled): enable streaming cache support using [cacache](https://github.com/zkat/cacache-rs) for disk storage with [moka](https://github.com/moka-rs/moka) for metadata tracking and TinyLFU eviction.
+- `streaming` (disabled): enable streaming cache support. Metadata is stored in an embedded [redb](https://github.com/cberner/redb) database; response bodies are written as raw files on disk. [moka](https://github.com/moka-rs/moka) fronts redb as an in-memory hot cache for metadata.
 - `rate-limiting` (disabled): enable rate limiting functionality with [governor](https://github.com/boinkor-net/governor).
 - `url-standard` (default): enable [url](https://github.com/servo/rust-url) for URL parsing.
 - `url-ada` (disabled): enable [ada-url](https://github.com/ada-url/rust) for WHATWG-compliant URL parsing (avoids Unicode/IDNA license).

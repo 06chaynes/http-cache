@@ -22,7 +22,7 @@ jobs:
     name: Check formatting
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: "rustfmt"
@@ -39,7 +39,7 @@ jobs:
           - macos-latest
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - run: |
           cargo test --all-targets --no-default-features --features manager-cacache,manager-moka,manager-foyer,rate-limiting,http-headers-compat,url-standard
@@ -50,7 +50,7 @@ jobs:
     needs: [fmt, test]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: "clippy"
@@ -63,7 +63,7 @@ jobs:
     needs: [fmt, test]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@nightly
         env:
           RUSTDOCFLAGS: --cfg docsrs -Dwarnings

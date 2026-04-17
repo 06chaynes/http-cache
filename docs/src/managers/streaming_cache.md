@@ -1,23 +1,21 @@
 # StreamingManager (Streaming Cache)
 
-[`StreamingManager`](https://github.com/06chaynes/http-cache/blob/main/http-cache/src/managers/streaming_cache.rs) is a streaming cache manager that combines [cacache](https://github.com/zkat/cacache-rs) for disk storage with [moka](https://github.com/moka-rs/moka) for metadata tracking and TinyLFU eviction.
+[`StreamingManager`](https://github.com/06chaynes/http-cache/blob/main/http-cache/src/managers/streaming_cache.rs) is a streaming cache manager. Metadata is stored in an embedded [redb](https://github.com/cberner/redb) database; response bodies are written as raw files on disk. [moka](https://github.com/moka-rs/moka) sits in front of redb as an in-memory hot cache of deserialized metadata.
 
 ## Key Features
 
 - **True streaming on read**: Cached responses are streamed from disk in 64KB chunks, not loaded fully into memory
-- **TinyLFU eviction**: Better hit rates than simple LRU by filtering out one-hit wonders
-- **Content deduplication**: Automatic via cacache's content-addressed storage
-- **Integrity verification**: Cached data is verified on read
-- **Body size limits**: Configurable maximum body size to prevent memory exhaustion
-- **Backpressure handling**: Eviction cleanup uses bounded channels to prevent task accumulation
+- **Persistence across restarts**: redb is an ACID-transactional embedded KV store; cache entries survive process restarts
+- **TinyLFU hot-metadata cache**: moka in front of redb uses TinyLFU admission to keep hot metadata warm in RAM
+- **Overwrite-crash detection**: every body file is prefixed with a 16-byte nonce stored alongside metadata. On read, the nonce and body length are verified before streaming; a mismatch triggers self-heal
+- **Body size limits**: configurable maximum body size to prevent memory exhaustion during writes
+- **Single-instance invariant**: redb's own exclusive file lock on `metadata.redb` prevents two processes from opening the same cache directory at once
 
 ## Important: Write-Path Buffering
 
-While cached responses are streamed on **read** (GET), the **write** path (PUT) requires buffering the entire response body in memory. This is necessary to:
-- Compute the content hash for cacache's content-addressed storage
-- Enable content deduplication
+While cached responses are streamed on **read** (GET), the **write** path (PUT) requires buffering the entire response body in memory. The body is staged to a temporary file, `fsync`ed, then atomically renamed into place before the redb metadata transaction commits.
 
-For very large responses, configure the `max_body_size` limit to prevent OOM. Memory usage during PUT is O(response_size), not O(buffer_size). The default limit is 100MB.
+For very large responses, configure the `max_body_size` limit to prevent OOM. Memory usage during PUT is O(response_size). The default limit is 100MB.
 
 ## Getting Started
 
@@ -39,7 +37,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create a streaming cache manager with disk storage
     let manager = StreamingManager::new(
         PathBuf::from("./cache"),  // Cache directory
-        10_000,                     // Max entries
+        10_000,                     // Moka hot-cache capacity (warm metadata entries)
     ).await?;
 
     // Or use with_temp_dir() for testing (uses temp directory)
@@ -60,24 +58,70 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ```text
 ┌─────────────────────────────────────────────────────────────────┐
-│  moka::Cache<String, CacheMetadata>  (in-memory)               │
-│  - Tracks: key → {content_hash, policy, headers, size}         │
-│  - TinyLFU eviction (better hit rates than LRU)                │
-│  - Eviction listener sends to bounded cleanup channel          │
+│  moka::Cache<String, CacheMetadata>  (in-memory hot cache)      │
+│  - TinyLFU admission; capacity bounds RAM use                   │
+│  - Eviction drops RAM only — disk state is unaffected           │
+└─────────────────────────────────────────────────────────────────┘
+                          │  miss → fall through
+                          ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  redb (metadata.redb)                                           │
+│  - ACID-transactional embedded B-tree KV store                  │
+│  - key → postcard(CacheMetadata) { status, headers, policy,    │
+│                                     body_size, nonce, ... }     │
+│  - Exclusive file lock (single-writer per cache_dir)            │
 └─────────────────────────────────────────────────────────────────┘
                           │
                           ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│  cacache (disk)                                                 │
-│  - Content-addressed storage (automatic deduplication)         │
-│  - Streaming reads via AsyncRead (64KB chunks)                 │
-│  - Integrity verification built-in                              │
+│  bodies/<prefix>/<blake3(key)>.bin   (raw files)                │
+│  - Format: [16-byte nonce][body bytes]                          │
+│  - Streaming reads via tokio::fs::File (AsyncRead, 64KB buffer) │
+│  - Overwrites atomically replace prior content (rename)         │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
+## On-Disk Layout
+
+```text
+$cache_dir/
+├── metadata.redb           # redb database (key → postcard-encoded metadata)
+├── bodies/                 # body files, sharded by blake3(key) prefix
+│   ├── 0a/
+│   │   └── 0a1b2c3d….bin   # [16-byte nonce][body bytes]
+│   └── …
+└── tmp/                    # staging directory for in-flight body writes
+```
+
+The `body_hash = blake3(cache_key)` is deterministic from the cache key, so overwrites to the same key target the same final path — the atomic rename replaces prior content without leaving orphans.
+
+## Crash Safety
+
+Put ordering is strictly:
+
+1. Write `[16-byte nonce][body bytes]` to `tmp/<body_hash>.<rand>.tmp` (the tmp suffix is a random `u64` distinct from the crash-detection nonce, used only to prevent tmp-file collisions between concurrent puts)
+2. `fsync` the tmp file
+3. Atomic `rename` → `bodies/<prefix>/<body_hash>.bin`
+4. Commit the redb metadata transaction
+5. Update moka hot cache
+
+If a crash occurs mid-sequence:
+
+- Before step 3: `.tmp` file is swept on next startup
+- After step 3 but before step 4: for a new key, metadata is absent so `get` returns `None` (body is orphaned, reclaimable by a future GC); for an overwrite, the body file has been replaced but redb holds old metadata — the nonce mismatch on the next `get` triggers self-heal
+- After step 4: disk state is consistent
+
+The 16-byte nonce written as the file header is regenerated per-put and compared to the nonce stored in `CacheMetadata` on every `get`. A mismatch (indicating the body file was replaced without the metadata commit landing) causes `get` to remove the redb row, invalidate moka, and return `Ok(None)`.
+
+## Single-Instance Invariant
+
+Only one `StreamingManager` may point at a given cache directory at a time. Construction of a second instance against the same `cache_dir` while the first is alive returns an error — enforced by redb's exclusive file lock on `metadata.redb`.
+
+This is a local-filesystem guarantee. Advisory file locks are unreliable on NFS, some container overlay filesystems, and some exotic setups — do not share a cache directory across hosts.
+
 ## Memory Efficiency
 
-**On cache hit (GET):** Only ~64KB is held in memory at a time (the streaming buffer), regardless of response size:
+**On cache hit (GET):** only ~64KB is held in memory at a time (the streaming buffer), regardless of response size:
 
 | Response Size | Peak Memory (Buffered) | Peak Memory (Streaming GET) |
 |---------------|------------------------|-----------------------------|
@@ -86,7 +130,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 | 10MB | 10MB | ~64KB |
 | 100MB | 100MB | ~64KB |
 
-**On cache write (PUT):** The entire response body is buffered in memory to compute the content hash. This is limited by `max_body_size` (default: 100MB) to prevent memory exhaustion.
+**On cache write (PUT):** the entire response body is buffered in memory before the atomic file write. This is limited by `max_body_size` (default: 100MB) to prevent memory exhaustion.
 
 ## Usage with Tower
 
@@ -101,16 +145,13 @@ use std::path::PathBuf;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Create streaming cache manager
     let manager = StreamingManager::new(
         PathBuf::from("./cache"),
         10_000,
     ).await?;
 
-    // Create streaming cache layer
     let cache_layer = HttpCacheStreamingLayer::new(manager);
 
-    // Your base service
     let service = tower::service_fn(|_req: Request<Full<Bytes>>| async {
         Ok::<_, std::convert::Infallible>(
             Response::builder()
@@ -120,10 +161,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
     });
 
-    // Wrap with caching
     let cached_service = cache_layer.layer(service);
 
-    // Make requests
     let request = Request::builder()
         .uri("https://example.com/api")
         .body(Full::new(Bytes::new()))?;
@@ -180,14 +219,12 @@ use std::path::PathBuf;
 
 let manager = StreamingManager::new(PathBuf::from("./cache"), 10_000).await?;
 
-// Create a response to cache
 let response = Response::builder()
     .status(StatusCode::OK)
     .header("cache-control", "max-age=3600, public")
     .header("content-type", "application/json")
     .body(Full::new(Bytes::from(r#"{"data": "example"}"#)))?;
 
-// Create cache policy
 let request = Request::builder()
     .method("GET")
     .uri("https://example.com/api")
@@ -197,7 +234,6 @@ let policy = CachePolicy::new(&request, &Response::builder()
     .header("cache-control", "max-age=3600, public")
     .body(vec![])?);
 
-// Cache the response
 let url = Url::parse("https://example.com/api")?;
 let cached_response = manager.put(
     "GET:https://example.com/api".to_string(),
@@ -211,14 +247,13 @@ let cached_response = manager.put(
 ### Retrieving a cached response
 
 ```rust
-// Retrieve from cache - body is streamed from disk!
+// Retrieve from cache — body is streamed from disk
 let cached = manager.get("GET:https://example.com/api").await?;
 
 if let Some((response, policy)) = cached {
     println!("Cache hit! Status: {}", response.status());
 
-    // The response body streams from disk in 8KB chunks
-    // Memory usage stays constant regardless of body size
+    // The body streams from the on-disk file; memory stays bounded
     use http_body_util::BodyExt;
     let body = response.into_body();
     let bytes = body.collect().await?.to_bytes();
@@ -231,45 +266,37 @@ if let Some((response, policy)) = cached {
 ### Deleting cached entries
 
 ```rust
-// Remove from cache
 manager.delete("GET:https://example.com/api").await?;
 ```
 
 ### Cache management
 
 ```rust
-// Get the number of entries
-let count = manager.entry_count();
+// Number of entries currently warm in the in-memory hot cache.
+// NOT the total number of entries persisted to disk — cold entries
+// remain reachable via `get` but are not counted here.
+let warm_count = manager.entry_count();
 
-// Clear all entries
+// Clear all entries (moka, redb, and on-disk bodies)
 manager.clear().await?;
 
-// Run pending maintenance tasks
+// Run pending moka maintenance tasks
 manager.run_pending_tasks().await;
 ```
 
-## Content Deduplication
+## No Content Deduplication
 
-The cacache backend automatically deduplicates content. If two different URLs return the same response body, it's only stored once on disk:
-
-```text
-Request 1: GET /api/users → 1MB response (hash: abc123)
-  └─ metadata/key1.json → points to content/abc123
-
-Request 2: GET /api/users?v=2 → Same 1MB response (hash: abc123)
-  └─ metadata/key2.json → points to content/abc123 (same file!)
-
-Storage: 1MB (not 2MB)
-```
+Unlike the previous cacache-based implementation, this design stores a separate body file per cache key. Two different keys with identical bodies produce two separate files on disk. This is an acceptable tradeoff for an HTTP cache, where distinct URLs almost always yield distinct bodies, in exchange for simpler semantics: overwrites to the same key atomically replace prior content without orphan tracking.
 
 ## Comparison with Buffered Caching
 
 | Aspect | CACacheManager (Buffered) | StreamingManager |
 |--------|---------------------------|------------------|
 | **Memory on GET** | Full body in memory | ~64KB streaming buffer |
-| **Memory on PUT** | Full body in memory | Full body in memory (limited by max_body_size) |
-| **Eviction** | Manual/None | TinyLFU (automatic) |
-| **Content Dedup** | Yes (cacache) | Yes (cacache) |
-| **Large responses** | May OOM | Configurable limit, streaming on read |
+| **Memory on PUT** | Full body in memory | Full body in memory (limited by `max_body_size`) |
+| **Persistence** | Yes | Yes (redb) |
+| **Hot-cache eviction** | None | TinyLFU (moka) for metadata only; disk state unaffected |
+| **Content dedup** | Yes (cacache) | No (per-key body files) |
 | **Body size limit** | None | Configurable (default 100MB) |
-| **Use case** | Small responses | Large responses |
+| **Multi-process** | Supported via cacache | Single-instance per cache_dir (redb lock) |
+| **Use case** | Small responses, dedup-heavy workloads | Large responses, long-lived caches |

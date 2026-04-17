@@ -1,16 +1,20 @@
 # Changelog
 
-## [1.0.0-alpha.6] - 2026-04-04
+## [1.0.0-alpha.6] - 2026-04-17
 
 ### Changed
 
 - Updated `http-cache` dependency to 1.0.0-alpha.6
-- Removed `async-trait` usage from `Middleware` trait implementation
+- Removed `async-trait` from http-cache core `Middleware` trait (still required by `reqwest-middleware`)
 - Removed `httpdate` dependency
+- Streaming middleware now delegates to core `HttpStreamingCache::run` orchestrator
+- Response extensions preserved through streaming body conversion
 
 ### Fixed
 
 - Headers no longer duplicated on revalidation requests when using custom headers
+- RFC 7234 s4.4: cache invalidation moved to after successful response, gated on unsafe methods
+- Cache status headers now gated on `cache_status_headers` option in non-cacheable path
 
 ## [1.0.0-alpha.5] - 2026-02-17
 

@@ -67,7 +67,7 @@ use http_cache::StreamingManager;
 #[cfg(feature = "streaming")]
 #[tokio::main]
 async fn main() -> reqwest_middleware::Result<()> {
-    let streaming_manager = StreamingManager::in_memory(1000).await.unwrap();
+    let streaming_manager = StreamingManager::with_temp_dir(1000).await.unwrap();
     let client = ClientBuilder::new(Client::new())
         .with(StreamingCache::new(
             streaming_manager,

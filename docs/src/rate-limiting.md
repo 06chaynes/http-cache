@@ -145,14 +145,12 @@ use http_cache_surf::{Cache, HttpCache, CACacheManager, CacheMode, HttpCacheOpti
 use http_cache_surf::{DomainRateLimiter, Quota};
 use surf::Client;
 use std::sync::Arc;
-use macro_rules_attribute::apply;
-use smol_macros::main;
 
-#[apply(main!)]
+#[tokio::main(flavor = "current_thread")]
 async fn main() -> surf::Result<()> {
     let quota = Quota::per_second(std::num::NonZeroU32::new(5).unwrap());
     let rate_limiter = Arc::new(DomainRateLimiter::new(quota));
-    
+
     let client = Client::new()
         .with(Cache(HttpCache {
             mode: CacheMode::Default,
@@ -213,10 +211,12 @@ use http_cache_ureq::{DomainRateLimiter, Quota};
 use std::sync::Arc;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let tokio_rt = tokio::runtime::Runtime::new()?;
+    let _tokio_guard = tokio_rt.enter();
     smol::block_on(async {
         let quota = Quota::per_second(std::num::NonZeroU32::new(5).unwrap());
         let rate_limiter = Arc::new(DomainRateLimiter::new(quota));
-        
+
         let agent = CachedAgent::builder()
             .cache_manager(CACacheManager::new("./cache".into(), true))
             .cache_mode(CacheMode::Default)
@@ -267,7 +267,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let quota = Quota::per_second(std::num::NonZeroU32::new(2).unwrap());
     let rate_limiter = Arc::new(DomainRateLimiter::new(quota));
 
-    let streaming_manager = StreamingManager::in_memory(1000).await?;
+    let streaming_manager = StreamingManager::with_temp_dir(1000).await?;
     
     let client = ClientBuilder::new(reqwest::Client::new())
         .with(StreamingCache::with_options(
@@ -306,7 +306,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let quota = Quota::per_second(std::num::NonZeroU32::new(3).unwrap());
     let rate_limiter = Arc::new(DomainRateLimiter::new(quota));
 
-    let streaming_manager = StreamingManager::in_memory(1000).await?;
+    let streaming_manager = StreamingManager::with_temp_dir(1000).await?;
     
     let layer = HttpCacheStreamingLayer::with_options(
         streaming_manager,

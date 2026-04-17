@@ -1,12 +1,20 @@
 //! Basic HTTP caching with ureq
 //!
 //! Run with: cargo run --example ureq_basic --features manager-cacache
+//!
+//! Note: `CACacheManager` delegates to the `cacache` crate, which is compiled
+//! with its `tokio-runtime` feature. This example uses smol::block_on for the
+//! async body, so we install a tokio runtime alongside and enter its context —
+//! that way cacache's `tokio::fs` operations find a reactor while the rest of
+//! the example continues to run on smol.
 
 use http_cache_ureq::{CACacheManager, CachedAgent};
 use std::time::Instant;
 use wiremock::{matchers::method, Mock, MockServer, ResponseTemplate};
 
 fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let tokio_rt = tokio::runtime::Runtime::new()?;
+    let _tokio_guard = tokio_rt.enter();
     smol::block_on(async {
         // Setup mock server with cacheable response
         let mock_server = MockServer::start().await;
