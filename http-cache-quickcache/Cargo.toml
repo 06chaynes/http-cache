@@ -41,7 +41,7 @@ http-body = "1.0.1"
 http-body-util = "0.1.2"
 futures = "0.3.31"
 tower = "0.5.1"
-tower-http = { version = "0.6.2", features = ["trace"] }
+tower-http = { version = "0.7.0", features = ["trace"] }
 tower-service = "0.3.3"
 hyper = "1.5.1"
 url = { version = "2.5.4", features = ["serde"] }
