@@ -445,6 +445,145 @@ mod cacache_bincode_graceful_miss {
     }
 }
 
+#[cfg(feature = "manager-redb")]
+mod with_redb {
+
+    use super::*;
+    use crate::{CacheManager, RedbManager};
+
+    use http_cache_semantics::CachePolicy;
+
+    fn sample_response(url: &Url) -> HttpResponse {
+        HttpResponse {
+            body: TEST_BODY.to_vec(),
+            headers: Default::default(),
+            status: 200,
+            url: url.clone(),
+            version: HttpVersion::Http11,
+            metadata: Some(b"Metadata".to_vec()),
+        }
+    }
+
+    #[tokio::test]
+    async fn redb() -> Result<()> {
+        let url = url_parse("http://example.com")?;
+        let cache_dir = tempfile::tempdir().unwrap();
+        let manager = RedbManager::new(cache_dir.path().join("cache.redb"))?;
+        let http_res = sample_response(&url);
+        let req = http::Request::get("http://example.com").body(())?;
+        let res =
+            http::Response::builder().status(200).body(TEST_BODY.to_vec())?;
+        let policy = CachePolicy::new(&req, &res);
+        manager
+            .put(format!("{}:{}", GET, &url), http_res.clone(), policy.clone())
+            .await?;
+        let data = manager.get(&format!("{}:{}", GET, &url)).await?;
+        assert!(data.is_some());
+        let test_data = data.unwrap();
+        assert_eq!(test_data.0.body, TEST_BODY);
+        assert_eq!(test_data.0.metadata, Some(b"Metadata".to_vec()));
+        // The CachePolicy round-trips through postcard intact.
+        assert_eq!(test_data.1.is_storable(), policy.is_storable());
+        let clone = manager.clone();
+        let clonedata = clone.get(&format!("{}:{}", GET, &url)).await?;
+        assert!(clonedata.is_some());
+        assert_eq!(clonedata.unwrap().0.body, TEST_BODY);
+        manager.delete(&format!("{}:{}", GET, &url)).await?;
+        let data = manager.get(&format!("{}:{}", GET, &url)).await?;
+        assert!(data.is_none());
+
+        manager.put(format!("{}:{}", GET, &url), http_res, policy).await?;
+        manager.clear().await?;
+        let data = manager.get(&format!("{}:{}", GET, &url)).await?;
+        assert!(data.is_none());
+        // Clone shares the same live database, so it sees the clear too.
+        assert!(clone.get(&format!("{}:{}", GET, &url)).await?.is_none());
+        Ok(())
+    }
+
+    // Persistence across instances is the key property over in-memory managers:
+    // a fresh manager opening the same file must see previously stored entries.
+    #[tokio::test]
+    async fn redb_persists_across_instances() -> Result<()> {
+        let url = url_parse("http://example.com/persist")?;
+        let cache_dir = tempfile::tempdir().unwrap();
+        let db_path = cache_dir.path().join("cache.redb");
+        let key = format!("{}:{}", GET, &url);
+        let req = http::Request::get("http://example.com/persist").body(())?;
+        let res =
+            http::Response::builder().status(200).body(TEST_BODY.to_vec())?;
+        let policy = CachePolicy::new(&req, &res);
+
+        {
+            let manager = RedbManager::new(&db_path)?;
+            manager.put(key.clone(), sample_response(&url), policy).await?;
+            // drop releases redb's exclusive file lock
+        }
+
+        let manager = RedbManager::new(&db_path)?;
+        let data = manager.get(&key).await?;
+        assert!(data.is_some(), "entry should persist across instances");
+        assert_eq!(data.unwrap().0.body, TEST_BODY);
+        Ok(())
+    }
+
+    // An undecodable stored entry must be treated as a cache miss, not an
+    // error (mirrors the corrupt-data tests of the other managers).
+    #[tokio::test]
+    async fn redb_corrupt_data_returns_none() -> Result<()> {
+        use redb::Database;
+
+        let cache_dir = tempfile::tempdir().unwrap();
+        let db_path = cache_dir.path().join("cache.redb");
+        let key = "GET:http://example.com/corrupt";
+
+        // Initialize the database + table via the manager, then drop it to
+        // release redb's exclusive file lock.
+        drop(RedbManager::new(&db_path)?);
+
+        // Write undecodable bytes for the key directly into the same table the
+        // manager reads from.
+        {
+            let db = Database::create(&db_path)?;
+            let write_txn = db.begin_write()?;
+            {
+                let mut table =
+                    write_txn.open_table(crate::managers::redb::TABLE)?;
+                table.insert(key, b"not valid postcard data".as_slice())?;
+            }
+            write_txn.commit()?;
+        }
+
+        let manager = RedbManager::new(&db_path)?;
+        let result = manager.get(key).await?;
+        assert!(result.is_none());
+        Ok(())
+    }
+
+    // The manager needs no tokio reactor: drive it on a non-tokio executor
+    // (smol, as used by http-cache-ureq / Bevy) with no tokio runtime present.
+    #[test]
+    fn redb_works_without_tokio_runtime() -> Result<()> {
+        smol::block_on(async {
+            let url = url_parse("http://example.com/smol")?;
+            let cache_dir = tempfile::tempdir().unwrap();
+            let manager =
+                RedbManager::new(cache_dir.path().join("cache.redb"))?;
+            let key = format!("{}:{}", GET, &url);
+            let req = http::Request::get("http://example.com/smol").body(())?;
+            let res = http::Response::builder()
+                .status(200)
+                .body(TEST_BODY.to_vec())?;
+            let policy = CachePolicy::new(&req, &res);
+            manager.put(key.clone(), sample_response(&url), policy).await?;
+            let data = manager.get(&key).await?;
+            assert!(data.is_some());
+            assert_eq!(data.unwrap().0.body, TEST_BODY);
+            Ok(())
+        })
+    }
+}
+
 #[cfg(feature = "manager-moka")]
 mod with_moka {
     use super::*;

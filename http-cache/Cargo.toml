@@ -1,6 +1,6 @@
 [package]
 name = "http-cache"
-version = "1.0.0-alpha.6"
+version = "1.0.0-alpha.7"
 description = "An HTTP caching middleware"
 authors = ["Christian Haynes <06chaynes@gmail.com>", "Kat Marchán <kzm@zkat.tech>"]
 repository = "https://github.com/06chaynes/http-cache"
@@ -59,13 +59,14 @@ macro_rules_attribute = "0.2.0"
 smol-macros = "0.1.1"
 
 [features]
-default = ["manager-cacache", "url-standard"]
+default = ["manager-redb", "url-standard"]
 http-headers-compat = []
 url-standard = ["dep:url"]
 url-ada = ["dep:ada-url"]
 manager-cacache = ["cacache", "postcard", "tokio"]
 manager-moka = ["moka", "postcard"]
 manager-foyer = ["foyer", "postcard", "tokio"]
+manager-redb = ["redb", "postcard"]
 streaming = [
     "redb",
     "blake3",

@@ -26,9 +26,10 @@ cargo add http-cache-tower
 
 ## Features
 
-The following features are available. By default `manager-cacache` is enabled.
+The following features are available. By default `manager-redb` is enabled.
 
-- `manager-cacache` (default): enable [cacache](https://github.com/zkat/cacache-rs), a high-performance disk cache, backend manager.
+- `manager-redb` (default): enable [redb](https://github.com/cberner/redb), an embedded, persistent disk cache, backend manager.
+- `manager-cacache`: enable [cacache](https://github.com/zkat/cacache-rs), a high-performance disk cache, backend manager.
 - `manager-moka` (disabled): enable [moka](https://github.com/moka-rs/moka), a high-performance in-memory cache, backend manager.
 - `manager-foyer` (disabled): enable [foyer](https://github.com/foyer-rs/foyer), a hybrid in-memory + disk cache, backend manager.
 - `streaming` (disabled): enable streaming cache support for memory-efficient handling of large responses using `StreamingManager`.
@@ -41,17 +42,16 @@ The following features are available. By default `manager-cacache` is enabled.
 
 ```rust
 use http_cache_tower::HttpCacheLayer;
-use http_cache::CACacheManager;
+use http_cache::RedbManager;
 use tower::{ServiceBuilder, ServiceExt};
 use http::{Request, Response};
 use http_body_util::Full;
 use bytes::Bytes;
-use std::path::PathBuf;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create a cache manager
-    let cache_manager = CACacheManager::new(PathBuf::from("./cache"), false);
+    let cache_manager = RedbManager::new("./http-cache.redb")?;
 
     // Create the cache layer
     let cache_layer = HttpCacheLayer::new(cache_manager);
@@ -136,22 +136,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 This crate supports multiple cache backends through feature flags:
 
-- `manager-cacache` (default): Disk-based caching using [cacache](https://github.com/zkat/cacache-rs)
+- `manager-redb` (default): Persistent disk caching using [redb](https://github.com/cberner/redb)
+- `manager-cacache`: Disk-based caching using [cacache](https://github.com/zkat/cacache-rs)
 - `manager-moka`: In-memory caching using [moka](https://github.com/moka-rs/moka)
 
 ## Integration with Hyper Client
 
 ```rust
 use http_cache_tower::HttpCacheLayer;
-use http_cache::CACacheManager;
+use http_cache::RedbManager;
 use hyper_util::client::legacy::Client;
 use hyper_util::rt::TokioExecutor;
 use tower::{ServiceBuilder, ServiceExt};
-use std::path::PathBuf;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let cache_manager = CACacheManager::new(PathBuf::from("./cache"), false);
+    let cache_manager = RedbManager::new("./http-cache.redb")?;
     let cache_layer = HttpCacheLayer::new(cache_manager);
 
     let client = Client::builder(TokioExecutor::new()).build_http();

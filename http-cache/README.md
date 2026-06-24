@@ -10,7 +10,7 @@
 
 A caching middleware that follows HTTP caching rules,
 thanks to [http-cache-semantics](https://github.com/kornelski/rusty-http-cache-semantics).
-By default, it uses [cacache](https://github.com/zkat/cacache-rs) as the backend cache manager.
+By default, it uses [redb](https://github.com/cberner/redb) as the backend cache manager.
 
 ## How do I use this?
 
@@ -32,9 +32,10 @@ cargo add http-cache
 
 ## Features
 
-The following features are available. By default `manager-cacache` and `url-standard` are enabled.
+The following features are available. By default `manager-redb` and `url-standard` are enabled.
 
-- `manager-cacache` (default): enable [cacache](https://github.com/zkat/cacache-rs), a high-performance disk cache, backend manager.
+- `manager-redb` (default): enable [redb](https://github.com/cberner/redb), an embedded, persistent disk cache, backend manager.
+- `manager-cacache`: enable [cacache](https://github.com/zkat/cacache-rs), a high-performance disk cache, backend manager.
 - `manager-moka` (disabled): enable [moka](https://github.com/moka-rs/moka), a high-performance in-memory cache, backend manager.
 - `manager-foyer` (disabled): enable [foyer](https://github.com/foyer-rs/foyer), a hybrid in-memory + disk cache, backend manager.
 - `streaming` (disabled): enable streaming cache support. Metadata is stored in an embedded [redb](https://github.com/cberner/redb) database; response bodies are written as raw files on disk. [moka](https://github.com/moka-rs/moka) fronts redb as an in-memory hot cache for metadata.
@@ -51,7 +52,7 @@ If you need to avoid the Unicode license, use `url-ada` instead:
 
 ```toml
 [dependencies]
-http-cache = { version = "1.0", default-features = false, features = ["manager-cacache", "url-ada"] }
+http-cache = { version = "1.0", default-features = false, features = ["manager-redb", "url-ada"] }
 ```
 
 **Breaking change for `default-features = false` users**: You must now explicitly enable either `url-standard` or `url-ada`.

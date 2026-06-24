@@ -473,6 +473,9 @@ pub use managers::moka::MokaManager;
 #[cfg(feature = "manager-foyer")]
 pub use managers::foyer::FoyerManager;
 
+#[cfg(feature = "manager-redb")]
+pub use managers::redb::RedbManager;
+
 #[cfg(feature = "rate-limiting")]
 pub use rate_limiting::{
     CacheAwareRateLimiter, DirectRateLimiter, DomainRateLimiter,

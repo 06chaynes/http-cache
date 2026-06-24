@@ -10,7 +10,8 @@ cargo add http-cache-tower
 
 ## Features
 
-- `manager-cacache`: (default) Enables the [`CACacheManager`](https://docs.rs/http-cache/latest/http_cache/struct.CACacheManager.html) backend cache manager.
+- `manager-redb`: (default) Enables the [`RedbManager`](https://docs.rs/http-cache/latest/http_cache/struct.RedbManager.html) backend cache manager.
+- `manager-cacache`: Enables the [`CACacheManager`](https://docs.rs/http-cache/latest/http_cache/struct.CACacheManager.html) backend cache manager.
 - `manager-moka`: Enables the [`MokaManager`](https://docs.rs/http-cache/latest/http_cache/struct.MokaManager.html) backend cache manager.
 - `manager-foyer`: Enables the [`FoyerManager`](https://docs.rs/http-cache/latest/http_cache/struct.FoyerManager.html) backend cache manager.
 - `streaming`: Enables streaming cache support for memory-efficient handling of large response bodies.
@@ -23,17 +24,16 @@ Here's a basic example using the regular HTTP cache layer:
 
 ```rust
 use http_cache_tower::HttpCacheLayer;
-use http_cache::CACacheManager;
+use http_cache::RedbManager;
 use tower::{ServiceBuilder, ServiceExt};
 use http::{Request, Response};
 use http_body_util::Full;
 use bytes::Bytes;
-use std::path::PathBuf;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create a cache manager
-    let cache_manager = CACacheManager::new(PathBuf::from("./cache"), false);
+    let cache_manager = RedbManager::new("./http-cache.redb")?;
 
     // Create the cache layer
     let cache_layer = HttpCacheLayer::new(cache_manager);
@@ -114,15 +114,14 @@ The tower layers can be easily integrated with Hyper clients:
 
 ```rust
 use http_cache_tower::HttpCacheLayer;
-use http_cache::CACacheManager;
+use http_cache::RedbManager;
 use hyper_util::client::legacy::Client;
 use hyper_util::rt::TokioExecutor;
 use tower::{ServiceBuilder, ServiceExt};
-use std::path::PathBuf;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let cache_manager = CACacheManager::new(PathBuf::from("./cache"), false);
+    let cache_manager = RedbManager::new("./http-cache.redb")?;
     let cache_layer = HttpCacheLayer::new(cache_manager);
 
     let client = Client::builder(TokioExecutor::new()).build_http();

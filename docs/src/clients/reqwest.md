@@ -10,7 +10,8 @@ cargo add http-cache-reqwest
 
 ## Features
 
-- `manager-cacache`: (default) Enables the [`CACacheManager`](https://docs.rs/http-cache/latest/http_cache/struct.CACacheManager.html) backend cache manager.
+- `manager-redb`: (default) Enables the [`RedbManager`](https://docs.rs/http-cache/latest/http_cache/struct.RedbManager.html) backend cache manager.
+- `manager-cacache`: Enables the [`CACacheManager`](https://docs.rs/http-cache/latest/http_cache/struct.CACacheManager.html) backend cache manager.
 - `manager-moka`: Enables the [`MokaManager`](https://docs.rs/http-cache/latest/http_cache/struct.MokaManager.html) backend cache manager.
 - `manager-foyer`: Enables the [`FoyerManager`](https://docs.rs/http-cache/latest/http_cache/struct.FoyerManager.html) backend cache manager.
 - `streaming`: Enables streaming cache support for memory-efficient handling of large response bodies.
@@ -19,22 +20,21 @@ cargo add http-cache-reqwest
 
 ## Usage
 
-In the following example we will construct our client using the builder provided by [`reqwest_middleware`](https://github.com/TrueLayer/reqwest-middleware) with our cache struct from [`http-cache-reqwest`](https://github.com/06chaynes/http-cache/tree/main/http-cache-reqwest). This example will use the default mode, default cacache manager, and default http cache options.
+In the following example we will construct our client using the builder provided by [`reqwest_middleware`](https://github.com/TrueLayer/reqwest-middleware) with our cache struct from [`http-cache-reqwest`](https://github.com/06chaynes/http-cache/tree/main/http-cache-reqwest). This example will use the default mode, default redb manager, and default http cache options.
 
 After constructing our client, we will make a request to the [MDN Caching Docs](https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching) which should result in an object stored in cache on disk.
 
 ```rust
 use reqwest::Client;
 use reqwest_middleware::{ClientBuilder, Result};
-use http_cache_reqwest::{Cache, CacheMode, CACacheManager, HttpCache, HttpCacheOptions};
-use std::path::PathBuf;
+use http_cache_reqwest::{Cache, CacheMode, RedbManager, HttpCache, HttpCacheOptions};
 
 #[tokio::main]
 async fn main() -> Result<()> {
     let client = ClientBuilder::new(Client::new())
         .with(Cache(HttpCache {
           mode: CacheMode::Default,
-          manager: CACacheManager::new(PathBuf::from("./cache"), false),
+          manager: RedbManager::new("./http-cache.redb")?,
           options: HttpCacheOptions::default(),
         }))
         .build();
@@ -119,15 +119,14 @@ This ensures that your application continues to work seamlessly even when using 
 ```rust
 use reqwest::Client;
 use reqwest_middleware::ClientBuilder;
-use http_cache_reqwest::{Cache, CacheMode, CACacheManager, HttpCache, HttpCacheOptions};
-use std::path::PathBuf;
+use http_cache_reqwest::{Cache, CacheMode, RedbManager, HttpCache, HttpCacheOptions};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let client = ClientBuilder::new(Client::new())
         .with(Cache(HttpCache {
             mode: CacheMode::Default,
-            manager: CACacheManager::new(PathBuf::from("./cache"), false),
+            manager: RedbManager::new("./http-cache.redb")?,
             options: HttpCacheOptions::default(),
         }))
         .build();
@@ -153,17 +152,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 ```rust
 use reqwest::Client;
 use reqwest_middleware::ClientBuilder;
-use http_cache_reqwest::{Cache, CacheMode, CACacheManager, HttpCache, HttpCacheOptions};
+use http_cache_reqwest::{Cache, CacheMode, RedbManager, HttpCache, HttpCacheOptions};
 use futures_util::{stream, StreamExt};
 use bytes::Bytes;
-use std::path::PathBuf;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let client = ClientBuilder::new(Client::new())
         .with(Cache(HttpCache {
             mode: CacheMode::Default,
-            manager: CACacheManager::new(PathBuf::from("./cache"), false),
+            manager: RedbManager::new("./http-cache.redb")?,
             options: HttpCacheOptions::default(),
         }))
         .build();

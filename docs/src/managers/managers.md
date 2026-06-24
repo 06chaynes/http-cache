@@ -4,7 +4,7 @@ The following backend cache manager implementations are provided by this crate:
 
 ## [cacache](./cacache.md)
 
-[`cacache`](https://github.com/zkat/cacache-rs) is a high-performance, concurrent, content-addressable disk cache, optimized for async APIs. Provides traditional buffered caching.
+[`cacache`](https://github.com/zkat/cacache-rs) is a high-performance, concurrent, content-addressable disk cache, optimized for async APIs. Provides traditional buffered caching. Now **opt-in** (no longer the default); its upstream is dormant/unmaintained.
 
 ## [moka](./moka.md)
 
@@ -13,6 +13,10 @@ The following backend cache manager implementations are provided by this crate:
 ## [foyer](./foyer.md)
 
 [`foyer`](https://github.com/foyer-rs/foyer) is a hybrid in-memory + disk cache that provides configurable eviction strategies (w-TinyLFU, S3-FIFO, SIEVE), optional disk storage, request deduplication, and Tokio-native async operations.
+
+## [redb](./redb.md)
+
+[`redb`](https://github.com/cberner/redb) is a simple, portable, pure-Rust embedded key/value database. `RedbManager` provides traditional buffered, persistent caching with **no async runtime dependency** — making it the recommended persistent backend for non-tokio clients such as smol-based `http-cache-ureq` or runtimes like Bevy. Now the **default** cache manager.
 
 ## [quick_cache](./quick-cache.md)
 

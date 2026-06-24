@@ -1,6 +1,6 @@
 [package]
 name = "http-cache-reqwest"
-version = "1.0.0-alpha.6"
+version = "1.0.0-alpha.7"
 description = "http-cache middleware implementation for reqwest"
 authors = [
     "Christian Haynes <06chaynes@gmail.com>",
@@ -34,7 +34,7 @@ futures-util = { version = "0.3.31", optional = true }
 
 [dependencies.http-cache]
 path = "../http-cache"
-version = "1.0.0-alpha.6"
+version = "1.0.0-alpha.7"
 default-features = false
 
 [dev-dependencies]
@@ -64,10 +64,11 @@ name = "reqwest_streaming"
 required-features = ["streaming"]
 
 [features]
-default = ["manager-cacache", "url-standard"]
+default = ["manager-redb", "url-standard"]
 manager-cacache = ["http-cache/manager-cacache"]
 manager-moka = ["http-cache/manager-moka"]
 manager-foyer = ["http-cache/manager-foyer"]
+manager-redb = ["http-cache/manager-redb"]
 streaming = ["http-cache/streaming", "reqwest/stream", "futures-util"]
 rate-limiting = ["http-cache/rate-limiting"]
 url-standard = ["http-cache/url-standard"]

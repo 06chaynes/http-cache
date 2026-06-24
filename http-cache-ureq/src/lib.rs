@@ -23,21 +23,22 @@
 //! ## Features
 //!
 //! - `json` - Enables JSON request/response support via `send_json()` and `into_json()` methods (requires `serde_json`)
-//! - `manager-cacache` - Enable [cacache](https://docs.rs/cacache/) cache manager (default)
+//! - `manager-redb` - Enable [redb](https://github.com/cberner/redb) cache manager (default)
+//! - `manager-cacache` - Enable [cacache](https://docs.rs/cacache/) cache manager
 //! - `manager-moka` - Enable [moka](https://docs.rs/moka/) cache manager
 //!
 //! ## Basic Usage
 //!
 //! ```no_run
-//! use http_cache_ureq::{CachedAgent, CACacheManager, CacheMode};
+//! use http_cache_ureq::{CachedAgent, RedbManager, CacheMode};
 //!
-//! fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 //!     smol::block_on(async {
 //!         let agent = CachedAgent::builder()
-//!             .cache_manager(CACacheManager::new("./cache".into(), true))
+//!             .cache_manager(RedbManager::new("./http-cache.redb")?)
 //!             .cache_mode(CacheMode::Default)
 //!             .build()?;
-//!         
+//!
 //!         // This request will be cached according to response headers
 //!         let response = agent.get("https://httpbin.org/cache/60").call().await?;
 //!         println!("Status: {}", response.status());
@@ -60,12 +61,12 @@
 //! Control caching behavior with different modes:
 //!
 //! ```no_run
-//! use http_cache_ureq::{CachedAgent, CACacheManager, CacheMode};
+//! use http_cache_ureq::{CachedAgent, RedbManager, CacheMode};
 //!
-//! fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 //!     smol::block_on(async {
 //!         let agent = CachedAgent::builder()
-//!             .cache_manager(CACacheManager::new("./cache".into(), true))
+//!             .cache_manager(RedbManager::new("./http-cache.redb")?)
 //!             .cache_mode(CacheMode::ForceCache) // Cache everything, ignore headers
 //!             .build()?;
 //!         
@@ -84,15 +85,15 @@
 //!
 //! ```no_run
 //! # #[cfg(feature = "json")]
-//! use http_cache_ureq::{CachedAgent, CACacheManager, CacheMode};
+//! use http_cache_ureq::{CachedAgent, RedbManager, CacheMode};
 //! # #[cfg(feature = "json")]
 //! use serde_json::json;
 //!
 //! # #[cfg(feature = "json")]
-//! fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 //!     smol::block_on(async {
 //!         let agent = CachedAgent::builder()
-//!             .cache_manager(CACacheManager::new("./cache".into(), true))
+//!             .cache_manager(RedbManager::new("./http-cache.redb")?)
 //!             .cache_mode(CacheMode::Default)
 //!             .build()?;
 //!         
@@ -122,7 +123,7 @@
 //! # #[cfg(feature = "manager-moka")]
 //!
 //! # #[cfg(feature = "manager-moka")]
-//! fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 //!     smol::block_on(async {
 //!         let agent = CachedAgent::builder()
 //!             .cache_manager(MokaManager::new(MokaCache::new(1000))) // Max 1000 entries
@@ -144,10 +145,10 @@
 //! Customize how cache keys are generated:
 //!
 //! ```no_run
-//! use http_cache_ureq::{CachedAgent, CACacheManager, CacheMode, HttpCacheOptions};
+//! use http_cache_ureq::{CachedAgent, RedbManager, CacheMode, HttpCacheOptions};
 //! use std::sync::Arc;
 //!
-//! fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 //!     smol::block_on(async {
 //!     let options = HttpCacheOptions {
 //!         cache_key: Some(Arc::new(|parts: &http::request::Parts| {
@@ -158,7 +159,7 @@
 //!     };
 //!     
 //!     let agent = CachedAgent::builder()
-//!         .cache_manager(CACacheManager::new("./cache".into(), true))
+//!         .cache_manager(RedbManager::new("./http-cache.redb")?)
 //!         .cache_mode(CacheMode::Default)
 //!         .cache_options(options)
 //!         .build()?;
@@ -176,13 +177,13 @@
 //! Set a maximum time-to-live for cached responses, particularly useful with `CacheMode::IgnoreRules`:
 //!
 //! ```no_run
-//! use http_cache_ureq::{CachedAgent, CACacheManager, CacheMode, HttpCacheOptions};
+//! use http_cache_ureq::{CachedAgent, RedbManager, CacheMode, HttpCacheOptions};
 //! use std::time::Duration;
 //!
-//! fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 //!     smol::block_on(async {
 //!         let agent = CachedAgent::builder()
-//!             .cache_manager(CACacheManager::new("./cache".into(), true))
+//!             .cache_manager(RedbManager::new("./http-cache.redb")?)
 //!             .cache_mode(CacheMode::IgnoreRules) // Ignore server cache-control headers
 //!             .cache_options(HttpCacheOptions {
 //!                 max_ttl: Some(Duration::from_secs(300)), // Limit cache to 5 minutes regardless of server headers
@@ -221,6 +222,10 @@ pub use http_cache::{
 #[cfg(feature = "manager-cacache")]
 #[cfg_attr(docsrs, doc(cfg(feature = "manager-cacache")))]
 pub use http_cache::CACacheManager;
+
+#[cfg(feature = "manager-redb")]
+#[cfg_attr(docsrs, doc(cfg(feature = "manager-redb")))]
+pub use http_cache::RedbManager;
 
 #[cfg(feature = "manager-moka")]
 #[cfg_attr(docsrs, doc(cfg(feature = "manager-moka")))]

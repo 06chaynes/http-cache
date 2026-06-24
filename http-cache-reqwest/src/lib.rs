@@ -22,14 +22,14 @@
 //! ```no_run
 //! use reqwest::Client;
 //! use reqwest_middleware::{ClientBuilder, Result};
-//! use http_cache_reqwest::{Cache, CacheMode, CACacheManager, HttpCache, HttpCacheOptions};
+//! use http_cache_reqwest::{Cache, CacheMode, RedbManager, HttpCache, HttpCacheOptions};
 //!
 //! #[tokio::main]
 //! async fn main() -> Result<()> {
 //!     let client = ClientBuilder::new(Client::new())
 //!         .with(Cache(HttpCache {
 //!             mode: CacheMode::Default,
-//!             manager: CACacheManager::new("./cache".into(), true),
+//!             manager: RedbManager::new("./http-cache.redb").unwrap(),
 //!             options: HttpCacheOptions::default(),
 //!         }))
 //!         .build();
@@ -156,14 +156,14 @@
 //! ```no_run
 //! use reqwest::Client;
 //! use reqwest_middleware::ClientBuilder;
-//! use http_cache_reqwest::{Cache, CacheMode, CACacheManager, HttpCache, HttpCacheOptions};
+//! use http_cache_reqwest::{Cache, CacheMode, RedbManager, HttpCache, HttpCacheOptions};
 //!
 //! #[tokio::main]
 //! async fn main() -> reqwest_middleware::Result<()> {
 //!     let client = ClientBuilder::new(Client::new())
 //!         .with(Cache(HttpCache {
 //!             mode: CacheMode::ForceCache, // Cache everything, ignore headers
-//!             manager: CACacheManager::new("./cache".into(), true),
+//!             manager: RedbManager::new("./http-cache.redb").unwrap(),
 //!             options: HttpCacheOptions::default(),
 //!         }))
 //!         .build();
@@ -181,14 +181,14 @@
 //! ```no_run
 //! use reqwest::Client;
 //! use reqwest_middleware::ClientBuilder;
-//! use http_cache_reqwest::{Cache, CacheMode, CACacheManager, HttpCache, HttpCacheOptions};
+//! use http_cache_reqwest::{Cache, CacheMode, RedbManager, HttpCache, HttpCacheOptions};
 //!
 //! #[tokio::main]
 //! async fn main() -> reqwest_middleware::Result<()> {
 //!     let client = ClientBuilder::new(Client::new())
 //!         .with(Cache(HttpCache {
 //!             mode: CacheMode::Default,
-//!             manager: CACacheManager::new("./cache".into(), true),
+//!             manager: RedbManager::new("./http-cache.redb").unwrap(),
 //!             options: HttpCacheOptions::default(),
 //!         }))
 //!         .build();
@@ -216,7 +216,7 @@
 //! ```no_run
 //! use reqwest::Client;
 //! use reqwest_middleware::ClientBuilder;
-//! use http_cache_reqwest::{Cache, CacheMode, CACacheManager, HttpCache, HttpCacheOptions};
+//! use http_cache_reqwest::{Cache, CacheMode, RedbManager, HttpCache, HttpCacheOptions};
 //! use std::sync::Arc;
 //!
 //! #[tokio::main]
@@ -232,7 +232,7 @@
 //!     let client = ClientBuilder::new(Client::new())
 //!         .with(Cache(HttpCache {
 //!             mode: CacheMode::Default,
-//!             manager: CACacheManager::new("./cache".into(), true),
+//!             manager: RedbManager::new("./http-cache.redb").unwrap(),
 //!             options,
 //!         }))
 //!         .build();
@@ -319,6 +319,10 @@ pub use http_cache::{
 #[cfg(feature = "manager-cacache")]
 #[cfg_attr(docsrs, doc(cfg(feature = "manager-cacache")))]
 pub use http_cache::CACacheManager;
+
+#[cfg(feature = "manager-redb")]
+#[cfg_attr(docsrs, doc(cfg(feature = "manager-redb")))]
+pub use http_cache::RedbManager;
 
 #[cfg(feature = "manager-moka")]
 #[cfg_attr(docsrs, doc(cfg(feature = "manager-moka")))]

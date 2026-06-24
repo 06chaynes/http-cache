@@ -23,7 +23,7 @@
 //!
 //! ```no_run
 //! use surf::Client;
-//! use http_cache_surf::{Cache, CACacheManager, HttpCache, CacheMode};
+//! use http_cache_surf::{Cache, RedbManager, HttpCache, CacheMode};
 //! use macro_rules_attribute::apply;
 //! use smol_macros::main;
 //!
@@ -32,7 +32,7 @@
 //!     let client = surf::Client::new()
 //!         .with(Cache(HttpCache {
 //!             mode: CacheMode::Default,
-//!             manager: CACacheManager::new("./cache".into(), true),
+//!             manager: RedbManager::new("./http-cache.redb").unwrap(),
 //!             options: Default::default(),
 //!         }));
 //!
@@ -54,7 +54,7 @@
 //!
 //! ```no_run
 //! use surf::Client;
-//! use http_cache_surf::{Cache, CACacheManager, HttpCache, CacheMode};
+//! use http_cache_surf::{Cache, RedbManager, HttpCache, CacheMode};
 //! use macro_rules_attribute::apply;
 //! use smol_macros::main;
 //!
@@ -63,7 +63,7 @@
 //!     let client = surf::Client::new()
 //!         .with(Cache(HttpCache {
 //!             mode: CacheMode::ForceCache, // Cache everything, ignore headers
-//!             manager: CACacheManager::new("./cache".into(), true),
+//!             manager: RedbManager::new("./http-cache.redb").unwrap(),
 //!             options: Default::default(),
 //!         }));
 //!
@@ -114,7 +114,7 @@
 //!
 //! ```no_run
 //! use surf::Client;
-//! use http_cache_surf::{Cache, CACacheManager, HttpCache, CacheMode};
+//! use http_cache_surf::{Cache, RedbManager, HttpCache, CacheMode};
 //! use http_cache::HttpCacheOptions;
 //! use std::sync::Arc;
 //! use macro_rules_attribute::apply;
@@ -133,7 +133,7 @@
 //!     let client = surf::Client::new()
 //!         .with(Cache(HttpCache {
 //!             mode: CacheMode::Default,
-//!             manager: CACacheManager::new("./cache".into(), true),
+//!             manager: RedbManager::new("./http-cache.redb").unwrap(),
 //!             options,
 //!         }));
 //!
@@ -168,6 +168,10 @@ use surf::{middleware::Next, Client};
 // Re-export managers and cache types
 #[cfg(feature = "manager-cacache")]
 pub use http_cache::CACacheManager;
+
+#[cfg(feature = "manager-redb")]
+#[cfg_attr(docsrs, doc(cfg(feature = "manager-redb")))]
+pub use http_cache::RedbManager;
 
 pub use http_cache::HttpCacheOptions;
 pub use http_cache::ResponseCacheModeFn;

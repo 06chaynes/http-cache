@@ -7,6 +7,9 @@ pub mod foyer;
 #[cfg(any(feature = "manager-moka", feature = "manager-moka-bincode"))]
 pub mod moka;
 
+#[cfg(feature = "manager-redb")]
+pub mod redb;
+
 // Streaming cache managers
 #[cfg(feature = "streaming")]
 pub mod streaming_cache;

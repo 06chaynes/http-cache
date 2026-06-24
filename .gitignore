@@ -9,3 +9,7 @@ http-cacache/
 # Cache directories from examples
 **/cache/
 **/cache-*/
+
+# redb database files from doctests/examples
+**/*.redb
+**/*.redb.lock

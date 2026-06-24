@@ -6,7 +6,8 @@ Since ureq is a synchronous HTTP client, this implementation uses the [smol](htt
 
 ## Features
 
-- `manager-cacache` (default): Enable [cacache](https://docs.rs/cacache/) cache manager.
+- `manager-redb` (default): Enable [redb](https://github.com/cberner/redb) persistent cache manager.
+- `manager-cacache`: Enable [cacache](https://docs.rs/cacache/) cache manager.
 - `manager-moka`: Enable [moka](https://docs.rs/moka/) cache manager.
 - `manager-foyer`: Enable [foyer](https://github.com/foyer-rs/foyer) hybrid in-memory + disk cache manager.
 - `json`: Enables JSON request/response support via `send_json()` and `into_json()` methods (requires `serde_json`).
@@ -24,33 +25,28 @@ http-cache-ureq = "1.0"
 
 Use the `CachedAgent` builder to create a cached HTTP client.
 
-> **Note:** `CACacheManager` delegates to the `cacache` crate, which uses `tokio::fs` internally and requires a tokio reactor. Install a tokio runtime alongside the smol executor as shown below. (If you are using a pure in-memory backend like `MokaManager`, the tokio runtime setup is unnecessary — see [In-Memory Caching](#in-memory-caching) below.)
-
 ```rust
-use http_cache_ureq::{CachedAgent, CACacheManager, CacheMode};
+use http_cache_ureq::{CachedAgent, RedbManager, CacheMode};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Install a tokio runtime so cacache's tokio::fs operations find a reactor.
-    let tokio_rt = tokio::runtime::Runtime::new()?;
-    let _tokio_guard = tokio_rt.enter();
     smol::block_on(async {
         let agent = CachedAgent::builder()
-            .cache_manager(CACacheManager::new("./cache".into(), true))
+            .cache_manager(RedbManager::new("./http-cache.redb")?)
             .cache_mode(CacheMode::Default)
             .build()?;
-        
+
         // This request will be cached according to response headers
         let response = agent.get("https://httpbin.org/cache/60").call().await?;
         println!("Status: {}", response.status());
         println!("Cached: {}", response.is_cached());
         println!("Response: {}", response.into_string()?);
-        
+
         // Subsequent identical requests may be served from cache
         let cached_response = agent.get("https://httpbin.org/cache/60").call().await?;
         println!("Cached status: {}", cached_response.status());
         println!("Is cached: {}", cached_response.is_cached());
         println!("Cached response: {}", cached_response.into_string()?);
-        
+
         Ok(())
     })
 }
@@ -66,15 +62,13 @@ http-cache-ureq = { version = "1.0", features = ["json"] }
 ```
 
 ```rust
-use http_cache_ureq::{CachedAgent, CACacheManager, CacheMode};
+use http_cache_ureq::{CachedAgent, RedbManager, CacheMode};
 use serde_json::json;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let tokio_rt = tokio::runtime::Runtime::new()?;
-    let _tokio_guard = tokio_rt.enter();
     smol::block_on(async {
         let agent = CachedAgent::builder()
-            .cache_manager(CACacheManager::new("./cache".into(), true))
+            .cache_manager(RedbManager::new("./http-cache.redb")?)
             .cache_mode(CacheMode::Default)
             .build()?;
 
@@ -97,14 +91,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 Control caching behavior with different modes:
 
 ```rust
-use http_cache_ureq::{CachedAgent, CACacheManager, CacheMode};
+use http_cache_ureq::{CachedAgent, RedbManager, CacheMode};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let tokio_rt = tokio::runtime::Runtime::new()?;
-    let _tokio_guard = tokio_rt.enter();
     smol::block_on(async {
         let agent = CachedAgent::builder()
-            .cache_manager(CACacheManager::new("./cache".into(), true))
+            .cache_manager(RedbManager::new("./http-cache.redb")?)
             .cache_mode(CacheMode::ForceCache) // Cache everything, ignore headers
             .build()?;
 
@@ -122,12 +114,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 Preserve your ureq agent configuration while adding caching:
 
 ```rust
-use http_cache_ureq::{CachedAgent, CACacheManager, CacheMode};
+use http_cache_ureq::{CachedAgent, RedbManager, CacheMode};
 use std::time::Duration;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let tokio_rt = tokio::runtime::Runtime::new()?;
-    let _tokio_guard = tokio_rt.enter();
     smol::block_on(async {
         // Create custom ureq configuration
         let config = ureq::config::Config::builder()
@@ -137,7 +127,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let agent = CachedAgent::builder()
             .agent_config(config)
-            .cache_manager(CACacheManager::new("./cache".into(), true))
+            .cache_manager(RedbManager::new("./http-cache.redb")?)
             .cache_mode(CacheMode::Default)
             .build()?;
 
@@ -167,10 +157,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .cache_manager(MokaManager::new(MokaCache::new(1000))) // Max 1000 entries
             .cache_mode(CacheMode::Default)
             .build()?;
-            
+
         let response = agent.get("https://httpbin.org/cache/60").call().await?;
         println!("Response: {}", response.into_string()?);
-        
+
         Ok(())
     })
 }
@@ -181,26 +171,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 Control cache expiration times, particularly useful with `IgnoreRules` mode:
 
 ```rust
-use http_cache_ureq::{CachedAgent, CACacheManager, CacheMode, HttpCacheOptions};
+use http_cache_ureq::{CachedAgent, RedbManager, CacheMode, HttpCacheOptions};
 use std::time::Duration;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let tokio_rt = tokio::runtime::Runtime::new()?;
-    let _tokio_guard = tokio_rt.enter();
     smol::block_on(async {
         let agent = CachedAgent::builder()
-            .cache_manager(CACacheManager::new("./cache".into(), true))
+            .cache_manager(RedbManager::new("./http-cache.redb")?)
             .cache_mode(CacheMode::IgnoreRules) // Ignore server cache headers
             .cache_options(HttpCacheOptions {
                 max_ttl: Some(Duration::from_secs(300)), // Limit cache to 5 minutes maximum
                 ..Default::default()
             })
             .build()?;
-        
+
         // This will be cached for max 5 minutes even if server says cache longer
         let response = agent.get("https://httpbin.org/cache/3600").call().await?;
         println!("Response: {}", response.into_string()?);
-        
+
         Ok(())
     })
 }

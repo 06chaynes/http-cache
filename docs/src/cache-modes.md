@@ -25,10 +25,10 @@ When using cache modes like `IgnoreRules` that bypass server cache headers, you 
 The `max_ttl` option accepts a `Duration` and sets a maximum time-to-live for cached responses:
 
 ```rust
-use http_cache::{HttpCacheOptions, CACacheManager, HttpCache, CacheMode};
+use http_cache::{HttpCacheOptions, RedbManager, HttpCache, CacheMode};
 use std::time::Duration;
 
-let manager = CACacheManager::new("./cache".into(), true);
+let manager = RedbManager::new("./http-cache.redb").unwrap();
 
 let options = HttpCacheOptions {
     max_ttl: Some(Duration::from_secs(300)), // 5 minutes maximum
@@ -85,10 +85,10 @@ You can implement selective caching based on response content types using the `r
 ### Basic Content-Type Filtering
 
 ```rust
-use http_cache::{HttpCacheOptions, CACacheManager, HttpCache, CacheMode};
+use http_cache::{HttpCacheOptions, RedbManager, HttpCache, CacheMode};
 use std::sync::Arc;
 
-let manager = CACacheManager::new("./cache".into(), true);
+let manager = RedbManager::new("./http-cache.redb").unwrap();
 
 let options = HttpCacheOptions {
     response_cache_mode_fn: Some(Arc::new(|_request_parts, response| {
@@ -127,11 +127,11 @@ let cache = HttpCache {
 For more complex scenarios, you can combine content-type checking with other response properties:
 
 ```rust
-use http_cache::{HttpCacheOptions, CACacheManager, HttpCache, CacheMode};
+use http_cache::{HttpCacheOptions, RedbManager, HttpCache, CacheMode};
 use std::sync::Arc;
 use std::time::Duration;
 
-let manager = CACacheManager::new("./cache".into(), true);
+let manager = RedbManager::new("./http-cache.redb").unwrap();
 
 let options = HttpCacheOptions {
     response_cache_mode_fn: Some(Arc::new(|request_parts, response| {
@@ -216,7 +216,7 @@ Here are some common content-type based caching strategies:
 Content-type based caching works well with other cache options:
 
 ```rust
-use http_cache::{HttpCacheOptions, CACacheManager, HttpCache, CacheMode};
+use http_cache::{HttpCacheOptions, RedbManager, HttpCache, CacheMode};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -248,11 +248,11 @@ This approach gives you fine-grained control over what gets cached based on the 
 The HTTP cache library provides comprehensive per-request customization capabilities for cache keys, cache options, and cache modes. Here's a complete example showing all features:
 
 ```rust
-use http_cache::{HttpCacheOptions, CACacheManager, HttpCache, CacheMode};
+use http_cache::{HttpCacheOptions, RedbManager, HttpCache, CacheMode};
 use std::sync::Arc;
 use std::time::Duration;
 
-let manager = CACacheManager::new("./cache".into(), true);
+let manager = RedbManager::new("./http-cache.redb").unwrap();
 
 let options = HttpCacheOptions {
     // 1. Configure cache keys when initializing (per-request cache key override)
@@ -392,10 +392,10 @@ The cache allows storing custom metadata alongside cached responses using the `m
 ### Basic Usage
 
 ```rust
-use http_cache::{HttpCacheOptions, CACacheManager, HttpCache, CacheMode};
+use http_cache::{HttpCacheOptions, RedbManager, HttpCache, CacheMode};
 use std::sync::Arc;
 
-let manager = CACacheManager::new("./cache".into(), true);
+let manager = RedbManager::new("./http-cache.redb").unwrap();
 
 let options = HttpCacheOptions {
     metadata_provider: Some(Arc::new(|request_parts, response_parts| {
@@ -488,7 +488,7 @@ For middleware implementations (like reqwest-middleware), the types `HttpCacheMe
 ```rust
 use http_cache_reqwest::{
     HttpCacheMetadata, MetadataProvider, HttpCacheOptions,
-    CacheMode, CACacheManager, HttpCache, Cache
+    CacheMode, RedbManager, HttpCache, Cache
 };
 use reqwest::Client;
 use reqwest_middleware::ClientBuilder;
@@ -505,7 +505,7 @@ let options = HttpCacheOptions {
 let client = ClientBuilder::new(Client::new())
     .with(Cache(HttpCache {
         mode: CacheMode::Default,
-        manager: CACacheManager::new("./cache".into(), true),
+        manager: RedbManager::new("./http-cache.redb").unwrap(),
         options,
     }))
     .build();

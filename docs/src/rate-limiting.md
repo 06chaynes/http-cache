@@ -105,7 +105,7 @@ let cache = HttpCache {
 ### reqwest
 
 ```rust
-use http_cache_reqwest::{Cache, HttpCache, CACacheManager, CacheMode, HttpCacheOptions};
+use http_cache_reqwest::{Cache, HttpCache, RedbManager, CacheMode, HttpCacheOptions};
 use http_cache_reqwest::{DomainRateLimiter, Quota};
 use reqwest_middleware::ClientBuilder;
 use std::sync::Arc;
@@ -118,7 +118,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client = ClientBuilder::new(reqwest::Client::new())
         .with(Cache(HttpCache {
             mode: CacheMode::Default,
-            manager: CACacheManager::new("./cache".into(), true),
+            manager: RedbManager::new("./http-cache.redb")?,
             options: HttpCacheOptions {
                 rate_limiter: Some(rate_limiter),
                 ..Default::default()
@@ -141,7 +141,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 ### surf
 
 ```rust
-use http_cache_surf::{Cache, HttpCache, CACacheManager, CacheMode, HttpCacheOptions};
+use http_cache_surf::{Cache, HttpCache, RedbManager, CacheMode, HttpCacheOptions};
 use http_cache_surf::{DomainRateLimiter, Quota};
 use surf::Client;
 use std::sync::Arc;
@@ -154,7 +154,7 @@ async fn main() -> surf::Result<()> {
     let client = Client::new()
         .with(Cache(HttpCache {
             mode: CacheMode::Default,
-            manager: CACacheManager::new("./cache".into(), true),
+            manager: RedbManager::new("./http-cache.redb")?,
             options: HttpCacheOptions {
                 rate_limiter: Some(rate_limiter),
                 ..Default::default()
@@ -175,7 +175,7 @@ async fn main() -> surf::Result<()> {
 ### tower
 
 ```rust
-use http_cache_tower::{HttpCacheLayer, CACacheManager};
+use http_cache_tower::{HttpCacheLayer, RedbManager};
 use http_cache::{CacheMode, HttpCache, HttpCacheOptions};
 use http_cache_tower::{DomainRateLimiter, Quota};
 use tower::ServiceBuilder;
@@ -188,7 +188,7 @@ async fn main() {
     
     let cache = HttpCache {
         mode: CacheMode::Default,
-        manager: CACacheManager::new("./cache".into(), true),
+        manager: RedbManager::new("./http-cache.redb").unwrap(),
         options: HttpCacheOptions {
             rate_limiter: Some(rate_limiter),
             ..Default::default()
@@ -206,19 +206,17 @@ async fn main() {
 ### ureq
 
 ```rust
-use http_cache_ureq::{CachedAgent, CACacheManager, CacheMode, HttpCacheOptions};
+use http_cache_ureq::{CachedAgent, RedbManager, CacheMode, HttpCacheOptions};
 use http_cache_ureq::{DomainRateLimiter, Quota};
 use std::sync::Arc;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let tokio_rt = tokio::runtime::Runtime::new()?;
-    let _tokio_guard = tokio_rt.enter();
     smol::block_on(async {
         let quota = Quota::per_second(std::num::NonZeroU32::new(5).unwrap());
         let rate_limiter = Arc::new(DomainRateLimiter::new(quota));
 
         let agent = CachedAgent::builder()
-            .cache_manager(CACacheManager::new("./cache".into(), true))
+            .cache_manager(RedbManager::new("./http-cache.redb")?)
             .cache_mode(CacheMode::Default)
             .cache_options(HttpCacheOptions {
                 rate_limiter: Some(rate_limiter),

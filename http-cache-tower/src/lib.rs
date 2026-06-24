@@ -8,7 +8,7 @@
 //! ### With Tower Services
 //!
 //! ```rust,no_run
-//! use http_cache_tower::{HttpCacheLayer, CACacheManager};
+//! use http_cache_tower::{HttpCacheLayer, RedbManager};
 //! use http_cache::{CacheMode, HttpCache, HttpCacheOptions};
 //! use tower::ServiceBuilder;
 //! use tower::service_fn;
@@ -25,7 +25,7 @@
 //! #[tokio::main]
 //! async fn main() {
 //!     // Create cache manager with disk storage
-//!     let cache_manager = CACacheManager::new("./cache".into(), true);
+//!     let cache_manager = RedbManager::new("./http-cache.redb").unwrap();
 //!     
 //!     // Create cache layer
 //!     let cache_layer = HttpCacheLayer::new(cache_manager);
@@ -46,14 +46,14 @@
 //!
 //! ### With Custom Cache Configuration
 //!
-//! ```rust
-//! use http_cache_tower::{HttpCacheLayer, CACacheManager};
+//! ```rust,no_run
+//! use http_cache_tower::{HttpCacheLayer, RedbManager};
 //! use http_cache::{CacheMode, HttpCache, HttpCacheOptions};
 //!
 //! # #[tokio::main]
 //! # async fn main() {
 //! // Create cache manager
-//! let cache_manager = CACacheManager::new("./cache".into(), true);
+//! let cache_manager = RedbManager::new("./http-cache.redb").unwrap();
 //!
 //! // Configure cache behavior
 //! let cache = HttpCache {
@@ -115,7 +115,7 @@
 //!
 //! ```rust,no_run
 //! use tower::ServiceBuilder;
-//! use http_cache_tower::{HttpCacheLayer, CACacheManager};
+//! use http_cache_tower::{HttpCacheLayer, RedbManager};
 //! use tower::service_fn;
 //! use tower::ServiceExt;
 //! use http::{Request, Response};
@@ -129,7 +129,7 @@
 //!
 //! #[tokio::main]
 //! async fn main() {
-//!     let cache_manager = CACacheManager::new("./cache".into(), true);
+//!     let cache_manager = RedbManager::new("./http-cache.redb").unwrap();
 //!     let cache_layer = HttpCacheLayer::new(cache_manager);
 //!
 //!     let service = ServiceBuilder::new()
@@ -156,6 +156,9 @@ use http_body_util::BodyExt;
 
 #[cfg(feature = "manager-cacache")]
 pub use http_cache::CACacheManager;
+
+#[cfg(feature = "manager-redb")]
+pub use http_cache::RedbManager;
 
 #[cfg(feature = "rate-limiting")]
 pub use http_cache::rate_limiting::{
@@ -378,8 +381,8 @@ fn add_cache_status_headers_streaming<B>(
 ///
 /// # Example
 ///
-/// ```rust
-/// use http_cache_tower::{HttpCacheLayer, CACacheManager};
+/// ```rust,no_run
+/// use http_cache_tower::{HttpCacheLayer, RedbManager};
 /// use tower::ServiceBuilder;
 /// use tower::service_fn;
 /// use http::{Request, Response};
@@ -389,7 +392,7 @@ fn add_cache_status_headers_streaming<B>(
 ///
 /// # #[tokio::main]
 /// # async fn main() {
-/// let cache_manager = CACacheManager::new("./cache".into(), true);
+/// let cache_manager = RedbManager::new("./http-cache.redb").unwrap();
 /// let cache_layer = HttpCacheLayer::new(cache_manager);
 ///
 /// // Use with ServiceBuilder
@@ -422,12 +425,12 @@ where
     ///
     /// # Example
     ///
-    /// ```rust
-    /// use http_cache_tower::{HttpCacheLayer, CACacheManager};
+    /// ```rust,no_run
+    /// use http_cache_tower::{HttpCacheLayer, RedbManager};
     ///
     /// # #[tokio::main]
     /// # async fn main() {
-    /// let cache_manager = CACacheManager::new("./cache".into(), true);
+    /// let cache_manager = RedbManager::new("./http-cache.redb").unwrap();
     /// let layer = HttpCacheLayer::new(cache_manager);
     /// # }
     /// ```
@@ -453,13 +456,13 @@ where
     ///
     /// # Example
     ///
-    /// ```rust
-    /// use http_cache_tower::{HttpCacheLayer, CACacheManager};
+    /// ```rust,no_run
+    /// use http_cache_tower::{HttpCacheLayer, RedbManager};
     /// use http_cache::HttpCacheOptions;
     ///
     /// # #[tokio::main]
     /// # async fn main() {
-    /// let cache_manager = CACacheManager::new("./cache".into(), true);
+    /// let cache_manager = RedbManager::new("./http-cache.redb").unwrap();
     ///
     /// let options = HttpCacheOptions {
     ///     cache_key: Some(std::sync::Arc::new(|req: &http::request::Parts| {
@@ -492,13 +495,13 @@ where
     ///
     /// # Example
     ///
-    /// ```rust
-    /// use http_cache_tower::{HttpCacheLayer, CACacheManager};
+    /// ```rust,no_run
+    /// use http_cache_tower::{HttpCacheLayer, RedbManager};
     /// use http_cache::{HttpCache, CacheMode, HttpCacheOptions};
     ///
     /// # #[tokio::main]
     /// # async fn main() {
-    /// let cache_manager = CACacheManager::new("./cache".into(), true);
+    /// let cache_manager = RedbManager::new("./http-cache.redb").unwrap();
     ///
     /// let cache = HttpCache {
     ///     mode: CacheMode::ForceCache,
@@ -522,7 +525,7 @@ where
 ///
 /// # Example
 ///
-/// ```rust
+/// ```rust,no_run
 /// use http_cache_tower::HttpCacheStreamingLayer;
 /// use http_cache::StreamingManager;
 /// use tower::ServiceBuilder;
@@ -571,7 +574,7 @@ where
     ///
     /// # Example
     ///
-    /// ```rust
+    /// ```rust,no_run
     /// use http_cache_tower::HttpCacheStreamingLayer;
     /// use http_cache::StreamingManager;
     ///
@@ -602,7 +605,7 @@ where
     ///
     /// # Example
     ///
-    /// ```rust
+    /// ```rust,no_run
     /// use http_cache_tower::HttpCacheStreamingLayer;
     /// use http_cache::{StreamingManager, HttpCacheOptions};
     ///
@@ -640,7 +643,7 @@ where
     ///
     /// # Example
     ///
-    /// ```rust
+    /// ```rust,no_run
     /// use http_cache_tower::HttpCacheStreamingLayer;
     /// use http_cache::{StreamingManager, HttpStreamingCache, CacheMode, HttpCacheOptions};
     ///

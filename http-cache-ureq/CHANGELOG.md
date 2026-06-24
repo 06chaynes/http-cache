@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.0.0-alpha.7] - 2026-05-29
+
+### Added
+
+- `manager-redb` feature flag for `RedbManager` support
+
+### Changed
+
+- Updated `http-cache` dependency to 1.0.0-alpha.7
+- Default feature changed from `manager-cacache` to `manager-redb`; enable `manager-cacache` explicitly to keep using `CACacheManager`
+
 ## [1.0.0-alpha.6] - 2026-04-17
 
 ### Changed

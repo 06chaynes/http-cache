@@ -10,7 +10,7 @@
 
 A caching middleware that follows HTTP caching rules,
 thanks to [http-cache-semantics](https://github.com/kornelski/rusty-http-cache-semantics).
-By default, it uses [cacache](https://github.com/zkat/cacache-rs) as the backend cache manager.
+By default, it uses [redb](https://github.com/cberner/redb) as the backend cache manager.
 Uses [reqwest-middleware](https://github.com/TrueLayer/reqwest-middleware) for middleware support.
 
 ## Minimum Supported Rust Version (MSRV)
@@ -30,15 +30,14 @@ cargo add http-cache-reqwest
 ```rust
 use reqwest::Client;
 use reqwest_middleware::{ClientBuilder, Result};
-use http_cache_reqwest::{Cache, CacheMode, CACacheManager, HttpCache, HttpCacheOptions};
-use std::path::PathBuf;
+use http_cache_reqwest::{Cache, CacheMode, RedbManager, HttpCache, HttpCacheOptions};
 
 #[tokio::main]
 async fn main() -> Result<()> {
     let client = ClientBuilder::new(Client::new())
         .with(Cache(HttpCache {
           mode: CacheMode::Default,
-          manager: CACacheManager::new(PathBuf::from("./cache"), false),
+          manager: RedbManager::new("./http-cache.redb")?,
           options: HttpCacheOptions::default(),
         }))
         .build();
@@ -99,9 +98,10 @@ fn main() {}
 
 ## Features
 
-The following features are available. By default `manager-cacache` is enabled.
+The following features are available. By default `manager-redb` is enabled.
 
-- `manager-cacache` (default): enable [cacache](https://github.com/zkat/cacache-rs), a high-performance disk cache, backend manager.
+- `manager-redb` (default): enable [redb](https://github.com/cberner/redb), an embedded, persistent disk cache, backend manager.
+- `manager-cacache`: enable [cacache](https://github.com/zkat/cacache-rs), a high-performance disk cache, backend manager.
 - `manager-moka` (disabled): enable [moka](https://github.com/moka-rs/moka), a high-performance in-memory cache, backend manager.
 - `manager-foyer` (disabled): enable [foyer](https://github.com/foyer-rs/foyer), a hybrid in-memory + disk cache, backend manager.
 - `streaming` (disabled): enable streaming cache support with efficient memory usage. Provides `StreamingCache` middleware that can handle large responses without buffering them entirely in memory, while maintaining full HTTP caching compliance. Requires cache managers that implement `StreamingCacheManager`.

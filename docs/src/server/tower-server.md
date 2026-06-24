@@ -17,7 +17,8 @@ cargo add http-cache-tower-server
 
 ## Features
 
-- `manager-cacache`: (default) Enables the [`CACacheManager`](https://docs.rs/http-cache/latest/http_cache/struct.CACacheManager.html) backend cache manager.
+- `manager-redb`: (default) Enables the [`RedbManager`](https://docs.rs/http-cache/latest/http_cache/struct.RedbManager.html) backend cache manager.
+- `manager-cacache`: Enables the [`CACacheManager`](https://docs.rs/http-cache/latest/http_cache/struct.CACacheManager.html) backend cache manager.
 - `manager-moka`: Enables the [`MokaManager`](https://docs.rs/http-cache/latest/http_cache/struct.MokaManager.html) backend cache manager.
 - `manager-foyer`: Enables the [`FoyerManager`](https://docs.rs/http-cache/latest/http_cache/struct.FoyerManager.html) backend cache manager.
 - `rate-limiting`: Enables cache-aware rate limiting.
@@ -32,13 +33,12 @@ use axum::{
     extract::Path,
 };
 use http_cache_tower_server::ServerCacheLayer;
-use http_cache::CACacheManager;
-use std::path::PathBuf;
+use http_cache::RedbManager;
 
 #[tokio::main]
 async fn main() {
     // Create cache manager
-    let cache_manager = CACacheManager::new(PathBuf::from("./cache"), false);
+    let cache_manager = RedbManager::new("./http-cache.redb").unwrap();
 
     // Create the server cache layer
     let cache_layer = ServerCacheLayer::new(cache_manager);
@@ -319,14 +319,13 @@ use axum::{
     http::header,
 };
 use http_cache_tower_server::{ServerCacheLayer, ServerCacheOptions, QueryKeyer};
-use http_cache::CACacheManager;
+use http_cache::RedbManager;
 use std::time::Duration;
-use std::path::PathBuf;
 
 #[tokio::main]
 async fn main() {
     // Configure cache manager
-    let cache_manager = CACacheManager::new(PathBuf::from("./cache"), false);
+    let cache_manager = RedbManager::new("./http-cache.redb").unwrap();
 
     // Configure cache options
     let options = ServerCacheOptions {
@@ -451,7 +450,7 @@ Or use `Cache-Control: private` to prevent caching entirely.
 - Cache lookups are async but fast (especially with in-memory managers)
 - Body buffering is required (responses are fully buffered before caching)
 - Consider using moka manager for frequently accessed data
-- Use cacache manager for larger datasets with disk persistence
+- Use the redb manager (the default) for disk persistence; cacache remains available as an opt-in alternative
 
 ## Comparison with Other Frameworks
 

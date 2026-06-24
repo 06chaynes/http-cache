@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.0.0-alpha.7] - 2026-05-29
+
+### Added
+
+- `RedbManager` cache backend using redb for persistent, synchronous on-disk caching that requires no async runtime
+- `manager-redb` feature flag for enabling `RedbManager`
+
+### Changed
+
+- Default cache manager changed from `manager-cacache` to `manager-redb`. `manager-cacache` (and `CACacheManager`) is now opt-in — enable the `manager-cacache` feature to keep using it. The `cacache` crate is no longer maintained upstream.
+
 ## [1.0.0-alpha.6] - 2026-04-17
 
 ### Added

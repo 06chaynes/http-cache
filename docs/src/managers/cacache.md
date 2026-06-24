@@ -2,9 +2,11 @@
 
 [`cacache`](https://github.com/zkat/cacache-rs) is a high-performance, concurrent, content-addressable disk cache, optimized for async APIs. It provides traditional buffered caching for memory-efficient handling of responses.
 
+> **Note:** As of this version, `cacache` is an **opt-in** backend and is no longer the default. Its upstream ([`zkat/cacache-rs`](https://github.com/zkat/cacache-rs)) is dormant/unmaintained. The default cache manager is now [`RedbManager`](./redb.md).
+
 ## Getting Started
 
-The `cacache` backend cache manager is provided by the `http-cache` crate and is enabled by default. The `http-cache-reqwest`, `http-cache-surf`, and `http-cache-tower` crates all expose the types so no need to pull in the `http-cache` directly unless you need to implement your own client.
+The `cacache` backend cache manager is provided by the `http-cache` crate behind the opt-in `manager-cacache` feature (it is no longer enabled by default — `manager-redb` is). The `http-cache-reqwest`, `http-cache-surf`, and `http-cache-tower` crates all expose the types so no need to pull in the `http-cache` directly unless you need to implement your own client.
 
 ### reqwest
 

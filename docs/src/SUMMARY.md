@@ -17,5 +17,6 @@
   - [cacache](./managers/cacache.md)
   - [moka](./managers/moka.md)
   - [foyer](./managers/foyer.md)
+  - [redb](./managers/redb.md)
   - [quick_cache](./managers/quick-cache.md)
   - [streaming_cache](./managers/streaming_cache.md)

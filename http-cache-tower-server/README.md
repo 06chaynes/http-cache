@@ -37,9 +37,10 @@ cargo add http-cache-tower-server
 
 ### Features
 
-By default, `manager-cacache` is enabled.
+By default, `manager-redb` is enabled.
 
-- `manager-cacache` (default): Enable [cacache](https://github.com/zkat/cacache-rs) disk-based cache backend
+- `manager-redb` (default): Enable [redb](https://github.com/cberner/redb) persistent disk cache backend
+- `manager-cacache`: Enable [cacache](https://github.com/zkat/cacache-rs) disk-based cache backend
 - `manager-moka`: Enable [moka](https://github.com/moka-rs/moka) in-memory cache backend
 - `manager-foyer`: Enable [foyer](https://github.com/foyer-rs/foyer) hybrid in-memory + disk cache backend
 
@@ -50,8 +51,7 @@ By default, `manager-cacache` is enabled.
 ```rust
 use axum::{Router, routing::get, response::IntoResponse};
 use http_cache_tower_server::ServerCacheLayer;
-use http_cache::CACacheManager;
-use std::path::PathBuf;
+use http_cache::RedbManager;
 
 async fn expensive_handler() -> impl IntoResponse {
     // Simulate expensive operation
@@ -67,7 +67,7 @@ async fn expensive_handler() -> impl IntoResponse {
 #[tokio::main]
 async fn main() {
     // Create cache manager
-    let manager = CACacheManager::new(PathBuf::from("./cache"), false);
+    let manager = RedbManager::new("./http-cache.redb").unwrap();
 
     // Create router with cache layer
     let app = Router::new()

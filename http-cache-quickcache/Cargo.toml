@@ -1,6 +1,6 @@
 [package]
 name = "http-cache-quickcache"
-version = "1.0.0-alpha.6"
+version = "1.0.0-alpha.7"
 description = "http-cache manager implementation for quick-cache"
 authors = ["Christian Haynes <06chaynes@gmail.com>", "Kat Marchán <kzm@zkat.tech>"]
 repository = "https://github.com/06chaynes/http-cache"
@@ -24,7 +24,7 @@ http = "1.2.0"
 
 [dependencies.http-cache]
 path = "../http-cache"
-version = "1.0.0-alpha.6"
+version = "1.0.0-alpha.7"
 default-features = false
 features = ["postcard"]
 
@@ -41,7 +41,7 @@ http-body = "1.0.1"
 http-body-util = "0.1.2"
 futures = "0.3.31"
 tower = "0.5.1"
-tower-http = { version = "0.6.2", features = ["trace"] }
+tower-http = { version = "0.7.0", features = ["trace"] }
 tower-service = "0.3.3"
 hyper = "1.5.1"
 url = { version = "2.5.4", features = ["serde"] }

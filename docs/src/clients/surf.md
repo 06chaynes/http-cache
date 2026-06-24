@@ -10,7 +10,8 @@ cargo add http-cache-surf
 
 ## Features
 
-- `manager-cacache`: (default) Enables the [`CACacheManager`](https://docs.rs/http-cache/latest/http_cache/struct.CACacheManager.html) backend cache manager.
+- `manager-redb`: (default) Enables the [`RedbManager`](https://docs.rs/http-cache/latest/http_cache/struct.RedbManager.html) backend cache manager.
+- `manager-cacache`: Enables the [`CACacheManager`](https://docs.rs/http-cache/latest/http_cache/struct.CACacheManager.html) backend cache manager.
 - `manager-moka`: Enables the [`MokaManager`](https://docs.rs/http-cache/latest/http_cache/struct.MokaManager.html) backend cache manager.
 - `manager-foyer`: Enables the [`FoyerManager`](https://docs.rs/http-cache/latest/http_cache/struct.FoyerManager.html) backend cache manager.
 - `rate-limiting`: Enables cache-aware rate limiting functionality.
@@ -18,23 +19,20 @@ cargo add http-cache-surf
 
 ## Usage
 
-In the following example we will construct our client with our cache struct from [`http-cache-surf`](https://github.com/06chaynes/http-cache/tree/main/http-cache-surf). This example will use the default mode, default cacache manager, and default http cache options.
+In the following example we will construct our client with our cache struct from [`http-cache-surf`](https://github.com/06chaynes/http-cache/tree/main/http-cache-surf). This example will use the default mode, default redb manager, and default http cache options.
 
 After constructing our client, we will make a request to the [MDN Caching Docs](https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching) which should result in an object stored in cache on disk.
 
-`CACacheManager` delegates to the `cacache` crate, which uses `tokio::fs` internally and therefore requires a tokio reactor. Surf itself is runtime-agnostic when using the `curl-client` backend, so the simplest pattern is to run the surf client inside a tokio runtime.
-
 ```rust
-use http_cache_surf::{Cache, CacheMode, CACacheManager, HttpCache, HttpCacheOptions};
+use http_cache_surf::{Cache, CacheMode, RedbManager, HttpCache, HttpCacheOptions};
 use surf::Client;
-use std::path::PathBuf;
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> surf::Result<()> {
     let client = Client::new()
         .with(Cache(HttpCache {
           mode: CacheMode::Default,
-          manager: CACacheManager::new(PathBuf::from("./cache"), false),
+          manager: RedbManager::new("./http-cache.redb")?,
           options: HttpCacheOptions::default(),
         }));
 

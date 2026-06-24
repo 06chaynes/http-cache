@@ -10,7 +10,7 @@
 
 A caching middleware that follows HTTP caching rules,
 thanks to [http-cache-semantics](https://github.com/kornelski/rusty-http-cache-semantics).
-By default, it uses [cacache](https://github.com/zkat/cacache-rs) as the backend cache manager.
+By default, it uses [redb](https://github.com/cberner/redb) as the backend cache manager.
 Provides a simple caching wrapper around [ureq](https://github.com/algesten/ureq).
 
 ## Minimum Supported Rust Version (MSRV)
@@ -28,13 +28,12 @@ cargo add http-cache-ureq
 ## Example
 
 ```rust
-use http_cache_ureq::{CACacheManager, CachedAgent};
-use std::path::PathBuf;
+use http_cache_ureq::{RedbManager, CachedAgent};
 
 #[smol_macros::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let client = CachedAgent::builder()
-        .cache_manager(CACacheManager::new(PathBuf::from("./cache"), false))
+        .cache_manager(RedbManager::new("./http-cache.redb")?)
         .build()?;
 
     let response = client
@@ -52,12 +51,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 The `CachedAgent` wraps ureq's functionality while providing transparent HTTP caching:
 
 ```rust
-use http_cache_ureq::{CACacheManager, CachedAgent};
-use std::path::PathBuf;
+use http_cache_ureq::{RedbManager, CachedAgent};
 
 // Create a cached agent with default settings
 let client = CachedAgent::builder()
-    .cache_manager(CACacheManager::new(PathBuf::from("./cache"), false))
+    .cache_manager(RedbManager::new("./http-cache.redb")?)
     .build()?;
 
 // Use it just like a regular ureq agent
@@ -66,9 +64,10 @@ let response = client.get("https://httpbin.org/json").call().await?;
 
 ## Features
 
-The following features are available. By default `manager-cacache` is enabled.
+The following features are available. By default `manager-redb` is enabled.
 
-- `manager-cacache` (default): enable [cacache](https://github.com/zkat/cacache-rs), a high-performance disk cache, backend manager.
+- `manager-redb` (default): enable [redb](https://github.com/cberner/redb), an embedded, persistent disk cache, backend manager.
+- `manager-cacache`: enable [cacache](https://github.com/zkat/cacache-rs), a high-performance disk cache, backend manager.
 - `manager-moka` (disabled): enable [moka](https://github.com/moka-rs/moka), a high-performance in-memory cache, backend manager.
 - `manager-foyer` (disabled): enable [foyer](https://github.com/foyer-rs/foyer), a hybrid in-memory + disk cache, backend manager.
 - `json` (disabled): enable JSON support via ureq's json feature.

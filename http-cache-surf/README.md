@@ -10,7 +10,7 @@
 
 A caching middleware that follows HTTP caching rules,
 thanks to [http-cache-semantics](https://github.com/kornelski/rusty-http-cache-semantics).
-By default, it uses [cacache](https://github.com/zkat/cacache-rs) as the backend cache manager.
+By default, it uses [redb](https://github.com/cberner/redb) as the backend cache manager.
 Should likely be registered after any middleware modifying the request.
 
 ## Minimum Supported Rust Version (MSRV)
@@ -28,8 +28,7 @@ cargo add http-cache-surf
 ## Example
 
 ```rust
-use http_cache_surf::{Cache, CacheMode, CACacheManager, HttpCache, HttpCacheOptions};
-use std::path::PathBuf;
+use http_cache_surf::{Cache, CacheMode, RedbManager, HttpCache, HttpCacheOptions};
 
 #[async_std::main]
 async fn main() -> surf::Result<()> {
@@ -37,7 +36,7 @@ async fn main() -> surf::Result<()> {
     surf::client()
         .with(Cache(HttpCache {
           mode: CacheMode::Default,
-          manager: CACacheManager::new(PathBuf::from("./cache"), false),
+          manager: RedbManager::new("./http-cache.redb")?,
           options: HttpCacheOptions::default(),
         }))
         .send(req)
@@ -48,9 +47,10 @@ async fn main() -> surf::Result<()> {
 
 ## Features
 
-The following features are available. By default `manager-cacache` is enabled.
+The following features are available. By default `manager-redb` is enabled.
 
-- `manager-cacache` (default): enable [cacache](https://github.com/zkat/cacache-rs), a high-performance disk cache, backend manager.
+- `manager-redb` (default): enable [redb](https://github.com/cberner/redb), an embedded, persistent disk cache, backend manager.
+- `manager-cacache`: enable [cacache](https://github.com/zkat/cacache-rs), a high-performance disk cache, backend manager.
 - `manager-moka` (disabled): enable [moka](https://github.com/moka-rs/moka), a high-performance in-memory cache, backend manager.
 - `manager-foyer` (disabled): enable [foyer](https://github.com/foyer-rs/foyer), a hybrid in-memory + disk cache, backend manager.
 
