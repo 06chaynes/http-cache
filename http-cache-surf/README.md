@@ -31,7 +31,7 @@ cargo add http-cache-surf
 use http_cache_surf::{Cache, CacheMode, RedbManager, HttpCache, HttpCacheOptions};
 
 #[async_std::main]
-async fn main() -> surf::Result<()> {
+async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let req = surf::get("https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching");
     surf::client()
         .with(Cache(HttpCache {

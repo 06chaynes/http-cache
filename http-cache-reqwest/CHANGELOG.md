@@ -1,6 +1,6 @@
 # Changelog
 
-## [1.0.0-alpha.7] - 2026-05-29
+## [1.0.0-alpha.7] - 2026-07-22
 
 ### Added
 
@@ -10,6 +10,12 @@
 
 - Updated `http-cache` dependency to 1.0.0-alpha.7
 - Default feature changed from `manager-cacache` to `manager-redb`; enable `manager-cacache` explicitly to keep using `CACacheManager`
+- `StreamingCache` no longer reads the upstream response body into memory before handing it to the cache; the network stream is passed through and consumed a frame at a time
+
+### Fixed
+
+- `Response::url()` on responses served through `StreamingCache` now returns the request's final URL instead of the `http://no.url.provided.local` placeholder
+- Responses larger than the manager's `max_body_size` no longer fail the request; they are served in full without being cached
 
 ## [1.0.0-alpha.6] - 2026-04-17
 

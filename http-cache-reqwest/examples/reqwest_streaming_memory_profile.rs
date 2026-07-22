@@ -302,7 +302,164 @@ async fn run_memory_analysis() {
     println!("Overall memory savings: {overall_savings:.1}%");
 }
 
+// --- Issue #164 regression gate ---
+//
+// `StreamingManager::put` used to `body.collect()` the whole upstream body
+// into memory before writing it to disk. This drives a real 256MiB response
+// (one reused static 64KiB chunk, never a large buffer) over a real HTTP
+// connection and fails if process peak RSS exceeds GATE_THRESHOLD_MB. Kept
+// out of the unit suite: RSS assertions flake on loaded CI runners.
+
+/// Returns this process's peak (high-water-mark) resident set size, in MB.
+///
+/// `getrusage`'s `ru_maxrss` is reported in bytes on macOS but in KiB on
+/// Linux (and most other targets) — the unit differs by platform, not by
+/// libc implementation, so this has to be a compile-time `cfg`.
+fn peak_rss_mb() -> f64 {
+    let mut ru: libc::rusage = unsafe { std::mem::zeroed() };
+    let ret = unsafe { libc::getrusage(libc::RUSAGE_SELF, &mut ru) };
+    assert_eq!(ret, 0, "getrusage failed");
+
+    #[cfg(target_os = "macos")]
+    {
+        ru.ru_maxrss as f64 / (1024.0 * 1024.0)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        ru.ru_maxrss as f64 / 1024.0
+    }
+}
+
+/// Size of the reused static chunk that makes up the gate's response body.
+const GATE_CHUNK_SIZE: usize = 64 * 1024;
+static GATE_CHUNK: [u8; GATE_CHUNK_SIZE] = [0u8; GATE_CHUNK_SIZE];
+/// 4096 * 64KiB = 256MiB streamed response.
+const GATE_CHUNK_COUNT: usize = 4096;
+/// ~8x headroom over the observed post-fix peak (~7.7MB on macOS for this
+/// 256MiB response). Pre-fix, `put()` collected the whole body first, which
+/// pushes peak RSS past 256MB.
+const GATE_THRESHOLD_MB: f64 = 64.0;
+
+/// The 256MiB gate body must sit under the cap or `put` declines mid-spool
+/// instead of committing; 512MiB gives 2x headroom.
+const GATE_MAX_BODY_SIZE: u64 = 512 * 1024 * 1024;
+
+fn gate_body_stream(
+) -> impl futures_util::Stream<Item = Result<bytes::Bytes, std::convert::Infallible>>
+{
+    futures_util::stream::iter((0..GATE_CHUNK_COUNT).map(|_| {
+        Ok::<_, std::convert::Infallible>(bytes::Bytes::from_static(
+            &GATE_CHUNK,
+        ))
+    }))
+}
+
+/// Starts a minimal local HTTP server that streams `GATE_CHUNK_COUNT`
+/// copies of `GATE_CHUNK` as one cacheable response, without ever holding
+/// more than one chunk in memory at a time. Returns the bound address.
+async fn serve_gate_body() -> std::net::SocketAddr {
+    use axum::{body::Body, response::Response, routing::get, Router};
+
+    let app = Router::new().route(
+        "/gate",
+        get(|| async {
+            Response::builder()
+                .header("cache-control", "public, max-age=3600")
+                .header("content-type", "application/octet-stream")
+                .body(Body::from_stream(gate_body_stream()))
+                .unwrap()
+        }),
+    );
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+    addr
+}
+
+/// Runs the issue-#164 regression gate. Exits the process non-zero (rather
+/// than returning a failure indication) so `just memory-profile` fails
+/// loudly and visibly on a memory regression.
+async fn run_issue_164_regression_gate() {
+    let total_mb = (GATE_CHUNK_COUNT * GATE_CHUNK_SIZE) / (1024 * 1024);
+    println!("Issue #164 regression gate");
+    println!("===========================");
+    println!(
+        "Streaming a {total_mb}MiB cacheable response through StreamingCache \
+         (cache miss -> StreamingManager::put)..."
+    );
+
+    let addr = serve_gate_body().await;
+    let url = format!("http://{addr}/gate");
+
+    let cache_dir =
+        tempdir().expect("failed to create temp dir for streaming manager");
+    let streaming_manager = StreamingManager::with_max_body_size(
+        cache_dir.path().to_path_buf(),
+        1000,
+        GATE_MAX_BODY_SIZE,
+    )
+    .await
+    .expect("failed to create streaming manager");
+    // Clone shares the same database + moka handle as the middleware's.
+    let manager_handle = streaming_manager.clone();
+    let streaming_cache =
+        StreamingCache::new(streaming_manager, http_cache::CacheMode::Default);
+    let client = ClientBuilder::new(reqwest::Client::new())
+        .with(streaming_cache)
+        .build();
+
+    assert_eq!(
+        manager_handle.entry_count(),
+        0,
+        "sanity check: cache must be empty before the gate request"
+    );
+
+    let response = client.get(&url).send().await.expect("request failed");
+    assert_eq!(response.status(), reqwest::StatusCode::OK);
+    let mut body_stream = response.bytes_stream();
+    let mut total_bytes = 0usize;
+    while let Some(chunk) = body_stream.next().await {
+        total_bytes += chunk.expect("body stream error").len();
+    }
+    assert_eq!(total_bytes, GATE_CHUNK_COUNT * GATE_CHUNK_SIZE);
+
+    // Proof the entry was committed, not just served from the spool handle.
+    // entry_count() is only accurate after run_pending_tasks.
+    manager_handle.run_pending_tasks().await;
+    assert_eq!(
+        manager_handle.entry_count(),
+        1,
+        "expected exactly one committed cache entry after the gate request"
+    );
+    println!(
+        "  cache entry_count() after request: {} (commit confirmed)",
+        manager_handle.entry_count()
+    );
+
+    let peak = peak_rss_mb();
+    println!(
+        "  measured peak RSS: {peak:.1} MB (threshold: {GATE_THRESHOLD_MB:.1} MB)"
+    );
+
+    if peak > GATE_THRESHOLD_MB {
+        eprintln!(
+            "ISSUE #164 REGRESSION: peak RSS {peak:.1} MB exceeds the \
+             {GATE_THRESHOLD_MB:.1} MB threshold for a {total_mb}MiB streamed \
+             response. StreamingManager::put (or StreamingCache) may be \
+             buffering the body again instead of spooling it frame-by-frame."
+        );
+        std::process::exit(1);
+    }
+
+    println!("  PASS: within threshold.\n");
+}
+
 #[tokio::main]
 async fn main() {
+    // Measure first: peak RSS is a whole-process high-water mark.
+    run_issue_164_regression_gate().await;
     run_memory_analysis().await;
 }

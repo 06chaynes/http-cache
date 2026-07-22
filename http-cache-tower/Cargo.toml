@@ -37,6 +37,9 @@ tempfile = "3.13.0"
 hyper = { version = "1.6.0", features = ["full"] }
 tower = { version = "0.5.2", features = ["util"] }
 criterion = { version = "0.8", features = ["html_reports"] }
+# Used only by the issue-#164 memory gate in examples/tower_streaming_memory_profile.rs.
+futures-util = "0.3.31"
+libc = "0.2"
 
 [[bench]]
 name = "streaming_benchmark"
@@ -45,7 +48,7 @@ required-features = ["streaming"]
 
 [[example]]
 name = "tower_streaming_memory_profile"
-required-features = ["streaming"]
+required-features = ["streaming", "manager-cacache"]
 
 [[example]]
 name = "hyper_basic"

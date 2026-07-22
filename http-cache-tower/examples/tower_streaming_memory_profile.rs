@@ -10,10 +10,11 @@
 
 use bytes::Bytes;
 use http::{Request, Response, StatusCode};
-use http_body_util::{BodyExt, Full};
-use http_cache::{CACacheManager, StreamingManager};
+use http_body_util::{BodyExt, Full, StreamBody};
+use http_cache::{CACacheManager, StreamingBody, StreamingManager};
 use http_cache_tower::{HttpCacheLayer, HttpCacheStreamingLayer};
 use std::alloc::{GlobalAlloc, Layout, System};
+use std::convert::Infallible;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -224,8 +225,192 @@ async fn measure_cache_hit_memory_usage(
     }
 }
 
+// --- Issue #164 regression gate ---
+//
+// `StreamingManager::put` used to `body.collect()` the whole upstream body
+// into memory before writing it to disk. This drives a 256MiB response (one
+// reused static 64KiB chunk, never a large buffer) through the layer and
+// fails if process peak RSS exceeds GATE_THRESHOLD_MB. Kept out of the unit
+// suite: RSS assertions flake on loaded CI runners.
+
+/// Returns this process's peak (high-water-mark) resident set size, in MB.
+///
+/// `getrusage`'s `ru_maxrss` is reported in bytes on macOS but in KiB on
+/// Linux (and most other targets) — the unit differs by platform, not by
+/// libc implementation, so this has to be a compile-time `cfg`.
+fn peak_rss_mb() -> f64 {
+    let mut ru: libc::rusage = unsafe { std::mem::zeroed() };
+    let ret = unsafe { libc::getrusage(libc::RUSAGE_SELF, &mut ru) };
+    assert_eq!(ret, 0, "getrusage failed");
+
+    #[cfg(target_os = "macos")]
+    {
+        ru.ru_maxrss as f64 / (1024.0 * 1024.0)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        ru.ru_maxrss as f64 / 1024.0
+    }
+}
+
+/// Size of the reused static chunk that makes up the gate's response body.
+const GATE_CHUNK_SIZE: usize = 64 * 1024;
+static GATE_CHUNK: [u8; GATE_CHUNK_SIZE] = [0u8; GATE_CHUNK_SIZE];
+/// 4096 * 64KiB = 256MiB streamed response.
+const GATE_CHUNK_COUNT: usize = 4096;
+/// Generous headroom over the observed post-fix peak (~8MB for this 256MiB
+/// response). Pre-fix, `put()` collected the whole body first, which pushes
+/// peak RSS past 256MB.
+const GATE_THRESHOLD_MB: f64 = 64.0;
+
+/// The 256MiB gate body must sit under the cap or `put` declines instead of
+/// spooling; 512MiB gives 2x headroom.
+const GATE_MAX_BODY_SIZE: u64 = 512 * 1024 * 1024;
+
+type GateStream = Pin<
+    Box<
+        dyn futures_util::Stream<
+                Item = Result<http_body::Frame<Bytes>, Infallible>,
+            > + Send,
+    >,
+>;
+type GateBody = StreamBody<GateStream>;
+
+fn gate_stream() -> GateStream {
+    Box::pin(futures_util::stream::iter(
+        (0..GATE_CHUNK_COUNT).map(|_| {
+            Ok(http_body::Frame::data(Bytes::from_static(&GATE_CHUNK)))
+        }),
+    ))
+}
+
+/// A service that returns one cacheable response streamed from
+/// `GATE_CHUNK_COUNT` copies of `GATE_CHUNK`, without ever holding more than
+/// one chunk in memory at a time.
+#[derive(Clone)]
+struct GateService;
+
+impl Service<Request<Full<Bytes>>> for GateService {
+    type Response = Response<GateBody>;
+    type Error = Box<dyn std::error::Error + Send + Sync>;
+    type Future = Pin<
+        Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>,
+    >;
+
+    fn poll_ready(
+        &mut self,
+        _cx: &mut Context<'_>,
+    ) -> Poll<Result<(), Self::Error>> {
+        Poll::Ready(Ok(()))
+    }
+
+    fn call(&mut self, _req: Request<Full<Bytes>>) -> Self::Future {
+        Box::pin(async move {
+            let total_len = GATE_CHUNK_COUNT * GATE_CHUNK_SIZE;
+            let response = Response::builder()
+                .status(StatusCode::OK)
+                .header("cache-control", "max-age=3600, public")
+                .header("content-type", "application/octet-stream")
+                .header("content-length", total_len.to_string())
+                .body(StreamBody::new(gate_stream()))
+                .map_err(|e| {
+                    Box::new(e) as Box<dyn std::error::Error + Send + Sync>
+                })?;
+            Ok(response)
+        })
+    }
+}
+
+/// Runs the issue-#164 regression gate. Exits the process non-zero (rather
+/// than returning a failure indication) so `just memory-profile` fails
+/// loudly and visibly on a memory regression.
+async fn run_issue_164_regression_gate() {
+    let total_mb = (GATE_CHUNK_COUNT * GATE_CHUNK_SIZE) / (1024 * 1024);
+    println!("Issue #164 regression gate");
+    println!("===========================");
+    println!(
+        "Streaming a {total_mb}MiB cacheable response through \
+         HttpCacheStreamingLayer (cache miss -> StreamingManager::put)..."
+    );
+
+    let cache_dir = tempfile::tempdir()
+        .expect("failed to create temp dir for streaming manager");
+    let manager = StreamingManager::with_max_body_size(
+        cache_dir.path().to_path_buf(),
+        1000,
+        GATE_MAX_BODY_SIZE,
+    )
+    .await
+    .expect("failed to create streaming manager");
+    // Clone shares the same database + moka handle as the layer's manager.
+    let manager_handle = manager.clone();
+    let cache_layer = HttpCacheStreamingLayer::new(manager);
+    let cached_service = cache_layer.layer(GateService);
+
+    let request = Request::builder()
+        .uri("https://example.com/issue-164-gate")
+        .body(Full::new(Bytes::new()))
+        .unwrap();
+
+    assert_eq!(
+        manager_handle.entry_count(),
+        0,
+        "sanity check: cache must be empty before the gate request"
+    );
+
+    let response = cached_service.oneshot(request).await.unwrap();
+    assert!(
+        matches!(response.body(), StreamingBody::File { .. }),
+        "expected a disk-backed File body — put() declined to cache instead \
+         of committing"
+    );
+    let body = response.into_body();
+    let mut body_stream = std::pin::pin!(body);
+    let mut total_bytes = 0usize;
+    while let Some(frame_result) = body_stream.frame().await {
+        let frame = frame_result.unwrap();
+        if let Some(chunk) = frame.data_ref() {
+            total_bytes += chunk.len();
+        }
+    }
+    assert_eq!(total_bytes, GATE_CHUNK_COUNT * GATE_CHUNK_SIZE);
+
+    // Proof the entry was committed, not just served from the spool handle.
+    // entry_count() is only accurate after run_pending_tasks.
+    manager_handle.run_pending_tasks().await;
+    assert_eq!(
+        manager_handle.entry_count(),
+        1,
+        "expected exactly one committed cache entry after the gate request"
+    );
+    println!(
+        "  cache entry_count() after request: {} (commit confirmed)",
+        manager_handle.entry_count()
+    );
+
+    let peak = peak_rss_mb();
+    println!(
+        "  measured peak RSS: {peak:.1} MB (threshold: {GATE_THRESHOLD_MB:.1} MB)"
+    );
+
+    if peak > GATE_THRESHOLD_MB {
+        eprintln!(
+            "ISSUE #164 REGRESSION: peak RSS {peak:.1} MB exceeds the \
+             {GATE_THRESHOLD_MB:.1} MB threshold for a {total_mb}MiB streamed \
+             response. StreamingManager::put may be buffering the body \
+             again instead of spooling it frame-by-frame."
+        );
+        std::process::exit(1);
+    }
+
+    println!("  PASS: within threshold.\n");
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Measure first: peak RSS is a whole-process high-water mark.
+    run_issue_164_regression_gate().await;
+
     println!("Memory Usage Analysis: Buffered vs Streaming Cache");
     println!("==================================================");
     println!("This analysis measures memory efficiency differences between");

@@ -28,7 +28,7 @@ use http_cache_surf::{Cache, CacheMode, RedbManager, HttpCache, HttpCacheOptions
 use surf::Client;
 
 #[tokio::main(flavor = "current_thread")]
-async fn main() -> surf::Result<()> {
+async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let client = Client::new()
         .with(Cache(HttpCache {
           mode: CacheMode::Default,

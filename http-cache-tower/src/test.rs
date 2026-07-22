@@ -28,7 +28,7 @@ mod tests {
     fn test_errors() -> Result<()> {
         // Testing the Debug trait for the error type
         let err = HttpCacheError::cache("test".to_string());
-        assert!(format!("{:?}", &err).contains("Cache"));
+        assert!(format!("{:?}", err).contains("Cache"));
         assert!(err.to_string().contains("test"));
         Ok(())
     }

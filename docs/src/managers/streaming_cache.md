@@ -8,14 +8,21 @@
 - **Persistence across restarts**: redb is an ACID-transactional embedded KV store; cache entries survive process restarts
 - **TinyLFU hot-metadata cache**: moka in front of redb uses TinyLFU admission to keep hot metadata warm in RAM
 - **Overwrite-crash detection**: every body file is prefixed with a 16-byte nonce stored alongside metadata. On read, the nonce and body length are verified before streaming; a mismatch triggers self-heal
-- **Body size limits**: configurable maximum body size to prevent memory exhaustion during writes
+- **True streaming on write**: `put` spools the response frame-by-frame straight to a temp file — at most one frame (typically ~64KB) is ever held in memory, regardless of response size
+- **Body size limits**: a configurable maximum cached-body size, enforced as a **decline, not an error** — oversize responses are simply not cached, not rejected
 - **Single-instance invariant**: redb's own exclusive file lock on `metadata.redb` prevents two processes from opening the same cache directory at once
 
-## Important: Write-Path Buffering
+## Write-Path: Bounded-Memory Spooling
 
-While cached responses are streamed on **read** (GET), the **write** path (PUT) requires buffering the entire response body in memory. The body is staged to a temporary file, `fsync`ed, then atomically renamed into place before the redb metadata transaction commits.
+Both directions are now streaming: cached responses are streamed on **read** (GET) in 64KB chunks, and the **write** path (PUT) spools the incoming body frame-by-frame to a temp file, flushing each frame before the next is pulled — bounded RAM of roughly one frame regardless of response size. The tmp file is `fsync`ed, then atomically renamed into place before the redb metadata transaction commits. On success, `put` returns a disk-backed, checksum-verified `File` body served from the just-committed file, not an in-memory copy.
 
-For very large responses, configure the `max_body_size` limit to prevent OOM. Memory usage during PUT is O(response_size). The default limit is 100MB.
+`max_body_size` bounds the size of entries this manager will *cache*, not the memory used while writing them:
+
+- A declared `Content-Length` over the limit skips the spool entirely — nothing touches disk, and the response streams straight through to the caller uncached (HEAD responses are exempt from this check: their `Content-Length` describes the entity, not the empty body actually sent).
+- If the length isn't known up front and the spooled byte count crosses the limit mid-stream, caching is declined at that point and the remainder of the body is streamed straight through — the caller still gets the complete response, it just isn't cached.
+- If the received byte count ends up not matching a declared `Content-Length`, the response is still served to the caller but is not cached (RFC 9111 §3.3 — never store a response known to be incomplete; HEAD exempt).
+
+None of these cases fail the request: a broken or over-limit cache write degrades to "serve uncached," never to an error. The default limit is 100MB.
 
 ## Getting Started
 
@@ -130,7 +137,7 @@ This is a local-filesystem guarantee. Advisory file locks are unreliable on NFS,
 | 10MB | 10MB | ~64KB |
 | 100MB | 100MB | ~64KB |
 
-**On cache write (PUT):** the entire response body is buffered in memory before the atomic file write. This is limited by `max_body_size` (default: 100MB) to prevent memory exhaustion.
+**On cache write (PUT):** only one frame (typically ~64KB) is held in memory at a time — the body is spooled frame-by-frame straight to a temp file, flushed per frame, then atomically renamed into place. `max_body_size` (default: 100MB) bounds which entries get cached, not write-path memory: responses over the limit are simply not cached (decline, not error) — the caller still receives the full body streamed through.
 
 ## Usage with Tower
 
@@ -263,6 +270,35 @@ if let Some((response, policy)) = cached {
 }
 ```
 
+### Updating metadata on revalidation (304)
+
+When a conditional request comes back `304 Not Modified`, the body on disk is
+still valid — only the stored headers, cache policy, and user metadata need
+refreshing. `update_metadata` does exactly that, without ever re-reading or
+re-writing the body file:
+
+```rust
+use http_cache::CacheEntryToken;
+
+// A `CacheEntryToken`, when supplied, ties this update to the exact entry
+// that a prior `get()` read (it arrives as a response extension on that
+// call's `Response<Self::Body>`). Passing `None` skips that check.
+let token: Option<CacheEntryToken> = None;
+
+let updated = manager.update_metadata(
+    "GET:https://example.com/api",
+    &new_headers,
+    new_policy,
+    None, // user metadata, unchanged here
+    token.as_ref(),
+).await?;
+
+if !updated {
+    // Entry was deleted or replaced concurrently — serve the fresh
+    // response as-is and skip re-caching.
+}
+```
+
 ### Deleting cached entries
 
 ```rust
@@ -293,10 +329,10 @@ Unlike the previous cacache-based implementation, this design stores a separate 
 | Aspect | CACacheManager (Buffered) | StreamingManager |
 |--------|---------------------------|------------------|
 | **Memory on GET** | Full body in memory | ~64KB streaming buffer |
-| **Memory on PUT** | Full body in memory | Full body in memory (limited by `max_body_size`) |
+| **Memory on PUT** | Full body in memory | ~1 frame (typically 64KB), regardless of body size |
 | **Persistence** | Yes | Yes (redb) |
 | **Hot-cache eviction** | None | TinyLFU (moka) for metadata only; disk state unaffected |
 | **Content dedup** | Yes (cacache) | No (per-key body files) |
-| **Body size limit** | None | Configurable (default 100MB) |
+| **Body size limit** | None | Configurable (default 100MB); over-limit responses decline to cache, not an error |
 | **Multi-process** | Supported via cacache | Single-instance per cache_dir (redb lock) |
 | **Use case** | Small responses, dedup-heavy workloads | Large responses, long-lived caches |

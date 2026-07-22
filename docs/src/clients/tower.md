@@ -95,7 +95,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         });
 
     // Cache hits stream from disk without loading the full body into memory.
-    // Writes buffer the body up to max_body_size before committing to disk.
+    // Writes spool the body to disk frame-by-frame (bounded RAM: ~one frame)
+    // before committing. Responses over max_body_size aren't an error — they
+    // just aren't cached; the caller still gets the full body streamed through.
     let request = Request::builder()
         .uri("https://example.com/large-file")
         .body(Full::new(Bytes::new()))?;

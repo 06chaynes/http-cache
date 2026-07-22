@@ -33,6 +33,9 @@ Required items:
 - `type Body` — the body type returned by `get`; must implement `http_body::Body`
 - `get` — retrieve a cached response, body-as-stream
 - `put` — store a response, consuming its body
+- `update_metadata` — update the stored headers, cache policy, and user metadata for an
+  existing entry **without** touching the body file; used by 304 revalidation, where the
+  body is known-unchanged and re-reading/re-writing it would be wasted work
 - `convert_body` — produce a `Self::Body` from a generic upstream body for responses that are not being cached
 - `delete` — remove a cached entry
 - `empty_body` — produce an empty `Self::Body` (used for 504 responses on `OnlyIfCached` misses)
@@ -254,6 +257,15 @@ async fn get(
 #### The streaming `put` method
 
 The `put` method accepts a `String` as the cache key, a streaming `Response<B>`, a `CachePolicy`, and a request URL. It stores the response body content in a file and the metadata separately, enabling efficient retrieval without loading the entire response into memory.
+
+For simplicity, this illustrative version collects the body up front (it needs the whole
+byte slice to compute a content digest for dedup). **This differs from the production
+`StreamingManager`**, which spools the body to its temp file frame-by-frame — at most one
+frame is ever held in memory regardless of response size — and enforces `max_body_size` as
+a *decline, not an error*: an oversize response simply is not cached, and the caller still
+receives the full body streamed through. A production implementation following that design
+would write each `Frame` to the content file as it arrives rather than calling
+`body.collect()`.
 
 ```rust
 async fn put<B>(

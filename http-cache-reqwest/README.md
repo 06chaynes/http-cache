@@ -29,11 +29,11 @@ cargo add http-cache-reqwest
 
 ```rust
 use reqwest::Client;
-use reqwest_middleware::{ClientBuilder, Result};
+use reqwest_middleware::ClientBuilder;
 use http_cache_reqwest::{Cache, CacheMode, RedbManager, HttpCache, HttpCacheOptions};
 
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let client = ClientBuilder::new(Client::new())
         .with(Cache(HttpCache {
           mode: CacheMode::Default,

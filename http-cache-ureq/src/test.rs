@@ -34,7 +34,7 @@ fn build_mock(
 fn test_errors() {
     assert!(format!("{:?}", BadRequest).contains("BadRequest"));
     let ureq_err = HttpCacheError::cache("test".to_string());
-    assert!(format!("{:?}", &ureq_err).contains("Cache"));
+    assert!(format!("{:?}", ureq_err).contains("Cache"));
     assert_eq!(ureq_err.to_string(), "Cache error: test".to_string());
 }
 
@@ -45,7 +45,7 @@ async fn default_mode() {
     let mock_server = MockServer::start().await;
     let m = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 1);
     let _mock_guard = mock_server.register_as_scoped(m).await;
-    let url = format!("{}/", &mock_server.uri());
+    let url = format!("{}/", mock_server.uri());
     let agent = CachedAgent::builder()
         .cache_manager(manager.clone())
         .cache_mode(CacheMode::Default)
@@ -54,7 +54,7 @@ async fn default_mode() {
     let res = agent.get(&url).call().await.unwrap();
     assert_eq!(res.header("x-cache-lookup"), Some(MISS));
     assert_eq!(res.header("x-cache"), Some(MISS));
-    let data = manager.get(&format!("{}:{}", GET, &url)).await.unwrap();
+    let data = manager.get(&format!("{}:{}", GET, url)).await.unwrap();
     assert!(data.is_some());
     let res = agent.get(&url).call().await.unwrap();
     assert_eq!(res.status(), 200);
@@ -69,7 +69,7 @@ async fn default_mode_with_options() {
     let mock_server = MockServer::start().await;
     let m = build_mock(CACHEABLE_PRIVATE, TEST_BODY, 200, 1);
     let _mock_guard = mock_server.register_as_scoped(m).await;
-    let url = format!("{}/", &mock_server.uri());
+    let url = format!("{}/", mock_server.uri());
     let agent = CachedAgent::builder()
         .cache_manager(manager.clone())
         .cache_mode(CacheMode::Default)
@@ -83,7 +83,7 @@ async fn default_mode_with_options() {
         .build()
         .unwrap();
     agent.get(&url).call().await.unwrap();
-    let data = manager.get(&format!("{}:{}", GET, &url)).await.unwrap();
+    let data = manager.get(&format!("{}:{}", GET, url)).await.unwrap();
     assert!(data.is_some());
     let res = agent.get(&url).call().await.unwrap();
     assert_eq!(res.status(), 200);
@@ -96,7 +96,7 @@ async fn default_mode_no_cache_response() {
     let mock_server = MockServer::start().await;
     let m = build_mock("no-cache", TEST_BODY, 200, 2);
     let _mock_guard = mock_server.register_as_scoped(m).await;
-    let url = format!("{}/", &mock_server.uri());
+    let url = format!("{}/", mock_server.uri());
     let agent = CachedAgent::builder()
         .cache_manager(manager.clone())
         .cache_mode(CacheMode::Default)
@@ -105,7 +105,7 @@ async fn default_mode_no_cache_response() {
     let res = agent.get(&url).call().await.unwrap();
     assert_eq!(res.header("x-cache-lookup"), Some(MISS));
     assert_eq!(res.header("x-cache"), Some(MISS));
-    let data = manager.get(&format!("{}:{}", GET, &url)).await.unwrap();
+    let data = manager.get(&format!("{}:{}", GET, url)).await.unwrap();
     assert!(data.is_some());
     let res = agent.get(&url).call().await.unwrap();
     assert_eq!(res.status(), 200);
@@ -127,7 +127,7 @@ async fn removes_warning() {
         )
         .expect(1);
     let _mock_guard = mock_server.register_as_scoped(m).await;
-    let url = format!("{}/", &mock_server.uri());
+    let url = format!("{}/", mock_server.uri());
     let agent = CachedAgent::builder()
         .cache_manager(manager.clone())
         .cache_mode(CacheMode::Default)
@@ -136,7 +136,7 @@ async fn removes_warning() {
     let res = agent.get(&url).call().await.unwrap();
     assert_eq!(res.header("x-cache-lookup"), Some(MISS));
     assert_eq!(res.header("x-cache"), Some(MISS));
-    let data = manager.get(&format!("{}:{}", GET, &url)).await.unwrap();
+    let data = manager.get(&format!("{}:{}", GET, url)).await.unwrap();
     assert!(data.is_some());
     let res = agent.get(&url).call().await.unwrap();
     assert_eq!(res.status(), 200);
@@ -152,14 +152,14 @@ async fn no_store_mode() {
     let mock_server = MockServer::start().await;
     let m = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 2);
     let _mock_guard = mock_server.register_as_scoped(m).await;
-    let url = format!("{}/", &mock_server.uri());
+    let url = format!("{}/", mock_server.uri());
     let agent = CachedAgent::builder()
         .cache_manager(manager.clone())
         .cache_mode(CacheMode::NoStore)
         .build()
         .unwrap();
     agent.get(&url).call().await.unwrap();
-    let data = manager.get(&format!("{}:{}", GET, &url)).await.unwrap();
+    let data = manager.get(&format!("{}:{}", GET, url)).await.unwrap();
     assert!(data.is_none());
     let res = agent.get(&url).call().await.unwrap();
     assert_eq!(res.header("x-cache-lookup"), Some(MISS));
@@ -173,7 +173,7 @@ async fn no_cache_mode() {
     let mock_server = MockServer::start().await;
     let m = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 2);
     let _mock_guard = mock_server.register_as_scoped(m).await;
-    let url = format!("{}/", &mock_server.uri());
+    let url = format!("{}/", mock_server.uri());
     let agent = CachedAgent::builder()
         .cache_manager(manager.clone())
         .cache_mode(CacheMode::NoCache)
@@ -182,7 +182,7 @@ async fn no_cache_mode() {
     let res = agent.get(&url).call().await.unwrap();
     assert_eq!(res.header("x-cache-lookup"), Some(MISS));
     assert_eq!(res.header("x-cache"), Some(MISS));
-    let data = manager.get(&format!("{}:{}", GET, &url)).await.unwrap();
+    let data = manager.get(&format!("{}:{}", GET, url)).await.unwrap();
     assert!(data.is_some());
     let res = agent.get(&url).call().await.unwrap();
     assert_eq!(res.header("x-cache-lookup"), Some(HIT));
@@ -196,7 +196,7 @@ async fn force_cache_mode() {
     let mock_server = MockServer::start().await;
     let m = build_mock("max-age=0, public", TEST_BODY, 200, 1);
     let _mock_guard = mock_server.register_as_scoped(m).await;
-    let url = format!("{}/", &mock_server.uri());
+    let url = format!("{}/", mock_server.uri());
     let agent = CachedAgent::builder()
         .cache_manager(manager.clone())
         .cache_mode(CacheMode::ForceCache)
@@ -205,7 +205,7 @@ async fn force_cache_mode() {
     let res = agent.get(&url).call().await.unwrap();
     assert_eq!(res.header("x-cache-lookup"), Some(MISS));
     assert_eq!(res.header("x-cache"), Some(MISS));
-    let data = manager.get(&format!("{}:{}", GET, &url)).await.unwrap();
+    let data = manager.get(&format!("{}:{}", GET, url)).await.unwrap();
     assert!(data.is_some());
     let res = agent.get(&url).call().await.unwrap();
     assert_eq!(res.header("x-cache-lookup"), Some(HIT));
@@ -219,7 +219,7 @@ async fn ignore_rules_mode() {
     let mock_server = MockServer::start().await;
     let m = build_mock("no-store, max-age=0, public", TEST_BODY, 200, 1);
     let _mock_guard = mock_server.register_as_scoped(m).await;
-    let url = format!("{}/", &mock_server.uri());
+    let url = format!("{}/", mock_server.uri());
     let agent = CachedAgent::builder()
         .cache_manager(manager.clone())
         .cache_mode(CacheMode::IgnoreRules)
@@ -228,7 +228,7 @@ async fn ignore_rules_mode() {
     let res = agent.get(&url).call().await.unwrap();
     assert_eq!(res.header("x-cache-lookup"), Some(MISS));
     assert_eq!(res.header("x-cache"), Some(MISS));
-    let data = manager.get(&format!("{}:{}", GET, &url)).await.unwrap();
+    let data = manager.get(&format!("{}:{}", GET, url)).await.unwrap();
     assert!(data.is_some());
     let res = agent.get(&url).call().await.unwrap();
     assert_eq!(res.header("x-cache-lookup"), Some(HIT));
@@ -242,7 +242,7 @@ async fn reload_mode() {
     let mock_server = MockServer::start().await;
     let m = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 2);
     let _mock_guard = mock_server.register_as_scoped(m).await;
-    let url = format!("{}/", &mock_server.uri());
+    let url = format!("{}/", mock_server.uri());
     let agent = CachedAgent::builder()
         .cache_manager(manager.clone())
         .cache_mode(CacheMode::Reload)
@@ -256,7 +256,7 @@ async fn reload_mode() {
         .build()
         .unwrap();
     agent.get(&url).call().await.unwrap();
-    let data = manager.get(&format!("{}:{}", GET, &url)).await.unwrap();
+    let data = manager.get(&format!("{}:{}", GET, url)).await.unwrap();
     assert!(data.is_some());
     agent.get(&url).call().await.unwrap();
 }
@@ -268,7 +268,7 @@ async fn custom_cache_key() {
     let mock_server = MockServer::start().await;
     let m = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 1);
     let _mock_guard = mock_server.register_as_scoped(m).await;
-    let url = format!("{}/", &mock_server.uri());
+    let url = format!("{}/", mock_server.uri());
     let agent = CachedAgent::builder()
         .cache_manager(manager.clone())
         .cache_mode(CacheMode::Default)
@@ -281,7 +281,7 @@ async fn custom_cache_key() {
         .build()
         .unwrap();
     agent.get(&url).call().await.unwrap();
-    let data = manager.get(&format!("GET:{}:test", &url)).await.unwrap();
+    let data = manager.get(&format!("GET:{}:test", url)).await.unwrap();
     assert!(data.is_some());
 }
 
@@ -292,7 +292,7 @@ async fn no_status_headers() {
     let mock_server = MockServer::start().await;
     let m = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 1);
     let _mock_guard = mock_server.register_as_scoped(m).await;
-    let url = format!("{}/test.css", &mock_server.uri());
+    let url = format!("{}/test.css", mock_server.uri());
     let agent = CachedAgent::builder()
         .cache_manager(manager.clone())
         .cache_mode(CacheMode::Default)
@@ -303,7 +303,7 @@ async fn no_status_headers() {
         .build()
         .unwrap();
     let res = agent.get(&url).call().await.unwrap();
-    let data = manager.get(&format!("{}:{}", GET, &url)).await.unwrap();
+    let data = manager.get(&format!("{}:{}", GET, url)).await.unwrap();
     assert!(data.is_some());
     assert!(res.header("x-cache-lookup").is_none());
     assert!(res.header("x-cache").is_none());
@@ -316,8 +316,8 @@ async fn cache_bust() {
     let mock_server = MockServer::start().await;
     let m = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 2);
     let _mock_guard = mock_server.register_as_scoped(m).await;
-    let url = format!("{}/", &mock_server.uri());
-    let bust_url = format!("{}/bust-cache", &mock_server.uri());
+    let url = format!("{}/", mock_server.uri());
+    let bust_url = format!("{}/bust-cache", mock_server.uri());
     let agent = CachedAgent::builder()
         .cache_manager(manager.clone())
         .cache_mode(CacheMode::Default)
@@ -342,10 +342,10 @@ async fn cache_bust() {
         .build()
         .unwrap();
     agent.get(&url).call().await.unwrap();
-    let data = manager.get(&format!("{}:{}", GET, &url)).await.unwrap();
+    let data = manager.get(&format!("{}:{}", GET, url)).await.unwrap();
     assert!(data.is_some());
     agent.get(&bust_url).call().await.unwrap();
-    let data = manager.get(&format!("{}:{}", GET, &url)).await.unwrap();
+    let data = manager.get(&format!("{}:{}", GET, url)).await.unwrap();
     assert!(data.is_none());
 }
 
@@ -356,7 +356,7 @@ async fn only_if_cached_mode_miss() {
     let mock_server = MockServer::start().await;
     let m = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 0);
     let _mock_guard = mock_server.register_as_scoped(m).await;
-    let url = format!("{}/", &mock_server.uri());
+    let url = format!("{}/", mock_server.uri());
     let agent = CachedAgent::builder()
         .cache_manager(manager.clone())
         .cache_mode(CacheMode::OnlyIfCached)
@@ -366,7 +366,7 @@ async fn only_if_cached_mode_miss() {
     assert_eq!(res.status(), 504);
     assert_eq!(res.header("x-cache-lookup"), Some(MISS));
     assert_eq!(res.header("x-cache"), Some(MISS));
-    let data = manager.get(&format!("{}:{}", GET, &url)).await.unwrap();
+    let data = manager.get(&format!("{}:{}", GET, url)).await.unwrap();
     assert!(data.is_none());
 }
 
@@ -377,7 +377,7 @@ async fn only_if_cached_mode_hit() {
     let mock_server = MockServer::start().await;
     let m = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 1);
     let _mock_guard = mock_server.register_as_scoped(m).await;
-    let url = format!("{}/", &mock_server.uri());
+    let url = format!("{}/", mock_server.uri());
     let agent_default = CachedAgent::builder()
         .cache_manager(manager.clone())
         .cache_mode(CacheMode::Default)
@@ -386,7 +386,7 @@ async fn only_if_cached_mode_hit() {
     let res = agent_default.get(&url).call().await.unwrap();
     assert_eq!(res.header("x-cache-lookup"), Some(MISS));
     assert_eq!(res.header("x-cache"), Some(MISS));
-    let data = manager.get(&format!("{}:{}", GET, &url)).await.unwrap();
+    let data = manager.get(&format!("{}:{}", GET, url)).await.unwrap();
     assert!(data.is_some());
     let agent_cached = CachedAgent::builder()
         .cache_manager(manager.clone())
@@ -411,17 +411,17 @@ async fn post_request_invalidates_cache() {
         .expect(1);
     let _mock_guard_get = mock_server.register_as_scoped(m_get).await;
     let _mock_guard_post = mock_server.register_as_scoped(m_post).await;
-    let url = format!("{}/", &mock_server.uri());
+    let url = format!("{}/", mock_server.uri());
     let agent = CachedAgent::builder()
         .cache_manager(manager.clone())
         .cache_mode(CacheMode::Default)
         .build()
         .unwrap();
     agent.get(&url).call().await.unwrap();
-    let data = manager.get(&format!("GET:{}", &url)).await.unwrap();
+    let data = manager.get(&format!("GET:{}", url)).await.unwrap();
     assert!(data.is_some());
     agent.post(&url).call().await.unwrap();
-    let data = manager.get(&format!("GET:{}", &url)).await.unwrap();
+    let data = manager.get(&format!("GET:{}", url)).await.unwrap();
     assert!(data.is_none());
 }
 
@@ -436,17 +436,17 @@ async fn put_request_invalidates_cache() {
         .expect(1);
     let _mock_guard_get = mock_server.register_as_scoped(m_get).await;
     let _mock_guard_put = mock_server.register_as_scoped(m_put).await;
-    let url = format!("{}/", &mock_server.uri());
+    let url = format!("{}/", mock_server.uri());
     let agent = CachedAgent::builder()
         .cache_manager(manager.clone())
         .cache_mode(CacheMode::Default)
         .build()
         .unwrap();
     agent.get(&url).call().await.unwrap();
-    let data = manager.get(&format!("GET:{}", &url)).await.unwrap();
+    let data = manager.get(&format!("GET:{}", url)).await.unwrap();
     assert!(data.is_some());
     agent.put(&url).call().await.unwrap();
-    let data = manager.get(&format!("GET:{}", &url)).await.unwrap();
+    let data = manager.get(&format!("GET:{}", url)).await.unwrap();
     assert!(data.is_none());
 }
 
@@ -461,17 +461,17 @@ async fn patch_request_invalidates_cache() {
         .expect(1);
     let _mock_guard_get = mock_server.register_as_scoped(m_get).await;
     let _mock_guard_patch = mock_server.register_as_scoped(m_patch).await;
-    let url = format!("{}/", &mock_server.uri());
+    let url = format!("{}/", mock_server.uri());
     let agent = CachedAgent::builder()
         .cache_manager(manager.clone())
         .cache_mode(CacheMode::Default)
         .build()
         .unwrap();
     agent.get(&url).call().await.unwrap();
-    let data = manager.get(&format!("GET:{}", &url)).await.unwrap();
+    let data = manager.get(&format!("GET:{}", url)).await.unwrap();
     assert!(data.is_some());
     agent.request("PATCH", &url).call().await.unwrap();
-    let data = manager.get(&format!("GET:{}", &url)).await.unwrap();
+    let data = manager.get(&format!("GET:{}", url)).await.unwrap();
     assert!(data.is_none());
 }
 
@@ -486,17 +486,17 @@ async fn delete_request_invalidates_cache() {
         .expect(1);
     let _mock_guard_get = mock_server.register_as_scoped(m_get).await;
     let _mock_guard_delete = mock_server.register_as_scoped(m_delete).await;
-    let url = format!("{}/", &mock_server.uri());
+    let url = format!("{}/", mock_server.uri());
     let agent = CachedAgent::builder()
         .cache_manager(manager.clone())
         .cache_mode(CacheMode::Default)
         .build()
         .unwrap();
     agent.get(&url).call().await.unwrap();
-    let data = manager.get(&format!("GET:{}", &url)).await.unwrap();
+    let data = manager.get(&format!("GET:{}", url)).await.unwrap();
     assert!(data.is_some());
     agent.delete(&url).call().await.unwrap();
-    let data = manager.get(&format!("GET:{}", &url)).await.unwrap();
+    let data = manager.get(&format!("GET:{}", url)).await.unwrap();
     assert!(data.is_none());
 }
 
@@ -513,7 +513,7 @@ async fn options_request_not_cached() {
         )
         .expect(2);
     let _mock_guard = mock_server.register_as_scoped(m).await;
-    let url = format!("{}/", &mock_server.uri());
+    let url = format!("{}/", mock_server.uri());
     let agent = CachedAgent::builder()
         .cache_manager(manager.clone())
         .cache_mode(CacheMode::Default)
@@ -521,7 +521,7 @@ async fn options_request_not_cached() {
         .unwrap();
     let res1 = agent.request("OPTIONS", &url).call().await.unwrap();
     assert_eq!(res1.status(), 200);
-    let data = manager.get(&format!("OPTIONS:{}", &url)).await.unwrap();
+    let data = manager.get(&format!("OPTIONS:{}", url)).await.unwrap();
     assert!(data.is_none());
     let res2 = agent.request("OPTIONS", &url).call().await.unwrap();
     assert_eq!(res2.status(), 200);
@@ -538,7 +538,7 @@ async fn revalidation_304() {
         .respond_with(ResponseTemplate::new(304))
         .expect(1);
     let mock_guard = mock_server.register_as_scoped(m).await;
-    let url = format!("{}/", &mock_server.uri());
+    let url = format!("{}/", mock_server.uri());
     let agent = CachedAgent::builder()
         .cache_manager(manager.clone())
         .cache_mode(CacheMode::Default)
@@ -552,7 +552,7 @@ async fn revalidation_304() {
     drop(mock_guard);
     let _mock_guard = mock_server.register_as_scoped(m_304).await;
 
-    let data = manager.get(&format!("{}:{}", GET, &url)).await.unwrap();
+    let data = manager.get(&format!("{}:{}", GET, url)).await.unwrap();
     assert!(data.is_some());
 
     let res = agent.get(&url).call().await.unwrap();
@@ -569,7 +569,7 @@ async fn revalidation_200() {
     let m = build_mock(MUST_REVALIDATE, TEST_BODY, 200, 1);
     let m_200 = build_mock(MUST_REVALIDATE, b"updated", 200, 1);
     let mock_guard = mock_server.register_as_scoped(m).await;
-    let url = format!("{}/", &mock_server.uri());
+    let url = format!("{}/", mock_server.uri());
     let agent = CachedAgent::builder()
         .cache_manager(manager.clone())
         .cache_mode(CacheMode::Default)
@@ -581,7 +581,7 @@ async fn revalidation_200() {
     drop(mock_guard);
     let _mock_guard = mock_server.register_as_scoped(m_200).await;
 
-    let data = manager.get(&format!("{}:{}", GET, &url)).await.unwrap();
+    let data = manager.get(&format!("{}:{}", GET, url)).await.unwrap();
     assert!(data.is_some());
 
     let res = agent.get(&url).call().await.unwrap();
@@ -600,7 +600,7 @@ async fn revalidation_500() {
         .respond_with(ResponseTemplate::new(500))
         .expect(1);
     let mock_guard = mock_server.register_as_scoped(m).await;
-    let url = format!("{}/", &mock_server.uri());
+    let url = format!("{}/", mock_server.uri());
     let agent = CachedAgent::builder()
         .cache_manager(manager.clone())
         .cache_mode(CacheMode::Default)
@@ -612,7 +612,7 @@ async fn revalidation_500() {
     drop(mock_guard);
     let _mock_guard = mock_server.register_as_scoped(m_500).await;
 
-    let data = manager.get(&format!("{}:{}", GET, &url)).await.unwrap();
+    let data = manager.get(&format!("{}:{}", GET, url)).await.unwrap();
     assert!(data.is_some());
 
     let res = agent.get(&url).call().await.unwrap();
@@ -643,7 +643,7 @@ async fn no_duplicate_headers_on_revalidation() {
         .expect(1);
 
     let mock_guard = mock_server.register_as_scoped(m).await;
-    let url = format!("{}/", &mock_server.uri());
+    let url = format!("{}/", mock_server.uri());
     let agent = CachedAgent::builder()
         .cache_manager(manager.clone())
         .cache_mode(CacheMode::Default)
@@ -668,7 +668,7 @@ async fn custom_cache_mode_fn() {
     let mock_server = MockServer::start().await;
     let m = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 2);
     let _mock_guard = mock_server.register_as_scoped(m).await;
-    let url = format!("{}/test.css", &mock_server.uri());
+    let url = format!("{}/test.css", mock_server.uri());
     let agent = CachedAgent::builder()
         .cache_manager(manager.clone())
         .cache_mode(CacheMode::NoStore)
@@ -687,13 +687,13 @@ async fn custom_cache_mode_fn() {
     // Remote request and should cache due to custom cache mode function
     agent.get(&url).call().await.unwrap();
     // Try to load cached object
-    let data = manager.get(&format!("{}:{}", GET, &url)).await.unwrap();
+    let data = manager.get(&format!("{}:{}", GET, url)).await.unwrap();
     assert!(data.is_some());
 
     // Test that non-.css files are not cached
-    let url2 = format!("{}/", &mock_server.uri());
+    let url2 = format!("{}/", mock_server.uri());
     agent.get(&url2).call().await.unwrap();
-    let data2 = manager.get(&format!("{}:{}", GET, &url2)).await.unwrap();
+    let data2 = manager.get(&format!("{}:{}", GET, url2)).await.unwrap();
     assert!(data2.is_none());
 }
 
@@ -708,7 +708,7 @@ async fn delete_after_non_get_head_method_request() {
         .expect(1);
     let _mock_guard_get = mock_server.register_as_scoped(m_get).await;
     let _mock_guard_post = mock_server.register_as_scoped(m_post).await;
-    let url = format!("{}/", &mock_server.uri());
+    let url = format!("{}/", mock_server.uri());
     let agent = CachedAgent::builder()
         .cache_manager(manager.clone())
         .cache_mode(CacheMode::Default)
@@ -721,13 +721,13 @@ async fn delete_after_non_get_head_method_request() {
     assert_eq!(res.header("x-cache"), Some(MISS));
 
     // Try to load cached object
-    let data = manager.get(&format!("{}:{}", GET, &url)).await.unwrap();
+    let data = manager.get(&format!("{}:{}", GET, url)).await.unwrap();
     assert!(data.is_some());
 
     // Post request to make sure the cache object at the same resource was deleted
     agent.post(&url).call().await.unwrap();
 
-    let data = manager.get(&format!("{}:{}", GET, &url)).await.unwrap();
+    let data = manager.get(&format!("{}:{}", GET, url)).await.unwrap();
     assert!(data.is_none());
 }
 
@@ -748,7 +748,7 @@ async fn json_request_and_response() {
         )
         .expect(1);
     let _mock_guard = mock_server.register_as_scoped(m).await;
-    let url = format!("{}/", &mock_server.uri());
+    let url = format!("{}/", mock_server.uri());
     let agent = CachedAgent::builder()
         .cache_manager(manager.clone())
         .cache_mode(CacheMode::Default)
@@ -777,7 +777,7 @@ async fn head_request_caching() {
         )
         .expect(1);
     let _mock_guard = mock_server.register_as_scoped(m).await;
-    let url = format!("{}/", &mock_server.uri());
+    let url = format!("{}/", mock_server.uri());
     let agent = CachedAgent::builder()
         .cache_manager(manager.clone())
         .cache_mode(CacheMode::Default)
@@ -790,7 +790,7 @@ async fn head_request_caching() {
     assert_eq!(res.header("x-cache"), Some(MISS));
     assert_eq!(res.as_bytes().len(), 0); // HEAD responses have no body
 
-    let data = manager.get(&format!("HEAD:{}", &url)).await.unwrap();
+    let data = manager.get(&format!("HEAD:{}", url)).await.unwrap();
     assert!(data.is_some());
 
     let res2 = agent.head(&url).call().await.unwrap();
@@ -812,7 +812,7 @@ async fn max_ttl_override() {
         )
         .expect(1);
     let _mock_guard = mock_server.register_as_scoped(m).await;
-    let url = format!("{}/", &mock_server.uri());
+    let url = format!("{}/", mock_server.uri());
     let agent = CachedAgent::builder()
         .cache_manager(manager.clone())
         .cache_mode(CacheMode::Default)
@@ -828,7 +828,7 @@ async fn max_ttl_override() {
     assert_eq!(res.header("x-cache-lookup"), Some(MISS));
     assert_eq!(res.header("x-cache"), Some(MISS));
 
-    let data = manager.get(&format!("{}:{}", GET, &url)).await.unwrap();
+    let data = manager.get(&format!("{}:{}", GET, url)).await.unwrap();
     assert!(data.is_some());
 
     // Verify the cache entry has the reduced TTL (this is implicit in the cache policy)
@@ -851,7 +851,7 @@ async fn max_ttl_with_ignore_rules() {
         )
         .expect(1);
     let _mock_guard = mock_server.register_as_scoped(m).await;
-    let url = format!("{}/", &mock_server.uri());
+    let url = format!("{}/", mock_server.uri());
     let agent = CachedAgent::builder()
         .cache_manager(manager.clone())
         .cache_mode(CacheMode::IgnoreRules) // Ignore cache-control headers
@@ -867,7 +867,7 @@ async fn max_ttl_with_ignore_rules() {
     assert_eq!(res.header("x-cache-lookup"), Some(MISS));
     assert_eq!(res.header("x-cache"), Some(MISS));
 
-    let data = manager.get(&format!("{}:{}", GET, &url)).await.unwrap();
+    let data = manager.get(&format!("{}:{}", GET, url)).await.unwrap();
     assert!(data.is_some());
 
     // Second request should hit cache despite no-cache header
@@ -890,7 +890,7 @@ async fn max_ttl_no_override_when_shorter() {
         )
         .expect(1);
     let _mock_guard = mock_server.register_as_scoped(m).await;
-    let url = format!("{}/", &mock_server.uri());
+    let url = format!("{}/", mock_server.uri());
     let agent = CachedAgent::builder()
         .cache_manager(manager.clone())
         .cache_mode(CacheMode::Default)
@@ -906,7 +906,7 @@ async fn max_ttl_no_override_when_shorter() {
     assert_eq!(res.header("x-cache-lookup"), Some(MISS));
     assert_eq!(res.header("x-cache"), Some(MISS));
 
-    let data = manager.get(&format!("{}:{}", GET, &url)).await.unwrap();
+    let data = manager.get(&format!("{}:{}", GET, url)).await.unwrap();
     assert!(data.is_some());
 
     // Verify the cache works (the actual TTL timing test would be complex)
@@ -1171,7 +1171,7 @@ mod rate_limiting_tests {
         let mock_server = MockServer::start().await;
         let m = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 1);
         let _mock_guard = mock_server.register_as_scoped(m).await;
-        let url = format!("{}/", &mock_server.uri());
+        let url = format!("{}/", mock_server.uri());
         let manager = MokaManager::default();
         let rate_limiter = Arc::new(MockRateLimiter::new(Duration::ZERO));
 
@@ -1206,7 +1206,7 @@ mod rate_limiting_tests {
         let mock_server = MockServer::start().await;
         let m = build_mock("no-cache", TEST_BODY, 200, 2);
         let _mock_guard = mock_server.register_as_scoped(m).await;
-        let url = format!("{}/", &mock_server.uri());
+        let url = format!("{}/", mock_server.uri());
         let manager = MokaManager::default();
         let rate_limiter =
             Arc::new(MockRateLimiter::new(Duration::from_millis(100)));
@@ -1244,7 +1244,7 @@ mod rate_limiting_tests {
         let mock_server = MockServer::start().await;
         let m = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 1);
         let _mock_guard = mock_server.register_as_scoped(m).await;
-        let url = format!("{}/", &mock_server.uri());
+        let url = format!("{}/", mock_server.uri());
         let manager = MokaManager::default();
 
         // Create a domain rate limiter with very permissive limits
@@ -1271,7 +1271,7 @@ mod rate_limiting_tests {
         let mock_server = MockServer::start().await;
         let m = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 1);
         let _mock_guard = mock_server.register_as_scoped(m).await;
-        let url = format!("{}/", &mock_server.uri());
+        let url = format!("{}/", mock_server.uri());
         let manager = MokaManager::default();
 
         // Create a direct rate limiter with very permissive limits

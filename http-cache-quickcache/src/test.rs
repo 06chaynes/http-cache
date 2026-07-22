@@ -54,18 +54,18 @@ async fn quickcache() -> Result<()> {
     let policy = CachePolicy::new(&req, &res);
     CacheManager::put(
         &*manager,
-        format!("{}:{}", GET, &url),
+        format!("{}:{}", GET, url),
         http_res.clone(),
         policy.clone(),
     )
     .await?;
     let data =
-        CacheManager::get(&*manager, &format!("{}:{}", GET, &url)).await?;
+        CacheManager::get(&*manager, &format!("{}:{}", GET, url)).await?;
     assert!(data.is_some());
     assert_eq!(data.unwrap().0.body, TEST_BODY);
-    CacheManager::delete(&*manager, &format!("{}:{}", GET, &url)).await?;
+    CacheManager::delete(&*manager, &format!("{}:{}", GET, url)).await?;
     let data =
-        CacheManager::get(&*manager, &format!("{}:{}", GET, &url)).await?;
+        CacheManager::get(&*manager, &format!("{}:{}", GET, url)).await?;
     assert!(data.is_none());
     Ok(())
 }
@@ -75,7 +75,7 @@ async fn default_mode() -> Result<()> {
     let mock_server = MockServer::start().await;
     let m = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 1);
     let _mock_guard = mock_server.register_as_scoped(m).await;
-    let url = format!("{}/", &mock_server.uri());
+    let url = format!("{}/", mock_server.uri());
     let manager = QuickManager::default();
 
     // Construct reqwest client with cache defaults
@@ -92,7 +92,7 @@ async fn default_mode() -> Result<()> {
 
     // Try to load cached object
     let data =
-        CacheManager::get(&manager, &format!("{}:{}", GET, &url_parse(&url)?))
+        CacheManager::get(&manager, &format!("{}:{}", GET, url_parse(&url)?))
             .await?;
     assert!(data.is_some());
 
@@ -107,7 +107,7 @@ async fn default_mode_with_options() -> Result<()> {
     let mock_server = MockServer::start().await;
     let m = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 1);
     let _mock_guard = mock_server.register_as_scoped(m).await;
-    let url = format!("{}/", &mock_server.uri());
+    let url = format!("{}/", mock_server.uri());
     let manager = QuickManager::default();
 
     // Construct reqwest client with cache options override
@@ -138,7 +138,7 @@ async fn default_mode_with_options() -> Result<()> {
     // Try to load cached object
     let data = http_cache::CacheManager::get(
         &manager,
-        &format!("{}:{}", GET, &url_parse(&url)?),
+        &format!("{}:{}", GET, url_parse(&url)?),
     )
     .await?;
     assert!(data.is_some());
@@ -150,7 +150,7 @@ async fn no_cache_mode() -> Result<()> {
     let mock_server = MockServer::start().await;
     let m = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 2);
     let _mock_guard = mock_server.register_as_scoped(m).await;
-    let url = format!("{}/", &mock_server.uri());
+    let url = format!("{}/", mock_server.uri());
     let manager = QuickManager::default();
 
     // Construct reqwest client with cache defaults
@@ -168,7 +168,7 @@ async fn no_cache_mode() -> Result<()> {
     // Try to load cached object
     let data = http_cache::CacheManager::get(
         &manager,
-        &format!("{}:{}", GET, &url_parse(&url)?),
+        &format!("{}:{}", GET, url_parse(&url)?),
     )
     .await?;
     assert!(data.is_some());
@@ -190,7 +190,7 @@ async fn head_request_caching() -> Result<()> {
         )
         .expect(1);
     let _mock_guard = mock_server.register_as_scoped(m).await;
-    let url = format!("{}/", &mock_server.uri());
+    let url = format!("{}/", mock_server.uri());
     let manager = QuickManager::default();
 
     // Construct reqwest client with cache defaults
@@ -210,7 +210,7 @@ async fn head_request_caching() -> Result<()> {
     // Try to load cached object - should use HEAD method in cache key
     let data = http_cache::CacheManager::get(
         &manager,
-        &format!("HEAD:{}", &url_parse(&url)?),
+        &format!("HEAD:{}", url_parse(&url)?),
     )
     .await?;
     assert!(data.is_some());
@@ -240,7 +240,7 @@ async fn put_request_invalidates_cache() -> Result<()> {
         .expect(1);
 
     let mock_guard_get = mock_server.register_as_scoped(m_get).await;
-    let url = format!("{}/", &mock_server.uri());
+    let url = format!("{}/", mock_server.uri());
     let manager = QuickManager::default();
 
     let client = ClientBuilder::new(Client::new())
@@ -257,7 +257,7 @@ async fn put_request_invalidates_cache() -> Result<()> {
     // Verify it's cached
     let data = http_cache::CacheManager::get(
         &manager,
-        &format!("GET:{}", &url_parse(&url)?),
+        &format!("GET:{}", url_parse(&url)?),
     )
     .await?;
     assert!(data.is_some());
@@ -272,7 +272,7 @@ async fn put_request_invalidates_cache() -> Result<()> {
     // Verify cache was invalidated
     let data = http_cache::CacheManager::get(
         &manager,
-        &format!("GET:{}", &url_parse(&url)?),
+        &format!("GET:{}", url_parse(&url)?),
     )
     .await?;
     assert!(data.is_none());
@@ -297,7 +297,7 @@ async fn patch_request_invalidates_cache() -> Result<()> {
         .expect(1);
 
     let mock_guard_get = mock_server.register_as_scoped(m_get).await;
-    let url = format!("{}/", &mock_server.uri());
+    let url = format!("{}/", mock_server.uri());
     let manager = QuickManager::default();
 
     let client = ClientBuilder::new(Client::new())
@@ -314,7 +314,7 @@ async fn patch_request_invalidates_cache() -> Result<()> {
     // Verify it's cached
     let data = http_cache::CacheManager::get(
         &manager,
-        &format!("GET:{}", &url_parse(&url)?),
+        &format!("GET:{}", url_parse(&url)?),
     )
     .await?;
     assert!(data.is_some());
@@ -329,7 +329,7 @@ async fn patch_request_invalidates_cache() -> Result<()> {
     // Verify cache was invalidated
     let data = http_cache::CacheManager::get(
         &manager,
-        &format!("GET:{}", &url_parse(&url)?),
+        &format!("GET:{}", url_parse(&url)?),
     )
     .await?;
     assert!(data.is_none());
@@ -354,7 +354,7 @@ async fn delete_request_invalidates_cache() -> Result<()> {
         .expect(1);
 
     let mock_guard_get = mock_server.register_as_scoped(m_get).await;
-    let url = format!("{}/", &mock_server.uri());
+    let url = format!("{}/", mock_server.uri());
     let manager = QuickManager::default();
 
     let client = ClientBuilder::new(Client::new())
@@ -371,7 +371,7 @@ async fn delete_request_invalidates_cache() -> Result<()> {
     // Verify it's cached
     let data = http_cache::CacheManager::get(
         &manager,
-        &format!("GET:{}", &url_parse(&url)?),
+        &format!("GET:{}", url_parse(&url)?),
     )
     .await?;
     assert!(data.is_some());
@@ -386,7 +386,7 @@ async fn delete_request_invalidates_cache() -> Result<()> {
     // Verify cache was invalidated
     let data = http_cache::CacheManager::get(
         &manager,
-        &format!("GET:{}", &url_parse(&url)?),
+        &format!("GET:{}", url_parse(&url)?),
     )
     .await?;
     assert!(data.is_none());
@@ -405,7 +405,7 @@ async fn options_request_not_cached() -> Result<()> {
         )
         .expect(2); // Should be called twice since not cached
     let _mock_guard = mock_server.register_as_scoped(m).await;
-    let url = format!("{}/", &mock_server.uri());
+    let url = format!("{}/", mock_server.uri());
     let manager = QuickManager::default();
 
     let client = ClientBuilder::new(Client::new())
@@ -424,7 +424,7 @@ async fn options_request_not_cached() -> Result<()> {
     // Verify it's not cached
     let data = http_cache::CacheManager::get(
         &manager,
-        &format!("OPTIONS:{}", &url_parse(&url)?),
+        &format!("OPTIONS:{}", url_parse(&url)?),
     )
     .await?;
     assert!(data.is_none());

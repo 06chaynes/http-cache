@@ -49,8 +49,11 @@
 //! # Memory efficiency
 //!
 //! On cache hit, only ~64KB is held in memory at a time (the streaming buffer),
-//! regardless of response size. Writes (put) still buffer the full body in RAM
-//! — use `max_body_size` to cap per-entry cost.
+//! regardless of response size. Writes (`put`) spool each frame straight to a
+//! tmp file and flush before pulling the next, so at most one frame is in RAM.
+//! `max_body_size` is a decline, not an error: an over-cap response is not
+//! cached but is still served in full. On success `put` returns the `File`
+//! variant, served from the committed on-disk body.
 //!
 //! # Example
 //!
@@ -67,35 +70,48 @@
 use std::{
     fmt,
     path::{Path, PathBuf},
-    sync::Arc,
+    sync::{Arc, Weak},
 };
 
 use crate::{
     body::StreamingBody,
-    error::{Result, StreamingError, StreamingErrorKind},
+    error::{Result, StreamingError},
     HttpHeaders, StreamingCacheManager, Url,
 };
-use bytes::Bytes;
+use bytes::{Buf, Bytes};
 use http::{Response, Version};
 use http_body::Body;
-use http_body_util::{BodyExt, Empty};
+use http_body_util::{combinators::UnsyncBoxBody, BodyExt};
 use http_cache_semantics::CachePolicy;
 use moka::future::Cache;
 use rand::RngExt;
-use redb::{Database, ReadableDatabase, ReadableTable, TableDefinition};
+use redb::{Database, ReadableDatabase, TableDefinition};
 use serde::{Deserialize, Serialize};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
+use tokio::sync::RwLock;
 
 use crate::CachedUserMetadata;
 
 /// Default maximum body size for cached responses (100MB).
 ///
-/// Responses larger than this will be rejected during caching to prevent
-/// memory exhaustion. Configure with [`StreamingManager::with_max_body_size`].
+/// Responses larger than this are not cached — not an error: caching is
+/// declined and the body streams through to the caller uncached. Configure
+/// with [`StreamingManager::with_max_body_size`].
 pub const DEFAULT_MAX_BODY_SIZE: u64 = 100 * 1024 * 1024;
 
 /// Size of the 16-byte nonce header prepended to every body file on disk.
 const NONCE_LEN: usize = 16;
+
+/// The concrete body type used by [`StreamingManager`]. Non-cacheable
+/// responses (see [`StreamingCacheManager::convert_body`]) are passed
+/// through as `Streaming` bodies boxed via `boxed_unsync` — `UnsyncBoxBody`
+/// only requires `Send + 'static`, not `Sync`, matching the bound on
+/// `convert_body`'s generic `B`.
+type ManagerBody = StreamingBody<UnsyncBoxBody<Bytes, StreamingError>>;
+
+/// Number of striped per-key lock shards. Bounded, so no lock-map cleanup is
+/// needed; shard index is derived from the body-hash prefix.
+const KEY_LOCK_SHARDS: usize = 64;
 
 /// redb table holding `cache_key -> postcard(CacheMetadata)` mappings.
 const METADATA_TABLE: TableDefinition<&str, &[u8]> =
@@ -120,6 +136,8 @@ struct CacheMetadata {
     /// overwrite-crash corruption where the file contents changed but the
     /// metadata transaction did not land.
     nonce: [u8; NONCE_LEN],
+    /// blake3 hash of the body bytes; verified while streaming on read.
+    checksum: [u8; 32],
     /// Cache policy for revalidation decisions
     policy: CachePolicy,
     /// Optional user-provided metadata
@@ -211,6 +229,10 @@ pub struct StreamingManager {
     metadata: Cache<String, CacheMetadata>,
     /// Maximum body size for cached responses.
     max_body_size: u64,
+    /// Striped per-key locks serializing put/get-validate/delete for a key.
+    /// redb's file lock makes cross-process access impossible, so
+    /// intra-process striping is sufficient.
+    key_locks: Arc<Vec<RwLock<()>>>,
 }
 
 impl fmt::Debug for StreamingManager {
@@ -265,7 +287,8 @@ impl StreamingManager {
     ///
     /// * `cache_dir` - Directory to store cached response bodies and metadata
     /// * `capacity` - Maximum number of metadata entries in the in-memory hot cache
-    /// * `max_body_size` - Maximum body size in bytes (responses larger than this are rejected)
+    /// * `max_body_size` - Maximum body size in bytes (responses larger than this are not
+    ///   cached — caching is declined and the body still streams through to the caller)
     ///
     /// # Example
     ///
@@ -363,111 +386,23 @@ impl StreamingManager {
         sweep_tmp_dir(&tmp_dir).await;
 
         // Build moka without any eviction listener — evictions drop RAM only.
+        // Hydration is lazy: get() falls through to redb on a moka miss and
+        // self-heals poisoned rows there.
         let metadata: Cache<String, CacheMetadata> =
             Cache::builder().max_capacity(capacity).build();
 
-        // Lazily hydrate moka from redb up to `capacity` entries. Use a
-        // spawn_blocking worker for the sync redb iteration, then do the
-        // async inserts back on this task.
-        type StartupScan = (Vec<(String, CacheMetadata)>, Vec<String>);
-        let db_for_scan = db.clone();
-        let cap_usize = capacity as usize;
-        let (entries, bad_keys) =
-            tokio::task::spawn_blocking(move || -> Result<StartupScan> {
-                let read_txn = db_for_scan.begin_read().map_err(|e| {
-                    crate::HttpCacheError::cache(format!(
-                        "redb begin_read failed during startup: {e}"
-                    ))
-                })?;
-                let table =
-                    read_txn.open_table(METADATA_TABLE).map_err(|e| {
-                        crate::HttpCacheError::cache(format!(
-                            "redb open_table failed during startup: {e}"
-                        ))
-                    })?;
-                let mut entries: Vec<(String, CacheMetadata)> = Vec::new();
-                let mut bad_keys: Vec<String> = Vec::new();
-                for row in table.iter().map_err(|e| {
-                    crate::HttpCacheError::cache(format!(
-                        "redb iter failed: {e}"
-                    ))
-                })? {
-                    let (k_guard, v_guard) = match row {
-                        Ok(pair) => pair,
-                        Err(e) => {
-                            log::debug!(
-                                "Skipping corrupt redb row during startup: \
-                                 {e}"
-                            );
-                            continue;
-                        }
-                    };
-                    let k = k_guard.value().to_string();
-                    let v = v_guard.value();
-                    match postcard::from_bytes::<CacheMetadata>(v) {
-                        Ok(m) => {
-                            if entries.len() < cap_usize {
-                                entries.push((k, m));
-                            }
-                        }
-                        Err(e) => {
-                            log::debug!(
-                                "Skipping poisoned metadata for key {k}: {e}"
-                            );
-                            bad_keys.push(k);
-                        }
-                    }
-                }
-                Ok((entries, bad_keys))
-            })
-            .await
-            .map_err(|e| {
-                crate::HttpCacheError::cache(format!(
-                    "startup scan join failed: {e}"
-                ))
-            })??;
+        let key_locks =
+            Arc::new((0..KEY_LOCK_SHARDS).map(|_| RwLock::new(())).collect());
 
-        // Remove any poisoned rows in a single follow-up write txn.
-        if !bad_keys.is_empty() {
-            let db_cleanup = db.clone();
-            tokio::task::spawn_blocking(move || -> Result<()> {
-                let write_txn = db_cleanup.begin_write().map_err(|e| {
-                    crate::HttpCacheError::cache(format!(
-                        "redb begin_write (poisoned cleanup) failed: {e}"
-                    ))
-                })?;
-                {
-                    let mut table =
-                        write_txn.open_table(METADATA_TABLE).map_err(|e| {
-                            crate::HttpCacheError::cache(format!(
-                                "redb open_table (poisoned cleanup) failed: \
-                                 {e}"
-                            ))
-                        })?;
-                    for k in &bad_keys {
-                        let _ = table.remove(k.as_str());
-                    }
-                }
-                write_txn.commit().map_err(|e| {
-                    crate::HttpCacheError::cache(format!(
-                        "redb commit (poisoned cleanup) failed: {e}"
-                    ))
-                })?;
-                Ok(())
-            })
-            .await
-            .map_err(|e| {
-                crate::HttpCacheError::cache(format!(
-                    "poisoned cleanup join failed: {e}"
-                ))
-            })??;
-        }
-
-        for (k, m) in entries {
-            metadata.insert(k, m).await;
-        }
-
-        Ok(Self { cache_dir, body_dir, tmp_dir, db, metadata, max_body_size })
+        Ok(Self {
+            cache_dir,
+            body_dir,
+            tmp_dir,
+            db,
+            metadata,
+            max_body_size,
+            key_locks,
+        })
     }
 
     /// Creates a new [`StreamingManager`] using a temporary directory.
@@ -530,10 +465,10 @@ impl StreamingManager {
 
     /// Returns the current number of entries in the **in-memory hot cache**.
     ///
-    /// Note: this is not necessarily the total number of persisted entries.
-    /// When the cache has fewer entries than the configured `capacity`, this
-    /// equals the total. Once capacity is exceeded, cold entries remain on
-    /// disk (reachable via `get`) but are not counted here.
+    /// Note: this is not the total number of persisted entries. Hydration
+    /// is lazy, so this reads 0 after a restart until keys are accessed,
+    /// and once `capacity` is exceeded, cold entries remain on disk
+    /// (reachable via `get`) but are not counted here.
     #[must_use]
     pub fn entry_count(&self) -> u64 {
         self.metadata.entry_count()
@@ -583,14 +518,12 @@ impl StreamingManager {
         })??;
 
         // Wipe body files and tmp files.
-        let _ = tokio::fs::remove_dir_all(&self.body_dir).await;
-        tokio::fs::create_dir_all(&self.body_dir).await.map_err(|e| {
+        recreate_dir(&self.body_dir).await.map_err(|e| {
             crate::HttpCacheError::cache(format!(
                 "Failed to recreate body directory: {e}"
             ))
         })?;
-        let _ = tokio::fs::remove_dir_all(&self.tmp_dir).await;
-        tokio::fs::create_dir_all(&self.tmp_dir).await.map_err(|e| {
+        recreate_dir(&self.tmp_dir).await.map_err(|e| {
             crate::HttpCacheError::cache(format!(
                 "Failed to recreate tmp directory: {e}"
             ))
@@ -615,31 +548,22 @@ impl StreamingManager {
     /// Remove a key from redb. Swallows errors at debug level; used by
     /// self-heal paths.
     async fn redb_remove(&self, cache_key: &str) {
-        let db = self.db.clone();
-        let key = cache_key.to_string();
-        let _ = tokio::task::spawn_blocking(move || -> Result<()> {
-            let write_txn = db.begin_write().map_err(|e| {
-                crate::HttpCacheError::cache(format!(
-                    "redb begin_write (remove) failed: {e}"
-                ))
-            })?;
-            {
-                let mut table =
-                    write_txn.open_table(METADATA_TABLE).map_err(|e| {
-                        crate::HttpCacheError::cache(format!(
-                            "redb open_table (remove) failed: {e}"
-                        ))
-                    })?;
-                let _ = table.remove(key.as_str());
-            }
-            write_txn.commit().map_err(|e| {
-                crate::HttpCacheError::cache(format!(
-                    "redb commit (remove) failed: {e}"
-                ))
-            })?;
-            Ok(())
-        })
-        .await;
+        redb_remove_row(self.db.clone(), cache_key.to_string()).await;
+    }
+
+    /// Drop an entry from all three tiers (moka, redb, body file). Used by
+    /// the read-path self-heal branches and by delete.
+    async fn self_heal(&self, cache_key: &str, body_path: &Path) {
+        self.metadata.invalidate(cache_key).await;
+        self.redb_remove(cache_key).await;
+        let _ = tokio::fs::remove_file(body_path).await;
+    }
+
+    /// Return the striped shard lock for the given body hash: get() takes
+    /// it shared, put/delete/heal take it exclusive. Callers must not
+    /// acquire a second shard lock while already holding one.
+    fn key_lock(&self, body_hash: &str) -> &RwLock<()> {
+        &self.key_locks[shard_index(body_hash)]
     }
 
     /// Read a metadata row from redb by key.
@@ -694,9 +618,13 @@ impl StreamingManager {
     /// validated metadata. File cursor must already be past the 16-byte nonce
     /// header.
     fn build_response_from_parts(
+        &self,
+        cache_key: &str,
+        body_hash: &str,
+        body_path: &Path,
         metadata: &CacheMetadata,
         file: tokio::fs::File,
-    ) -> Result<Response<StreamingBody<Empty<Bytes>>>> {
+    ) -> Result<Response<ManagerBody>> {
         let mut response_builder = Response::builder()
             .status(metadata.status)
             .version(version_from_u8(metadata.version));
@@ -704,7 +632,23 @@ impl StreamingManager {
             response_builder =
                 response_builder.header(name.as_str(), value.as_str());
         }
-        let body = StreamingBody::from_file_with_size(file, metadata.body_size);
+        let heal = CorruptHeal {
+            db: Arc::downgrade(&self.db),
+            metadata: self.metadata.clone(),
+            key_locks: self.key_locks.clone(),
+            key: cache_key.to_string(),
+            body_hash: body_hash.to_string(),
+            body_path: body_path.to_path_buf(),
+            nonce: metadata.nonce,
+        };
+        let body = StreamingBody::from_file_verified(
+            file,
+            metadata.body_size,
+            metadata.checksum,
+            move || {
+                tokio::spawn(heal.run());
+            },
+        );
         let mut response = response_builder.body(body).map_err(|e| {
             crate::HttpCacheError::cache(format!(
                 "Failed to build response: {e}"
@@ -715,7 +659,197 @@ impl StreamingManager {
         response
             .extensions_mut()
             .insert(CachedUserMetadata(metadata.user_metadata.clone()));
+        response
+            .extensions_mut()
+            .insert(crate::CacheEntryToken(metadata.nonce.to_vec()));
         Ok(response)
+    }
+}
+
+/// Write to the spool. `tokio::fs::File` defers write errors to the next
+/// operation and `sync_all` discards them, so this flush is required.
+async fn spool_write<W: tokio::io::AsyncWrite + Unpin>(
+    writer: &mut W,
+    data: &[u8],
+) -> std::io::Result<()> {
+    writer.write_all(data).await?;
+    writer.flush().await
+}
+
+/// Unlinks the spool tmp file on drop unless `defuse()` was called
+/// (defused = the file was renamed into its final location). In structs that
+/// also own the spool `File`, declare the guard AFTER the file field so the
+/// handle closes first (Windows unlink-while-open).
+struct TmpGuard {
+    path: PathBuf,
+    defused: bool,
+}
+
+impl TmpGuard {
+    fn new(path: PathBuf) -> Self {
+        Self { path, defused: false }
+    }
+    fn defuse(&mut self) {
+        self.defused = true;
+    }
+}
+
+impl Drop for TmpGuard {
+    fn drop(&mut self) {
+        if !self.defused {
+            let _ = std::fs::remove_file(&self.path);
+        }
+    }
+}
+
+/// Single agreed Content-Length, if one exists. Multiple disagreeing or
+/// unparseable values are treated as unknown length (RFC 9110 §8.6) so the
+/// running spool counter stays authoritative.
+fn parse_content_length(headers: &http::HeaderMap) -> Option<u64> {
+    let mut iter = headers.get_all(http::header::CONTENT_LENGTH).iter();
+    let first = iter.next()?.to_str().ok()?.trim().parse::<u64>().ok()?;
+    for v in iter {
+        if v.to_str().ok()?.trim().parse::<u64>().ok()? != first {
+            return None;
+        }
+    }
+    Some(first)
+}
+
+/// Hop-by-hop headers must not be replayed from cache (RFC 9111 §3.1):
+/// the stored body is already transfer-decoded, so replaying e.g.
+/// `transfer-encoding: chunked` would be a lie.
+const HOP_BY_HOP: &[&str] = &[
+    "connection",
+    "keep-alive",
+    "proxy-authenticate",
+    "proxy-authorization",
+    "proxy-connection",
+    "te",
+    "trailer",
+    "transfer-encoding",
+    "upgrade",
+];
+
+/// Header set persisted into `CacheMetadata`: hop-by-hop stripped —
+/// including any field names nominated by `Connection` header values
+/// (RFC 9111 §3.1) — multi-valued preserved, non-UTF-8 values skipped
+/// (unchanged policy).
+fn stored_headers(headers: &http::HeaderMap) -> HttpHeaders {
+    // Field names listed inside Connection values are hop-by-hop too.
+    let nominated: Vec<String> = headers
+        .get_all(http::header::CONNECTION)
+        .iter()
+        .filter_map(|v| v.to_str().ok())
+        .flat_map(|v| v.split(','))
+        .map(|t| t.trim().to_ascii_lowercase())
+        .filter(|t| !t.is_empty())
+        .collect();
+
+    let mut out = HttpHeaders::new();
+    for (name, value) in headers.iter() {
+        // HeaderName::as_str() is always lower case.
+        let name = name.as_str();
+        if HOP_BY_HOP.contains(&name) || nominated.iter().any(|n| n == name) {
+            continue;
+        }
+        if let Ok(value_str) = value.to_str() {
+            out.append(name.to_string(), value_str.to_string());
+        }
+    }
+    out
+}
+
+fn shard_index(body_hash: &str) -> usize {
+    usize::from_str_radix(&body_hash[..2], 16).unwrap_or(0) % KEY_LOCK_SHARDS
+}
+
+/// Remove a metadata row. Errors are swallowed; used by self-heal paths.
+async fn redb_remove_row(db: Arc<Database>, key: String) {
+    let _ = tokio::task::spawn_blocking(move || -> Result<()> {
+        let write_txn = db.begin_write().map_err(|e| {
+            crate::HttpCacheError::cache(format!(
+                "redb begin_write (remove) failed: {e}"
+            ))
+        })?;
+        {
+            let mut table =
+                write_txn.open_table(METADATA_TABLE).map_err(|e| {
+                    crate::HttpCacheError::cache(format!(
+                        "redb open_table (remove) failed: {e}"
+                    ))
+                })?;
+            let _ = table.remove(key.as_str());
+        }
+        write_txn.commit().map_err(|e| {
+            crate::HttpCacheError::cache(format!(
+                "redb commit (remove) failed: {e}"
+            ))
+        })?;
+        Ok(())
+    })
+    .await;
+}
+
+/// Read a row's nonce; any failure reads as `None`. Used by the deferred
+/// corrupt-heal identity check.
+async fn redb_read_nonce(
+    db: Arc<Database>,
+    key: String,
+) -> Option<[u8; NONCE_LEN]> {
+    tokio::task::spawn_blocking(move || {
+        let read_txn = db.begin_read().ok()?;
+        let table = read_txn.open_table(METADATA_TABLE).ok()?;
+        let guard = table.get(key.as_str()).ok()??;
+        postcard::from_bytes::<CacheMetadata>(guard.value())
+            .ok()
+            .map(|m| m.nonce)
+    })
+    .await
+    .ok()
+    .flatten()
+}
+
+/// Deferred heal for a corrupt streamed body. Holds a weak database handle
+/// so an in-flight body does not keep the redb file lock alive, and the
+/// nonce observed at read time so it never deletes an entry written after
+/// the corrupt read.
+struct CorruptHeal {
+    db: Weak<Database>,
+    metadata: Cache<String, CacheMetadata>,
+    key_locks: Arc<Vec<RwLock<()>>>,
+    key: String,
+    body_hash: String,
+    body_path: PathBuf,
+    nonce: [u8; NONCE_LEN],
+}
+
+impl CorruptHeal {
+    async fn run(self) {
+        let Some(db) = self.db.upgrade() else {
+            return;
+        };
+        let _guard = self.key_locks[shard_index(&self.body_hash)].write().await;
+        let current = match self.metadata.get(&self.key).await {
+            Some(m) => Some(m.nonce),
+            None => redb_read_nonce(db.clone(), self.key.clone()).await,
+        };
+        if current != Some(self.nonce) {
+            return;
+        }
+        self.metadata.invalidate(&self.key).await;
+        redb_remove_row(db, self.key).await;
+        let _ = tokio::fs::remove_file(&self.body_path).await;
+    }
+}
+
+/// Remove and recreate `dir`, tolerating the `AlreadyExists` that
+/// `create_dir_all` can return when it races a concurrent removal.
+async fn recreate_dir(dir: &Path) -> std::io::Result<()> {
+    let _ = tokio::fs::remove_dir_all(dir).await;
+    match tokio::fs::create_dir_all(dir).await {
+        Err(e) if e.kind() != std::io::ErrorKind::AlreadyExists => Err(e),
+        _ => Ok(()),
     }
 }
 
@@ -755,8 +889,83 @@ async fn sweep_tmp_dir(tmp_dir: &Path) {
     }
 }
 
+pin_project_lite::pin_project! {
+    /// Pass-through stream that owns the spool TmpGuard, tying the tmp
+    /// file's lifetime to the caller's body. Field order: `inner` (which
+    /// owns the File inside its StreamingBody) before `guard`, so the
+    /// handle closes before the unlink attempt.
+    struct GuardedStream<S> {
+        #[pin]
+        inner: S,
+        guard: TmpGuard,
+    }
+}
+
+impl<S: futures_util::Stream> futures_util::Stream for GuardedStream<S> {
+    type Item = S::Item;
+    fn poll_next(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Option<Self::Item>> {
+        self.project().inner.poll_next(cx)
+    }
+}
+
+/// Serve an uncached response assembled from a partially- or fully-spooled
+/// tmp file plus whatever of the upstream body remains. Used when put()
+/// declines mid-flight: the caller still receives every byte, nothing is
+/// cached, and the tmp file is unlinked when the body is dropped.
+///
+/// `file`'s cursor position on entry is irrelevant: the stream seeks past
+/// the nonce before reading. `written` is the count of flush-confirmed
+/// spooled body bytes — the size-enforced File body reads exactly that
+/// many, so partial trailing writes are ignored.
+fn serve_uncached_spooled(
+    parts: http::response::Parts,
+    file: tokio::fs::File,
+    guard: TmpGuard,
+    written: u64,
+    pending: Option<Bytes>,
+    rest: Option<UnsyncBoxBody<Bytes, StreamingError>>,
+) -> Result<Response<ManagerBody>> {
+    use futures_util::{StreamExt, TryStreamExt};
+    use http_body_util::{BodyStream, StreamBody};
+
+    // The seek is deferred into the stream so this fn stays sync.
+    let prefix = futures_util::stream::once(async move {
+        let mut file = file;
+        file.seek(std::io::SeekFrom::Start(NONCE_LEN as u64))
+            .await
+            .map_err(|e| StreamingError::new(Box::new(e)))?;
+        Ok::<_, StreamingError>(BodyStream::new(StreamingBody::<
+            UnsyncBoxBody<Bytes, StreamingError>,
+        >::from_file_with_size(
+            file, written
+        )))
+    })
+    .try_flatten();
+
+    let pending_stream = futures_util::stream::iter(
+        pending.into_iter().map(|b| Ok(http_body::Frame::data(b))),
+    );
+
+    let rest_stream = rest
+        .map(BodyStream::new)
+        .map(StreamExt::left_stream)
+        .unwrap_or_else(|| futures_util::stream::empty().right_stream());
+
+    let chained = prefix.chain(pending_stream).chain(rest_stream);
+    let body = StreamBody::new(GuardedStream { inner: chained, guard });
+    // Extensions must survive every decline path: reqwest reads the final
+    // URL back out of them.
+    Ok(Response::from_parts(
+        parts,
+        StreamingBody::streaming(body.boxed_unsync()),
+    ))
+}
+
 impl StreamingCacheManager for StreamingManager {
-    type Body = StreamingBody<Empty<Bytes>>;
+    type Body = ManagerBody;
 
     async fn get(
         &self,
@@ -767,6 +976,10 @@ impl StreamingCacheManager for StreamingManager {
         <Self::Body as Body>::Error:
             Into<StreamingError> + Send + Sync + 'static,
     {
+        let body_hash = body_hash_for(cache_key);
+        let body_path = body_path_for(&self.body_dir, &body_hash);
+        let _guard = self.key_lock(&body_hash).read().await;
+
         // Resolve metadata: moka hit first, fall through to redb on miss.
         let metadata = match self.metadata.get(cache_key).await {
             Some(m) => m,
@@ -781,21 +994,21 @@ impl StreamingCacheManager for StreamingManager {
             },
         };
 
-        let body_hash = body_hash_for(cache_key);
-        let body_path = body_path_for(&self.body_dir, &body_hash);
-
         // Open the body file. NotFound self-heals as a miss.
         let mut file = match tokio::fs::File::open(&body_path).await {
             Ok(f) => f,
             Err(ref e) if e.kind() == std::io::ErrorKind::NotFound => {
-                self.metadata.invalidate(cache_key).await;
-                self.redb_remove(cache_key).await;
+                self.self_heal(cache_key, &body_path).await;
                 return Ok(None);
             }
             Err(e) => {
-                return Err(Box::new(crate::HttpCacheError::cache(format!(
-                    "Failed to open cached body file: {e}"
-                ))));
+                // Other open errors (permissions, transient I/O) read as a
+                // miss without deleting the entry.
+                log::debug!(
+                    "body file open failed for {cache_key}; treating as \
+                     miss: {e}"
+                );
+                return Ok(None);
             }
         };
 
@@ -806,9 +1019,7 @@ impl StreamingCacheManager for StreamingManager {
                 log::debug!(
                     "body file stat failed for {cache_key}; self-healing: {e}"
                 );
-                self.metadata.invalidate(cache_key).await;
-                self.redb_remove(cache_key).await;
-                let _ = tokio::fs::remove_file(&body_path).await;
+                self.self_heal(cache_key, &body_path).await;
                 return Ok(None);
             }
         };
@@ -819,9 +1030,7 @@ impl StreamingCacheManager for StreamingManager {
                 NONCE_LEN as u64 + metadata.body_size
             );
             drop(file);
-            self.metadata.invalidate(cache_key).await;
-            self.redb_remove(cache_key).await;
-            let _ = tokio::fs::remove_file(&body_path).await;
+            self.self_heal(cache_key, &body_path).await;
             return Ok(None);
         }
 
@@ -832,9 +1041,7 @@ impl StreamingCacheManager for StreamingManager {
                 "body-file nonce read failed for {cache_key}; self-healing: {e}"
             );
             drop(file);
-            self.metadata.invalidate(cache_key).await;
-            self.redb_remove(cache_key).await;
-            let _ = tokio::fs::remove_file(&body_path).await;
+            self.self_heal(cache_key, &body_path).await;
             return Ok(None);
         }
         if nonce_buf != metadata.nonce {
@@ -843,16 +1050,15 @@ impl StreamingCacheManager for StreamingManager {
                  window or tampering)"
             );
             drop(file);
-            self.metadata.invalidate(cache_key).await;
-            self.redb_remove(cache_key).await;
-            let _ = tokio::fs::remove_file(&body_path).await;
+            self.self_heal(cache_key, &body_path).await;
             return Ok(None);
         }
 
-        // File cursor is now at offset NONCE_LEN; StreamingBody streams from
-        // here to EOF, and the length check guarantees EOF = body_size bytes
-        // later.
-        let response = Self::build_response_from_parts(&metadata, file)?;
+        // File cursor is now at offset NONCE_LEN; the body streams exactly
+        // body_size bytes from here, verified against the stored checksum.
+        let response = self.build_response_from_parts(
+            cache_key, &body_hash, &body_path, &metadata, file,
+        )?;
         Ok(Some((response, metadata.policy)))
     }
 
@@ -874,164 +1080,362 @@ impl StreamingCacheManager for StreamingManager {
     {
         let (parts, body) = response.into_parts();
 
-        // Collect body — the put path is fully buffered (reads stream).
-        let body_bytes = body
-            .collect()
-            .await
-            .map_err(|e| StreamingError::new(e.into()))?
-            .to_bytes();
+        // Normalize the incoming body once: Data -> Bytes, Error ->
+        // StreamingError, boxed so decline paths can hand it back out.
+        let mut inner: UnsyncBoxBody<Bytes, StreamingError> = body
+            .map_frame(|frame| {
+                frame.map_data(|mut d| d.copy_to_bytes(d.remaining()))
+            })
+            .map_err(Into::into)
+            .boxed_unsync();
 
-        // Enforce body-size limit before writing anything to disk.
-        if body_bytes.len() as u64 > self.max_body_size {
-            return Err(Box::new(StreamingError::with_kind(
-                format!(
-                    "Response body size ({} bytes) exceeds maximum size ({} bytes)",
-                    body_bytes.len(),
-                    self.max_body_size
-                ),
-                StreamingErrorKind::Other,
-            )));
+        // HEAD responses carry the entity's Content-Length with an empty
+        // body (RFC 9110 §8.6): exempt them from the CL-based size and
+        // completeness checks below.
+        let is_head = parts
+            .extensions
+            .get::<crate::CachedRequestMethod>()
+            .is_some_and(|m| m.0 == http::Method::HEAD);
+
+        // Decline before the stream is touched.
+        let content_length = parse_content_length(&parts.headers);
+        if self.max_body_size == 0
+            || (!is_head
+                && content_length.is_some_and(|cl| cl > self.max_body_size))
+        {
+            return Ok(Response::from_parts(
+                parts,
+                StreamingBody::streaming(inner),
+            ));
         }
 
-        let body_size = body_bytes.len() as u64;
-        // Crash-detection nonce: written at the head of the body file AND
-        // stored in metadata. Any mismatch on read means the file was
-        // overwritten by a put whose redb commit did not land (or by
-        // external tampering).
-        let nonce: [u8; NONCE_LEN] = rand::rng().random();
-
-        // Build metadata.
-        let mut headers = HttpHeaders::new();
-        for (name, value) in parts.headers.iter() {
-            if let Ok(value_str) = value.to_str() {
-                headers
-                    .append(name.as_str().to_string(), value_str.to_string());
-            }
-        }
-        let metadata = CacheMetadata {
-            status: parts.status.as_u16(),
-            version: version_to_u8(parts.version),
-            headers,
-            body_size,
-            nonce,
-            policy,
-            user_metadata,
-        };
-
-        // Write to tmp, sync, rename to final.
+        // Spool setup. Failures here degrade to pass-through; the stream has
+        // not been polled yet, so nothing is lost.
         let body_hash = body_hash_for(&cache_key);
         let tmp_suffix: u64 = rand::rng().random();
         let tmp_path =
             self.tmp_dir.join(format!("{body_hash}.{tmp_suffix:016x}.tmp"));
         let final_dir = self.body_dir.join(&body_hash[0..2]);
-        tokio::fs::create_dir_all(&final_dir).await.map_err(|e| {
-            crate::HttpCacheError::cache(format!(
-                "Failed to create body subdir: {e}"
-            ))
-        })?;
-        let final_path = final_dir.join(format!("{body_hash}.bin"));
-
-        {
-            let mut f =
-                tokio::fs::File::create(&tmp_path).await.map_err(|e| {
-                    crate::HttpCacheError::cache(format!(
-                        "Failed to open tmp body file: {e}"
-                    ))
-                })?;
-            f.write_all(&nonce).await.map_err(|e| {
-                crate::HttpCacheError::cache(format!(
-                    "Failed to write nonce header: {e}"
-                ))
-            })?;
-            f.write_all(&body_bytes).await.map_err(|e| {
-                crate::HttpCacheError::cache(format!(
-                    "Failed to write body bytes: {e}"
-                ))
-            })?;
-            f.sync_all().await.map_err(|e| {
-                crate::HttpCacheError::cache(format!(
-                    "Failed to fsync body file: {e}"
-                ))
-            })?;
+        if let Err(e) = tokio::fs::create_dir_all(&final_dir).await {
+            log::debug!(
+                "put: create body subdir failed; serving uncached: {e}"
+            );
+            return Ok(Response::from_parts(
+                parts,
+                StreamingBody::streaming(inner),
+            ));
         }
-        tokio::fs::rename(&tmp_path, &final_path).await.map_err(|e| {
-            crate::HttpCacheError::cache(format!(
-                "Failed to rename tmp to final body file: {e}"
-            ))
-        })?;
+        let final_path = final_dir.join(format!("{body_hash}.bin"));
+        let nonce: [u8; NONCE_LEN] = rand::rng().random();
 
-        // Commit metadata to redb. If the commit fails AFTER the body file
-        // has been renamed into place, roll back the rename by unlinking the
-        // body file so we don't leak disk space on an orphaned body.
-        let db = self.db.clone();
-        let key_for_redb = cache_key.clone();
+        // read+write: the same handle serves the response after commit.
+        let mut file = match tokio::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create_new(true)
+            .open(&tmp_path)
+            .await
+        {
+            Ok(f) => f,
+            Err(e) => {
+                log::debug!("put: open tmp failed; serving uncached: {e}");
+                return Ok(Response::from_parts(
+                    parts,
+                    StreamingBody::streaming(inner),
+                ));
+            }
+        };
+        // Construct the guard only after `create_new` succeeded: on EEXIST
+        // the tmp file belongs to another in-flight put, not to us.
+        let mut guard = TmpGuard::new(tmp_path.clone());
+        if let Err(e) = spool_write(&mut file, &nonce).await {
+            log::debug!("put: nonce write failed; serving uncached: {e}");
+            drop(file); // close before the guard unlinks
+            return Ok(Response::from_parts(
+                parts,
+                StreamingBody::streaming(inner),
+            ));
+        }
+
+        // Spool loop: exactly one frame in flight. The size check precedes
+        // the write so the tmp file never exceeds max_body_size, and
+        // `written` counts flush-confirmed bytes (see `spool_write`).
+        let mut hasher = blake3::Hasher::new();
+        let mut written: u64 = 0;
+        loop {
+            match inner.frame().await {
+                None => break,
+                Some(Err(e)) => {
+                    // Upstream failed: fail the request; the guard unlinks
+                    // the tmp file.
+                    drop(file);
+                    return Err(Box::new(e));
+                }
+                Some(Ok(frame)) => {
+                    let Ok(data) = frame.into_data() else {
+                        // Trailer frame: the cache format has no trailers.
+                        continue;
+                    };
+                    if written + data.len() as u64 > self.max_body_size {
+                        // Unknown-length overflow: decline, keep serving.
+                        return serve_uncached_spooled(
+                            parts,
+                            file,
+                            guard,
+                            written,
+                            Some(data),
+                            Some(inner),
+                        );
+                    }
+                    if let Err(e) = spool_write(&mut file, &data).await {
+                        log::debug!(
+                            "put: spool write failed; serving uncached: {e}"
+                        );
+                        return serve_uncached_spooled(
+                            parts,
+                            file,
+                            guard,
+                            written,
+                            Some(data),
+                            Some(inner),
+                        );
+                    }
+                    hasher.update(&data);
+                    written += data.len() as u64;
+                }
+            }
+        }
+
+        // RFC 9111 §3.3: never store a response we know is incomplete.
+        if !is_head {
+            if let Some(cl) = content_length {
+                if cl != written {
+                    log::debug!(
+                        "put: content-length {cl} != received {written}; \
+                         serving uncached (incomplete response)"
+                    );
+                    return serve_uncached_spooled(
+                        parts, file, guard, written, None, None,
+                    );
+                }
+            }
+        }
+        if let Err(e) = file.sync_all().await {
+            log::debug!("put: fsync failed; serving uncached: {e}");
+            return serve_uncached_spooled(
+                parts, file, guard, written, None, None,
+            );
+        }
+
+        let metadata = CacheMetadata {
+            status: parts.status.as_u16(),
+            version: version_to_u8(parts.version),
+            headers: stored_headers(&parts.headers),
+            body_size: written,
+            nonce,
+            checksum: *hasher.finalize().as_bytes(),
+            policy,
+            user_metadata,
+        };
+        let checksum = metadata.checksum;
+
+        // Serialization failure is a cache-side failure: decline, don't
+        // fail the request.
+        let serialized = match postcard::to_allocvec(&metadata) {
+            Ok(s) => s,
+            Err(e) => {
+                log::debug!(
+                    "put: metadata serialization failed; serving uncached: {e}"
+                );
+                return serve_uncached_spooled(
+                    parts, file, guard, written, None, None,
+                );
+            }
+        };
+
+        // Publish under the shard write lock: rename -> redb commit -> moka.
+        {
+            let _guard_lock = self.key_lock(&body_hash).write().await;
+            if let Err(e) = tokio::fs::rename(&tmp_path, &final_path).await {
+                log::debug!("put: rename failed; serving uncached: {e}");
+                return serve_uncached_spooled(
+                    parts, file, guard, written, None, None,
+                );
+            }
+            guard.defuse(); // tmp path no longer exists
+
+            let db = self.db.clone();
+            let key_for_redb = cache_key.clone();
+            let commit_result: Result<()> =
+                match tokio::task::spawn_blocking(move || -> Result<()> {
+                    let write_txn = db.begin_write().map_err(|e| {
+                        crate::HttpCacheError::cache(format!(
+                            "redb begin_write (put) failed: {e}"
+                        ))
+                    })?;
+                    {
+                        let mut table = write_txn
+                            .open_table(METADATA_TABLE)
+                            .map_err(|e| {
+                                crate::HttpCacheError::cache(format!(
+                                    "redb open_table (put) failed: {e}"
+                                ))
+                            })?;
+                        table
+                            .insert(
+                                key_for_redb.as_str(),
+                                serialized.as_slice(),
+                            )
+                            .map_err(|e| {
+                                crate::HttpCacheError::cache(format!(
+                                    "redb insert (put) failed: {e}"
+                                ))
+                            })?;
+                    }
+                    write_txn.commit().map_err(|e| {
+                        crate::HttpCacheError::cache(format!(
+                            "redb commit (put) failed: {e}"
+                        ))
+                    })?;
+                    Ok(())
+                })
+                .await
+                {
+                    Ok(inner_result) => inner_result,
+                    Err(e) => Err(Box::new(crate::HttpCacheError::cache(
+                        format!("put join failed: {e}"),
+                    ))),
+                };
+            if let Err(e) = commit_result {
+                // Roll back the rename (unlink final) so we don't leak an
+                // orphaned body, then keep serving from the open handle —
+                // the inode stays alive until the handle drops (Rust's std
+                // opens files with FILE_SHARE_DELETE on Windows, so the
+                // unlink is legal there too).
+                log::debug!("put: redb commit failed; serving uncached: {e}");
+                let _ = tokio::fs::remove_file(&final_path).await;
+                return serve_uncached_spooled(
+                    parts, file, guard, written, None, None,
+                );
+            }
+            self.metadata.insert(cache_key.clone(), metadata).await;
+        }
+
+        // Serve from the same handle we just wrote: no reopen race with a
+        // concurrent put. Parts stay exactly as received; only the stored
+        // metadata got the hop-by-hop strip.
+        if let Err(e) =
+            file.seek(std::io::SeekFrom::Start(NONCE_LEN as u64)).await
+        {
+            // Entry is committed and valid; only our serving handle is
+            // broken. Fall back to a fresh get().
+            log::debug!("put: post-commit seek failed: {e}");
+            drop(file);
+            if let Some((resp, _)) = self.get(&cache_key).await? {
+                let (_, body) = resp.into_parts();
+                return Ok(Response::from_parts(parts, body));
+            }
+            return Err(crate::HttpCacheError::cache(format!(
+                "put: entry vanished after commit: {e}"
+            ))
+            .into());
+        }
+        let heal = CorruptHeal {
+            db: Arc::downgrade(&self.db),
+            metadata: self.metadata.clone(),
+            key_locks: self.key_locks.clone(),
+            key: cache_key,
+            body_hash,
+            body_path: final_path,
+            nonce,
+        };
+        let body = StreamingBody::from_file_verified(
+            file,
+            written,
+            checksum,
+            move || {
+                tokio::spawn(heal.run());
+            },
+        );
+        Ok(Response::from_parts(parts, body))
+    }
+
+    async fn update_metadata(
+        &self,
+        cache_key: &str,
+        headers: &http::HeaderMap,
+        policy: CachePolicy,
+        user_metadata: Option<Vec<u8>>,
+        token: Option<&crate::CacheEntryToken>,
+    ) -> Result<bool> {
+        let body_hash = body_hash_for(cache_key);
+        let _guard = self.key_lock(&body_hash).write().await;
+
+        // redb is authoritative; moka may lag.
+        let Some(mut metadata) = self.redb_get(cache_key).await? else {
+            // Entry vanished (evicted/healed). Drop any stale moka row.
+            self.metadata.invalidate(cache_key).await;
+            return Ok(false);
+        };
+
+        // Identity check: refuse to staple this revision's headers onto a
+        // concurrently-stored replacement entry's body.
+        if let Some(t) = token {
+            if t.0.as_slice() != metadata.nonce {
+                return Ok(false);
+            }
+        }
+
+        metadata.headers = stored_headers(headers);
+        metadata.policy = policy;
+        metadata.user_metadata = user_metadata;
+        // nonce/checksum/body_size stay as-is, which also keeps CorruptHeal
+        // correct for a corrupt read already in flight.
+
         let serialized = postcard::to_allocvec(&metadata).map_err(|e| {
             crate::HttpCacheError::cache(format!(
                 "Failed to serialize metadata: {e}"
             ))
         })?;
-        let commit_result: Result<()> =
-            match tokio::task::spawn_blocking(move || -> Result<()> {
-                let write_txn = db.begin_write().map_err(|e| {
-                    crate::HttpCacheError::cache(format!(
-                        "redb begin_write (put) failed: {e}"
-                    ))
-                })?;
-                {
-                    let mut table =
-                        write_txn.open_table(METADATA_TABLE).map_err(|e| {
-                            crate::HttpCacheError::cache(format!(
-                                "redb open_table (put) failed: {e}"
-                            ))
-                        })?;
-                    table
-                        .insert(key_for_redb.as_str(), serialized.as_slice())
-                        .map_err(|e| {
-                            crate::HttpCacheError::cache(format!(
-                                "redb insert (put) failed: {e}"
-                            ))
-                        })?;
-                }
-                write_txn.commit().map_err(|e| {
-                    crate::HttpCacheError::cache(format!(
-                        "redb commit (put) failed: {e}"
-                    ))
-                })?;
-                Ok(())
-            })
-            .await
-            {
-                Ok(inner) => inner,
-                Err(e) => Err(Box::new(crate::HttpCacheError::cache(format!(
-                    "put join failed: {e}"
-                )))),
-            };
-        if let Err(e) = commit_result {
-            // Roll back the body file to avoid a disk leak. Best-effort.
-            let _ = tokio::fs::remove_file(&final_path).await;
-            return Err(e);
-        }
-
-        // Populate moka.
-        self.metadata.insert(cache_key, metadata).await;
-
-        // Return response with Buffered body (bytes are already in RAM —
-        // matches the pre-refactor contract that puts return in-memory bodies).
-        let mut response_builder =
-            Response::builder().status(parts.status).version(parts.version);
-        for (name, value) in parts.headers.iter() {
-            response_builder = response_builder.header(name, value);
-        }
-        let return_body = StreamingBody::buffered(body_bytes);
-        let mut return_response =
-            response_builder.body(return_body).map_err(|e| {
+        let db = self.db.clone();
+        let key_for_redb = cache_key.to_string();
+        tokio::task::spawn_blocking(move || -> Result<()> {
+            let write_txn = db.begin_write().map_err(|e| {
                 crate::HttpCacheError::cache(format!(
-                    "Failed to build response: {e}"
+                    "redb begin_write (update_metadata) failed: {e}"
                 ))
             })?;
-        *return_response.extensions_mut() = parts.extensions;
+            {
+                let mut table =
+                    write_txn.open_table(METADATA_TABLE).map_err(|e| {
+                        crate::HttpCacheError::cache(format!(
+                            "redb open_table (update_metadata) failed: {e}"
+                        ))
+                    })?;
+                table
+                    .insert(key_for_redb.as_str(), serialized.as_slice())
+                    .map_err(|e| {
+                        crate::HttpCacheError::cache(format!(
+                            "redb insert (update_metadata) failed: {e}"
+                        ))
+                    })?;
+            }
+            write_txn.commit().map_err(|e| {
+                crate::HttpCacheError::cache(format!(
+                    "redb commit (update_metadata) failed: {e}"
+                ))
+            })?;
+            Ok(())
+        })
+        .await
+        .map_err(|e| {
+            crate::HttpCacheError::cache(format!(
+                "update_metadata join failed: {e}"
+            ))
+        })??;
 
-        Ok(return_response)
+        self.metadata.insert(cache_key.to_string(), metadata).await;
+        Ok(true)
     }
 
     async fn convert_body<B>(
@@ -1046,47 +1450,23 @@ impl StreamingCacheManager for StreamingManager {
         <Self::Body as Body>::Error:
             Into<StreamingError> + Send + Sync + 'static,
     {
-        let (parts, body) = response.into_parts();
-
-        // Collect body into bytes
-        let body_bytes = body
-            .collect()
-            .await
-            .map_err(|e| StreamingError::new(e.into()))?
-            .to_bytes();
-
-        // Build response with buffered body
-        let mut response_builder =
-            Response::builder().status(parts.status).version(parts.version);
-
-        for (name, value) in parts.headers.iter() {
-            response_builder = response_builder.header(name, value);
-        }
-
-        let streaming_body = StreamingBody::buffered(body_bytes);
-        let mut response =
-            response_builder.body(streaming_body).map_err(|e| {
-                crate::HttpCacheError::cache(format!(
-                    "Failed to build response: {e}"
-                ))
-            })?;
-
-        // Preserve extensions from the original response
-        *response.extensions_mut() = parts.extensions;
-
-        Ok(response)
+        // Non-cacheable responses pass through without buffering.
+        Ok(response.map(|body| {
+            StreamingBody::streaming(
+                body.map_frame(|frame| {
+                    frame.map_data(|mut d| d.copy_to_bytes(d.remaining()))
+                })
+                .map_err(Into::into)
+                .boxed_unsync(),
+            )
+        }))
     }
 
     async fn delete(&self, cache_key: &str) -> Result<()> {
-        // Drop metadata first (both moka and redb).
-        self.metadata.invalidate(cache_key).await;
-        self.redb_remove(cache_key).await;
-
-        // Unlink the body file (idempotent: NotFound is fine).
         let body_hash = body_hash_for(cache_key);
         let body_path = body_path_for(&self.body_dir, &body_hash);
-        let _ = tokio::fs::remove_file(&body_path).await;
-
+        let _guard = self.key_lock(&body_hash).write().await;
+        self.self_heal(cache_key, &body_path).await;
         Ok(())
     }
 
@@ -1143,10 +1523,21 @@ mod tests {
             .unwrap()
     }
 
-    async fn read_body_bytes(
-        resp: Response<StreamingBody<Empty<Bytes>>>,
-    ) -> Bytes {
+    async fn read_body_bytes(resp: Response<ManagerBody>) -> Bytes {
         resp.into_body().collect().await.unwrap().to_bytes()
+    }
+
+    #[tokio::test]
+    async fn test_convert_body_passes_through_without_buffering() {
+        let manager = StreamingManager::with_temp_dir(10).await.unwrap();
+        let resp = response_with_body(Bytes::from("pass-through"));
+        let converted = manager.convert_body(resp).await.unwrap();
+        assert!(
+            matches!(converted.body(), StreamingBody::Streaming { .. }),
+            "non-cacheable responses must not be buffered"
+        );
+        let b = converted.into_body().collect().await.unwrap().to_bytes();
+        assert_eq!(b, "pass-through");
     }
 
     #[tokio::test]
@@ -1198,6 +1589,17 @@ mod tests {
             let (resp, _) = manager.get(key).await.unwrap().unwrap();
             assert_eq!(read_body_bytes(resp).await, "Duplicate content");
         }
+    }
+
+    #[tokio::test]
+    async fn test_recreate_dir_tolerates_already_exists() {
+        // `create_dir_all` returns `AlreadyExists` when the path exists as a
+        // non-directory — the same error a concurrent removal produces mid
+        // `clear()`. `recreate_dir` must treat it as success.
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path().join("collide");
+        std::fs::write(&path, b"x").unwrap();
+        recreate_dir(&path).await.unwrap();
     }
 
     #[tokio::test]
@@ -1270,6 +1672,145 @@ mod tests {
         // SystemTime::now() calls doesn't make the assertion flaky.
         let now = std::time::SystemTime::now();
         assert_eq!(restored_policy.time_to_live(now), policy.time_to_live(now));
+    }
+
+    /// update_metadata must rewrite headers/policy without touching the body
+    /// file (no re-read into RAM, no rewrite: bytes stay identical).
+    #[tokio::test]
+    async fn test_update_metadata_leaves_body_file_untouched() {
+        let dir = TempDir::new().unwrap();
+        let manager =
+            StreamingManager::new(dir.path().to_path_buf(), 100).await.unwrap();
+        let body = Full::new(Bytes::from_static(b"immutable body"));
+        let response = Response::builder()
+            .status(StatusCode::OK)
+            .header("x-old", "1")
+            .body(body)
+            .unwrap();
+        let key = "GET:https://example.com/reval".to_string();
+        let _ = manager
+            .put(key.clone(), response, sample_policy(), test_url(), None)
+            .await
+            .unwrap();
+
+        let body_hash = body_hash_for(&key);
+        let body_path = body_path_for(&manager.body_dir, &body_hash);
+        let before = std::fs::read(&body_path).unwrap();
+
+        // Fetch the entry token the way the orchestrator would.
+        let (resp, _) = manager.get(&key).await.unwrap().unwrap();
+        let token = resp
+            .extensions()
+            .get::<crate::CacheEntryToken>()
+            .cloned()
+            .expect("get() must attach a CacheEntryToken");
+
+        let mut new_headers = http::HeaderMap::new();
+        new_headers.insert("x-new", "2".parse().unwrap());
+        let updated = manager
+            .update_metadata(
+                &key,
+                &new_headers,
+                sample_policy(),
+                None,
+                Some(&token),
+            )
+            .await
+            .unwrap();
+        assert!(updated);
+
+        let after = std::fs::read(&body_path).unwrap();
+        assert_eq!(before, after, "body file must be byte-identical");
+
+        let (resp, _) = manager.get(&key).await.unwrap().unwrap();
+        assert!(resp.headers().get("x-new").is_some());
+        assert!(
+            resp.headers().get("x-old").is_none(),
+            "header set is replaced, not merged (the orchestrator does the merge)"
+        );
+        let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+        assert_eq!(&bytes[..], b"immutable body");
+    }
+
+    #[tokio::test]
+    async fn test_update_metadata_missing_entry_returns_false() {
+        let dir = TempDir::new().unwrap();
+        let manager =
+            StreamingManager::new(dir.path().to_path_buf(), 100).await.unwrap();
+        let updated = manager
+            .update_metadata(
+                "GET:https://example.com/absent",
+                &http::HeaderMap::new(),
+                sample_policy(),
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        assert!(!updated);
+    }
+
+    /// A stale token (entry was concurrently replaced) must refuse the update
+    /// rather than stapling old headers onto the new entry's body.
+    #[tokio::test]
+    async fn test_update_metadata_stale_token_returns_false() {
+        let dir = TempDir::new().unwrap();
+        let manager =
+            StreamingManager::new(dir.path().to_path_buf(), 100).await.unwrap();
+        let key = "GET:https://example.com/race".to_string();
+        let mk_body =
+            |s: &'static str| Full::new(Bytes::from_static(s.as_bytes()));
+        let response = Response::builder()
+            .status(StatusCode::OK)
+            .header("x-version", "v1")
+            .body(mk_body("v1"))
+            .unwrap();
+        let _ = manager
+            .put(key.clone(), response, sample_policy(), test_url(), None)
+            .await
+            .unwrap();
+        let (resp, _) = manager.get(&key).await.unwrap().unwrap();
+        let v1_token =
+            resp.extensions().get::<crate::CacheEntryToken>().cloned().unwrap();
+
+        // Concurrent replacement: v2 lands (new nonce).
+        let response = Response::builder()
+            .status(StatusCode::OK)
+            .header("x-version", "v2")
+            .body(mk_body("v2"))
+            .unwrap();
+        let _ = manager
+            .put(key.clone(), response, sample_policy(), test_url(), None)
+            .await
+            .unwrap();
+
+        let updated = manager
+            .update_metadata(
+                &key,
+                &http::HeaderMap::new(),
+                sample_policy(),
+                None,
+                Some(&v1_token),
+            )
+            .await
+            .unwrap();
+        assert!(!updated, "stale token must refuse the metadata update");
+
+        // The refused update must not have mutated v2's stored entry: it
+        // still carries v2's own headers and body, not v1's and not the
+        // (empty) headers passed to the refused `update_metadata` call.
+        let (resp, _) = manager.get(&key).await.unwrap().unwrap();
+        assert_eq!(
+            resp.headers().get("x-version").unwrap(),
+            "v2",
+            "refused update must leave v2's stored headers unmodified"
+        );
+        let bytes = read_body_bytes(resp).await;
+        assert_eq!(
+            &bytes[..],
+            b"v2",
+            "refused update must leave v2's stored body unmodified"
+        );
     }
 
     #[tokio::test]
@@ -1478,10 +2019,10 @@ mod tests {
             .unwrap();
         }
 
-        // Reopen: startup should tolerate the poisoned row.
+        // Reopen: the poisoned row reads as a miss.
         let manager = StreamingManager::new(path, 100).await.unwrap();
         assert!(manager.get("bad").await.unwrap().is_none());
-        // The startup cleanup should have removed the poisoned row.
+        // The lazy self-heal in redb_get removed the poisoned row.
         assert!(manager.redb_get("bad").await.unwrap().is_none());
         // Good row still loadable.
         let (resp, _) = manager.get("good").await.unwrap().unwrap();
@@ -1607,21 +2148,18 @@ mod tests {
         t1.await.unwrap();
         t2.await.unwrap();
 
-        // Concurrent puts to the same key can interleave such that the body
-        // file and the committed metadata.nonce end up describing different
-        // writes. When that happens, `get` correctly self-heals to `None`
-        // rather than returning corrupt data. Either outcome is acceptable:
-        //   - `Some(body)` where body is one of the two values committed
-        //   - `None` (self-healed due to nonce/length mismatch)
-        // The invariants we care about: no panic, no corruption returned,
-        // and at most one body file left on disk for the key.
-        if let Some((resp, _)) = manager.get("k").await.unwrap() {
-            let body = read_body_bytes(resp).await;
-            assert!(body == "aaa" || body == "bbb", "got {body:?}");
-        }
+        // With per-key locking, concurrent puts serialize: the entry must
+        // survive and contain one of the two committed bodies.
+        let (resp, _) = manager
+            .get("k")
+            .await
+            .unwrap()
+            .expect("entry must survive concurrent puts");
+        let body = read_body_bytes(resp).await;
+        assert!(body == "aaa" || body == "bbb", "got {body:?}");
 
-        // At most one body file under the key's prefix (self-heal may have
-        // removed it; the non-racy path leaves exactly one).
+        // With per-key locking, exactly one body file remains under the
+        // key's prefix.
         let prefix_dir = manager.body_dir.join(&body_hash_for("k")[0..2]);
         let mut count = 0usize;
         if prefix_dir.exists() {
@@ -1630,11 +2168,63 @@ mod tests {
                 count += 1;
             }
         }
-        assert!(count <= 1, "expected at most one body file, got {count}");
+        assert_eq!(count, 1, "expected exactly one body file, got {count}");
     }
 
     #[tokio::test]
-    async fn test_max_body_size_rejection() {
+    async fn test_concurrent_get_put_no_entry_loss() {
+        let manager =
+            Arc::new(StreamingManager::with_temp_dir(100).await.unwrap());
+        manager
+            .put(
+                "k".into(),
+                response_with_body(Bytes::from("seed")),
+                sample_policy(),
+                test_url(),
+                None,
+            )
+            .await
+            .unwrap();
+        let putter = {
+            let m = manager.clone();
+            tokio::spawn(async move {
+                for i in 0..50u32 {
+                    m.put(
+                        "k".into(),
+                        response_with_body(Bytes::from(format!("body-{i}"))),
+                        sample_policy(),
+                        test_url(),
+                        None,
+                    )
+                    .await
+                    .unwrap();
+                }
+            })
+        };
+        let getter = {
+            let m = manager.clone();
+            tokio::spawn(async move {
+                for _ in 0..200 {
+                    let (resp, _) = m
+                        .get("k")
+                        .await
+                        .unwrap()
+                        .expect("entry lost during concurrent get/put");
+                    let b = read_body_bytes(resp).await;
+                    assert!(
+                        b == "seed" || b.starts_with(b"body-"),
+                        "torn body {b:?}"
+                    );
+                }
+            })
+        };
+        putter.await.unwrap();
+        getter.await.unwrap();
+        assert!(manager.get("k").await.unwrap().is_some());
+    }
+
+    #[tokio::test]
+    async fn test_max_body_size_declines() {
         let tmp = TempDir::new().unwrap();
         let manager = StreamingManager::with_max_body_size(
             tmp.path().to_path_buf(),
@@ -1644,7 +2234,7 @@ mod tests {
         .await
         .unwrap();
 
-        let err = manager
+        let returned = manager
             .put(
                 "k".into(),
                 response_with_body(Bytes::from("this body exceeds the limit")),
@@ -1653,10 +2243,13 @@ mod tests {
                 None,
             )
             .await
-            .unwrap_err();
-        assert!(err.to_string().to_lowercase().contains("exceeds"));
+            .unwrap();
 
-        // No redb row, no body file.
+        // Response succeeds with the full body — decline, not an error.
+        let bytes = returned.into_body().collect().await.unwrap().to_bytes();
+        assert_eq!(&bytes[..], b"this body exceeds the limit");
+
+        // No redb row, no body file: nothing cached.
         assert!(manager.redb_get("k").await.unwrap().is_none());
         let body_path = body_path_for(&manager.body_dir, &body_hash_for("k"));
         assert!(!body_path.exists());
@@ -1813,21 +2406,875 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_put_returns_buffered_variant() {
-        let manager = StreamingManager::with_temp_dir(100).await.unwrap();
-        let resp = manager
+    async fn test_corrupted_body_detected_and_healed() {
+        let manager =
+            Arc::new(StreamingManager::with_temp_dir(100).await.unwrap());
+        manager
             .put(
                 "k".into(),
-                response_with_body(Bytes::from("body")),
+                response_with_body(Bytes::from("hello corruption test")),
                 sample_policy(),
                 test_url(),
                 None,
             )
             .await
             .unwrap();
-        match resp.into_body() {
-            StreamingBody::Buffered { .. } => {}
-            other => panic!("expected Buffered variant, got {other:?}"),
+
+        // Flip one body byte on disk without changing length or nonce.
+        let path = body_path_for(&manager.body_dir, &body_hash_for("k"));
+        let mut contents = tokio::fs::read(&path).await.unwrap();
+        let idx = contents.len() - 1;
+        contents[idx] ^= 0xFF;
+        tokio::fs::write(&path, &contents).await.unwrap();
+
+        // The stream must error rather than yield corrupt bytes silently.
+        let (resp, _) = manager.get("k").await.unwrap().unwrap();
+        let collected = resp.into_body().collect().await;
+        assert!(collected.is_err(), "corrupt body must fail the stream");
+
+        // Self-heal runs asynchronously; poll until the entry is gone.
+        // yield_now instead of sleep: tokio's "time" feature is not part of
+        // the streaming feature gate.
+        for _ in 0..1000 {
+            if manager.get("k").await.unwrap().is_none() {
+                return;
+            }
+            tokio::task::yield_now().await;
         }
+        panic!("corrupt entry was not self-healed");
+    }
+
+    #[tokio::test]
+    async fn test_corrupt_heal_spares_fresh_entry() {
+        let manager =
+            Arc::new(StreamingManager::with_temp_dir(100).await.unwrap());
+        manager
+            .put(
+                "k".into(),
+                response_with_body(Bytes::from("stale entry body")),
+                sample_policy(),
+                test_url(),
+                None,
+            )
+            .await
+            .unwrap();
+
+        // Corrupt the body, open a stream against it, then replace the
+        // entry before the stream detects the corruption.
+        let path = body_path_for(&manager.body_dir, &body_hash_for("k"));
+        let mut contents = tokio::fs::read(&path).await.unwrap();
+        let idx = contents.len() - 1;
+        contents[idx] ^= 0xFF;
+        tokio::fs::write(&path, &contents).await.unwrap();
+
+        let (resp, _) = manager.get("k").await.unwrap().unwrap();
+        manager
+            .put(
+                "k".into(),
+                response_with_body(Bytes::from("fresh entry body")),
+                sample_policy(),
+                test_url(),
+                None,
+            )
+            .await
+            .unwrap();
+
+        // The corrupt stream errors, but the heal it fires must not touch
+        // the entry written after the corrupt read.
+        assert!(resp.into_body().collect().await.is_err());
+        for _ in 0..1000 {
+            tokio::task::yield_now().await;
+        }
+        let (resp, _) = manager
+            .get("k")
+            .await
+            .unwrap()
+            .expect("fresh entry must survive the deferred heal");
+        assert_eq!(read_body_bytes(resp).await, "fresh entry body");
+    }
+
+    #[tokio::test]
+    async fn test_body_does_not_hold_redb_lock() {
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path().to_path_buf();
+        let manager = StreamingManager::new(path.clone(), 100).await.unwrap();
+        manager
+            .put(
+                "k".into(),
+                response_with_body(Bytes::from("body outlives manager")),
+                sample_policy(),
+                test_url(),
+                None,
+            )
+            .await
+            .unwrap();
+        let (resp, _) = manager.get("k").await.unwrap().unwrap();
+        drop(manager);
+
+        // The still-alive body must not keep the redb file lock, so a new
+        // manager can open the same directory.
+        let manager = StreamingManager::new(path, 100).await.unwrap();
+        assert_eq!(read_body_bytes(resp).await, "body outlives manager");
+        assert!(manager.get("k").await.unwrap().is_some());
+    }
+
+    /// put() must return a disk-backed File body (not Buffered), and the entry
+    /// must be durable+visible before put() returns.
+    #[tokio::test]
+    async fn test_put_returns_file_variant_and_commits_before_return() {
+        let dir = TempDir::new().unwrap();
+        let manager =
+            StreamingManager::new(dir.path().to_path_buf(), 100).await.unwrap();
+        let body = Full::new(Bytes::from_static(b"hello streaming world"));
+        let response = Response::builder()
+            .status(StatusCode::OK)
+            .header("content-type", "text/plain")
+            .body(body)
+            .unwrap();
+        let returned = manager
+            .put(
+                "GET:https://example.com/test".to_string(),
+                response,
+                sample_policy(),
+                test_url(),
+                None,
+            )
+            .await
+            .unwrap();
+
+        // Pins the current visible-at-return behavior; the documented
+        // contract only promises visible at-or-after full body consumption.
+        let got = manager.get("GET:https://example.com/test").await.unwrap();
+        assert!(got.is_some(), "entry must be visible when put() returns");
+
+        // Returned body is File-backed, not an in-RAM copy.
+        let body = returned.into_body();
+        assert!(
+            matches!(body, StreamingBody::File { .. }),
+            "put must return the File variant, got {body:?}"
+        );
+        let bytes = body.collect().await.unwrap().to_bytes();
+        assert_eq!(&bytes[..], b"hello streaming world");
+
+        // And the cached copy replays identically.
+        let (cached, _policy) = got.unwrap();
+        let cached_bytes =
+            cached.into_body().collect().await.unwrap().to_bytes();
+        assert_eq!(&cached_bytes[..], b"hello streaming world");
+    }
+
+    /// Structural bounded-RAM proof: every previously-yielded frame must already
+    /// be on disk (in tmp/) before the next frame is pulled. A collect()-based
+    /// put leaves tmp/ empty until EOF; the spool writes+flushes as it reads.
+    #[tokio::test]
+    async fn test_put_spools_frames_to_disk_incrementally() {
+        use std::pin::Pin;
+        use std::task::{Context, Poll};
+
+        const FRAME: usize = 64 * 1024;
+        const NFRAMES: u64 = 8;
+
+        /// Yields NFRAMES x 64KB frames; on each poll after the first, asserts
+        /// the spool dir already holds at least (frames_yielded - 1) * FRAME
+        /// body bytes.
+        struct AssertSpooled {
+            tmp_dir: PathBuf,
+            yielded: u64,
+        }
+        impl Body for AssertSpooled {
+            type Data = Bytes;
+            type Error = StreamingError;
+            fn poll_frame(
+                mut self: Pin<&mut Self>,
+                _cx: &mut Context<'_>,
+            ) -> Poll<
+                Option<
+                    std::result::Result<
+                        http_body::Frame<Bytes>,
+                        StreamingError,
+                    >,
+                >,
+            > {
+                if self.yielded > 0 {
+                    let spooled: u64 = std::fs::read_dir(&self.tmp_dir)
+                        .unwrap()
+                        .filter_map(|e| e.ok())
+                        .filter_map(|e| e.metadata().ok())
+                        .map(|m| m.len())
+                        .sum();
+                    let expected =
+                        NONCE_LEN as u64 + (self.yielded - 1) * FRAME as u64;
+                    assert!(
+                        spooled >= expected,
+                        "frame {} pulled but only {spooled} bytes spooled \
+                         (expected >= {expected}); put() is buffering",
+                        self.yielded
+                    );
+                }
+                if self.yielded == NFRAMES {
+                    return Poll::Ready(None);
+                }
+                self.yielded += 1;
+                Poll::Ready(Some(Ok(http_body::Frame::data(Bytes::from(
+                    vec![0xAB; FRAME],
+                )))))
+            }
+        }
+
+        let dir = TempDir::new().unwrap();
+        let manager =
+            StreamingManager::new(dir.path().to_path_buf(), 100).await.unwrap();
+        let body =
+            AssertSpooled { tmp_dir: dir.path().join("tmp"), yielded: 0 };
+        let response =
+            Response::builder().status(StatusCode::OK).body(body).unwrap();
+        let returned = manager
+            .put(
+                "GET:https://example.com/incremental".to_string(),
+                response,
+                sample_policy(),
+                test_url(),
+                None,
+            )
+            .await
+            .unwrap();
+        let bytes = returned.into_body().collect().await.unwrap().to_bytes();
+        assert_eq!(bytes.len() as u64, NFRAMES * FRAME as u64);
+    }
+
+    /// One data frame, then end-of-stream. Used by the decline tests.
+    struct OneFrameBody {
+        frame: &'static [u8],
+        sent: bool,
+    }
+    impl Body for OneFrameBody {
+        type Data = Bytes;
+        type Error = StreamingError;
+        fn poll_frame(
+            mut self: std::pin::Pin<&mut Self>,
+            _cx: &mut std::task::Context<'_>,
+        ) -> std::task::Poll<
+            Option<
+                std::result::Result<http_body::Frame<Bytes>, StreamingError>,
+            >,
+        > {
+            if self.sent {
+                std::task::Poll::Ready(None)
+            } else {
+                self.sent = true;
+                std::task::Poll::Ready(Some(Ok(http_body::Frame::data(
+                    Bytes::from_static(self.frame),
+                ))))
+            }
+        }
+    }
+
+    /// Content-Length over the cap: put() must decline up front — no spool
+    /// file, nothing cached — and pass the body through for the caller.
+    #[tokio::test]
+    async fn test_put_declines_oversized_content_length_up_front() {
+        let dir = TempDir::new().unwrap();
+        let manager = StreamingManager::with_max_body_size(
+            dir.path().to_path_buf(),
+            100,
+            1024, // 1KiB cap
+        )
+        .await
+        .unwrap();
+
+        let response = Response::builder()
+            .status(StatusCode::OK)
+            .header("content-length", "1048576") // claims 1MiB
+            .body(OneFrameBody { frame: b"served-after-decline", sent: false })
+            .unwrap();
+        let returned = manager
+            .put(
+                "GET:https://example.com/big".to_string(),
+                response,
+                sample_policy(),
+                test_url(),
+                None,
+            )
+            .await
+            .unwrap();
+
+        // Nothing cached, no spool file ever created.
+        assert!(manager
+            .get("GET:https://example.com/big")
+            .await
+            .unwrap()
+            .is_none());
+        let tmp_entries = std::fs::read_dir(dir.path().join("tmp"))
+            .map(|rd| rd.count())
+            .unwrap_or(0);
+        assert_eq!(tmp_entries, 0, "decline must not touch the spool dir");
+
+        // The caller still gets the body.
+        let bytes = returned.into_body().collect().await.unwrap().to_bytes();
+        assert_eq!(&bytes[..], b"served-after-decline");
+    }
+
+    /// HEAD responses carry the entity's Content-Length with an empty body
+    /// (RFC 9110 §8.6) — they must still be cached, not declined by the
+    /// size/completeness checks. Regression guard for the CL checks above.
+    #[tokio::test]
+    async fn test_put_head_response_with_entity_content_length_is_cached() {
+        use http_body_util::Empty;
+        let dir = TempDir::new().unwrap();
+        let manager = StreamingManager::with_max_body_size(
+            dir.path().to_path_buf(),
+            100,
+            1024,
+        )
+        .await
+        .unwrap();
+        let mut response = Response::builder()
+            .status(StatusCode::OK)
+            .header("content-length", "1048576") // entity size, > cap; body empty
+            .body(Empty::<Bytes>::new())
+            .unwrap();
+        response
+            .extensions_mut()
+            .insert(crate::CachedRequestMethod(http::Method::HEAD));
+        let _ = manager
+            .put(
+                "HEAD:https://example.com/test".to_string(),
+                response,
+                sample_policy(),
+                test_url(),
+                None,
+            )
+            .await
+            .unwrap();
+        assert!(
+            manager
+                .get("HEAD:https://example.com/test")
+                .await
+                .unwrap()
+                .is_some(),
+            "HEAD response must be cached despite entity Content-Length"
+        );
+    }
+
+    /// Unknown-length body overflowing the cap mid-stream: caller receives the
+    /// complete body, nothing is cached, no request error (this case used to
+    /// fail the request).
+    #[tokio::test]
+    async fn test_put_unknown_length_overflow_serves_full_body_uncached() {
+        use http_body_util::StreamBody;
+        let dir = TempDir::new().unwrap();
+        let manager = StreamingManager::with_max_body_size(
+            dir.path().to_path_buf(),
+            100,
+            1024,
+        )
+        .await
+        .unwrap();
+
+        // 4 x 512B frames = 2KiB total, no content-length -> overflows 1KiB cap
+        // at frame 3.
+        let frames = (0..4).map(|i| {
+            Ok::<_, StreamingError>(http_body::Frame::data(Bytes::from(
+                vec![i as u8; 512],
+            )))
+        });
+        let body = StreamBody::new(futures_util::stream::iter(frames));
+        let response =
+            Response::builder().status(StatusCode::OK).body(body).unwrap();
+        let returned = manager
+            .put(
+                "GET:https://example.com/overflow".to_string(),
+                response,
+                sample_policy(),
+                test_url(),
+                None,
+            )
+            .await
+            .unwrap();
+
+        let bytes = returned.into_body().collect().await.unwrap().to_bytes();
+        assert_eq!(bytes.len(), 2048, "caller must receive every byte");
+        assert_eq!(&bytes[..512], &[0u8; 512][..]);
+        assert_eq!(&bytes[1536..], &[3u8; 512][..]);
+
+        assert!(
+            manager
+                .get("GET:https://example.com/overflow")
+                .await
+                .unwrap()
+                .is_none(),
+            "overflowing entry must not be cached"
+        );
+        // Guard cleanup: tmp dir empty after body drop.
+        let tmp_entries =
+            std::fs::read_dir(dir.path().join("tmp")).unwrap().count();
+        assert_eq!(tmp_entries, 0);
+    }
+
+    /// Exact boundary: body of exactly max_body_size IS cached.
+    #[tokio::test]
+    async fn test_put_exactly_max_body_size_is_cached() {
+        let dir = TempDir::new().unwrap();
+        let manager = StreamingManager::with_max_body_size(
+            dir.path().to_path_buf(),
+            100,
+            1024,
+        )
+        .await
+        .unwrap();
+        let body = Full::new(Bytes::from(vec![7u8; 1024]));
+        let response =
+            Response::builder().status(StatusCode::OK).body(body).unwrap();
+        let _ = manager
+            .put(
+                "GET:https://example.com/exact".to_string(),
+                response,
+                sample_policy(),
+                test_url(),
+                None,
+            )
+            .await
+            .unwrap();
+        assert!(manager
+            .get("GET:https://example.com/exact")
+            .await
+            .unwrap()
+            .is_some());
+    }
+
+    /// Content-Length lie (RFC 9111 §3.3): upstream declared 100 bytes but sent
+    /// 5 -> serve the 5 bytes, do NOT cache a known-incomplete response.
+    #[tokio::test]
+    async fn test_put_content_length_mismatch_declines_commit() {
+        let dir = TempDir::new().unwrap();
+        let manager =
+            StreamingManager::new(dir.path().to_path_buf(), 100).await.unwrap();
+        let body = Full::new(Bytes::from_static(b"short"));
+        let response = Response::builder()
+            .status(StatusCode::OK)
+            .header("content-length", "100")
+            .body(body)
+            .unwrap();
+        let returned = manager
+            .put(
+                "GET:https://example.com/truncated".to_string(),
+                response,
+                sample_policy(),
+                test_url(),
+                None,
+            )
+            .await
+            .unwrap();
+        let bytes = returned.into_body().collect().await.unwrap().to_bytes();
+        assert_eq!(&bytes[..], b"short");
+        assert!(manager
+            .get("GET:https://example.com/truncated")
+            .await
+            .unwrap()
+            .is_none());
+    }
+
+    /// Upstream body error mid-stream: put() errors (unchanged contract) and
+    /// the spool tmp file is cleaned up.
+    #[tokio::test]
+    async fn test_put_upstream_error_fails_and_cleans_tmp() {
+        use http_body_util::StreamBody;
+        let dir = TempDir::new().unwrap();
+        let manager =
+            StreamingManager::new(dir.path().to_path_buf(), 100).await.unwrap();
+        let frames = vec![
+            Ok(http_body::Frame::data(Bytes::from_static(b"good"))),
+            Err(StreamingError::new(Box::new(std::io::Error::other(
+                "upstream reset",
+            )))),
+        ];
+        let body = StreamBody::new(futures_util::stream::iter(frames));
+        let response =
+            Response::builder().status(StatusCode::OK).body(body).unwrap();
+        let result = manager
+            .put(
+                "GET:https://example.com/reset".to_string(),
+                response,
+                sample_policy(),
+                test_url(),
+                None,
+            )
+            .await;
+        assert!(result.is_err(), "upstream error must propagate");
+        assert!(manager
+            .get("GET:https://example.com/reset")
+            .await
+            .unwrap()
+            .is_none());
+        let tmp_entries =
+            std::fs::read_dir(dir.path().join("tmp")).unwrap().count();
+        assert_eq!(tmp_entries, 0, "tmp must be cleaned on upstream error");
+    }
+
+    /// Empty body round-trips.
+    #[tokio::test]
+    async fn test_put_empty_body_round_trips() {
+        use http_body_util::Empty;
+        let dir = TempDir::new().unwrap();
+        let manager =
+            StreamingManager::new(dir.path().to_path_buf(), 100).await.unwrap();
+        let body = Empty::<Bytes>::new();
+        let response = Response::builder()
+            .status(StatusCode::NO_CONTENT)
+            .body(body)
+            .unwrap();
+        let returned = manager
+            .put(
+                "GET:https://example.com/empty".to_string(),
+                response,
+                sample_policy(),
+                test_url(),
+                None,
+            )
+            .await
+            .unwrap();
+        let bytes = returned.into_body().collect().await.unwrap().to_bytes();
+        assert!(bytes.is_empty());
+        let (cached, _) = manager
+            .get("GET:https://example.com/empty")
+            .await
+            .unwrap()
+            .unwrap();
+        let cached_bytes =
+            cached.into_body().collect().await.unwrap().to_bytes();
+        assert!(cached_bytes.is_empty());
+    }
+
+    /// Response extensions must survive every put() return path.
+    #[tokio::test]
+    async fn test_put_preserves_extensions_on_success_and_decline() {
+        #[derive(Clone, PartialEq, Debug)]
+        struct Marker(u32);
+
+        let dir = TempDir::new().unwrap();
+        let manager = StreamingManager::with_max_body_size(
+            dir.path().to_path_buf(),
+            100,
+            1024,
+        )
+        .await
+        .unwrap();
+
+        // Success path.
+        let mut response = Response::builder()
+            .status(StatusCode::OK)
+            .body(Full::new(Bytes::from_static(b"ok")))
+            .unwrap();
+        response.extensions_mut().insert(Marker(1));
+        let returned = manager
+            .put(
+                "GET:https://example.com/ext1".to_string(),
+                response,
+                sample_policy(),
+                test_url(),
+                None,
+            )
+            .await
+            .unwrap();
+        assert_eq!(returned.extensions().get::<Marker>(), Some(&Marker(1)));
+
+        // Decline path (content-length over cap).
+        let mut response = Response::builder()
+            .status(StatusCode::OK)
+            .header("content-length", "1048576")
+            .body(Full::new(Bytes::from(vec![0u8; 16])))
+            .unwrap();
+        response.extensions_mut().insert(Marker(2));
+        let returned = manager
+            .put(
+                "GET:https://example.com/ext2".to_string(),
+                response,
+                sample_policy(),
+                test_url(),
+                None,
+            )
+            .await
+            .unwrap();
+        assert_eq!(returned.extensions().get::<Marker>(), Some(&Marker(2)));
+    }
+
+    /// max_body_size == 0 degenerate: always decline, always pass through.
+    #[tokio::test]
+    async fn test_put_zero_max_body_size_always_declines() {
+        let dir = TempDir::new().unwrap();
+        let manager = StreamingManager::with_max_body_size(
+            dir.path().to_path_buf(),
+            100,
+            0,
+        )
+        .await
+        .unwrap();
+        let response = Response::builder()
+            .status(StatusCode::OK)
+            .body(Full::new(Bytes::from_static(b"never cached")))
+            .unwrap();
+        let returned = manager
+            .put(
+                "GET:https://example.com/zero".to_string(),
+                response,
+                sample_policy(),
+                test_url(),
+                None,
+            )
+            .await
+            .unwrap();
+        let bytes = returned.into_body().collect().await.unwrap().to_bytes();
+        assert_eq!(&bytes[..], b"never cached");
+        assert!(manager
+            .get("GET:https://example.com/zero")
+            .await
+            .unwrap()
+            .is_none());
+    }
+
+    /// Pass-through decline is true streaming: put() returns without consuming
+    /// the stalled upstream, and the first frame reaches the caller even though
+    /// upstream never finishes. The success path spools to EOF before
+    /// serving, so this property is specific to the decline path.
+    #[tokio::test]
+    async fn test_put_decline_path_streams_first_frame_before_eof() {
+        use std::pin::Pin;
+        use std::task::{Context, Poll};
+
+        struct FirstFrameThenForeverPending {
+            sent: bool,
+        }
+        impl Body for FirstFrameThenForeverPending {
+            type Data = Bytes;
+            type Error = StreamingError;
+            fn poll_frame(
+                mut self: Pin<&mut Self>,
+                _cx: &mut Context<'_>,
+            ) -> Poll<
+                Option<
+                    std::result::Result<
+                        http_body::Frame<Bytes>,
+                        StreamingError,
+                    >,
+                >,
+            > {
+                if self.sent {
+                    Poll::Pending // upstream stalls forever
+                } else {
+                    self.sent = true;
+                    Poll::Ready(Some(Ok(http_body::Frame::data(
+                        Bytes::from_static(b"first"),
+                    ))))
+                }
+            }
+        }
+
+        let dir = TempDir::new().unwrap();
+        let manager = StreamingManager::with_max_body_size(
+            dir.path().to_path_buf(),
+            100,
+            1024,
+        )
+        .await
+        .unwrap();
+        let response = Response::builder()
+            .status(StatusCode::OK)
+            .header("content-length", "1048576") // -> decline path
+            .body(FirstFrameThenForeverPending { sent: false })
+            .unwrap();
+        // Wrapped in a timeout so a regression (put() consuming the body)
+        // fails deterministically instead of hanging the suite.
+        let returned = tokio::time::timeout(
+            std::time::Duration::from_secs(10),
+            manager.put(
+                "GET:https://example.com/ttfb".to_string(),
+                response,
+                sample_policy(),
+                test_url(),
+                None,
+            ),
+        )
+        .await
+        .expect("put() must return without consuming the stalled upstream")
+        .unwrap();
+
+        let mut body = returned.into_body();
+        let first = tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            body.frame(),
+        )
+        .await
+        .expect("first frame must arrive without waiting for upstream EOF")
+        .unwrap()
+        .unwrap();
+        assert_eq!(first.into_data().unwrap(), Bytes::from_static(b"first"));
+    }
+
+    /// Without the flush a write counts as spooled before it is
+    /// confirmed, and `put` can commit an entry shorter than its metadata says.
+    #[tokio::test]
+    async fn test_spool_write_surfaces_deferred_write_error() {
+        use std::pin::Pin;
+        use std::task::{Context, Poll};
+        use tokio::io::AsyncWrite;
+
+        struct DeferredErrorWriter;
+
+        impl AsyncWrite for DeferredErrorWriter {
+            fn poll_write(
+                self: Pin<&mut Self>,
+                _cx: &mut Context<'_>,
+                buf: &[u8],
+            ) -> Poll<std::io::Result<usize>> {
+                Poll::Ready(Ok(buf.len()))
+            }
+            fn poll_flush(
+                self: Pin<&mut Self>,
+                _cx: &mut Context<'_>,
+            ) -> Poll<std::io::Result<()>> {
+                Poll::Ready(Err(std::io::Error::other("disk full")))
+            }
+            fn poll_shutdown(
+                self: Pin<&mut Self>,
+                _cx: &mut Context<'_>,
+            ) -> Poll<std::io::Result<()>> {
+                Poll::Ready(Ok(()))
+            }
+        }
+
+        let err = spool_write(&mut DeferredErrorWriter, b"frame")
+            .await
+            .expect_err("a flush-time failure must be reported");
+        assert_eq!(err.to_string(), "disk full");
+    }
+
+    #[test]
+    fn test_tmp_guard_unlinks_unless_defused() {
+        let dir = TempDir::new().unwrap();
+        let armed = dir.path().join("armed.tmp");
+        let defused = dir.path().join("defused.tmp");
+        std::fs::write(&armed, b"x").unwrap();
+        std::fs::write(&defused, b"x").unwrap();
+        {
+            let _g = TmpGuard::new(armed.clone());
+        }
+        {
+            let mut g = TmpGuard::new(defused.clone());
+            g.defuse();
+        }
+        assert!(!armed.exists(), "armed guard must unlink on drop");
+        assert!(defused.exists(), "defused guard must leave the file");
+    }
+
+    #[test]
+    fn test_parse_content_length() {
+        let mut h = http::HeaderMap::new();
+        assert_eq!(parse_content_length(&h), None, "absent -> None");
+        h.insert(http::header::CONTENT_LENGTH, "1234".parse().unwrap());
+        assert_eq!(parse_content_length(&h), Some(1234));
+        h.append(http::header::CONTENT_LENGTH, "1234".parse().unwrap());
+        assert_eq!(parse_content_length(&h), Some(1234), "agreeing dupes ok");
+        h.append(http::header::CONTENT_LENGTH, "999".parse().unwrap());
+        assert_eq!(parse_content_length(&h), None, "disagreeing dupes -> None");
+        let mut bad = http::HeaderMap::new();
+        bad.insert(http::header::CONTENT_LENGTH, "12x4".parse().unwrap());
+        assert_eq!(parse_content_length(&bad), None, "unparseable -> None");
+    }
+
+    /// Collect every stored value for a name (HttpHeaders has no get_all).
+    fn header_values(h: &HttpHeaders, name: &str) -> Vec<String> {
+        h.iter()
+            .filter(|(k, _)| k.as_str() == name)
+            .map(|(_, v)| v.clone())
+            .collect()
+    }
+
+    #[test]
+    fn test_stored_headers_strips_hop_by_hop_keeps_multi_valued() {
+        let mut h = http::HeaderMap::new();
+        h.insert("transfer-encoding", "chunked".parse().unwrap());
+        h.insert("connection", "keep-alive, x-tracing-id".parse().unwrap());
+        h.insert("x-tracing-id", "abc".parse().unwrap()); // nominated by Connection
+        h.insert("proxy-connection", "keep-alive".parse().unwrap());
+        h.insert("te", "trailers".parse().unwrap());
+        h.insert("content-type", "text/plain".parse().unwrap());
+        h.append("set-cookie", "a=1".parse().unwrap());
+        h.append("set-cookie", "b=2".parse().unwrap());
+        let stored = stored_headers(&h);
+        assert!(header_values(&stored, "transfer-encoding").is_empty());
+        assert!(header_values(&stored, "connection").is_empty());
+        assert!(header_values(&stored, "proxy-connection").is_empty());
+        assert!(header_values(&stored, "te").is_empty());
+        assert!(
+            header_values(&stored, "x-tracing-id").is_empty(),
+            "Connection-nominated fields must be stripped (RFC 9111 §3.1)"
+        );
+        assert_eq!(header_values(&stored, "content-type"), vec!["text/plain"]);
+        assert_eq!(header_values(&stored, "set-cookie"), vec!["a=1", "b=2"]);
+    }
+
+    #[tokio::test]
+    async fn test_serve_uncached_spooled_chains_prefix_pending_rest_and_unlinks(
+    ) {
+        let dir = TempDir::new().unwrap();
+        let tmp = dir.path().join("spool.tmp");
+
+        // Simulate a spool: nonce header + 8 confirmed bytes, then a partial
+        // trailing junk byte (as if a chunk write died halfway).
+        let mut f = tokio::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create_new(true)
+            .open(&tmp)
+            .await
+            .unwrap();
+        f.write_all(&[0u8; NONCE_LEN]).await.unwrap();
+        f.write_all(b"prefix12").await.unwrap();
+        f.write_all(b"J").await.unwrap(); // junk past `written`, must be ignored
+        f.flush().await.unwrap();
+
+        let guard = TmpGuard::new(tmp.clone());
+        let pending = Some(Bytes::from_static(b"PENDING!"));
+        let rest: Option<UnsyncBoxBody<Bytes, StreamingError>> = Some(
+            Full::new(Bytes::from_static(b"rest-of-upstream"))
+                .map_err(|never| match never {})
+                .boxed_unsync(),
+        );
+
+        let parts =
+            Response::builder().status(200).body(()).unwrap().into_parts().0;
+        let resp =
+            serve_uncached_spooled(parts, f, guard, 8, pending, rest).unwrap();
+
+        let collected = resp.into_body().collect().await.unwrap().to_bytes();
+        assert_eq!(&collected[..], b"prefix12PENDING!rest-of-upstream");
+        // Body fully consumed and dropped -> guard dropped -> tmp unlinked.
+        assert!(!tmp.exists(), "tmp file must be unlinked after body drop");
+    }
+
+    #[tokio::test]
+    async fn test_serve_uncached_spooled_prefix_only() {
+        use http_body_util::BodyExt;
+        let dir = TempDir::new().unwrap();
+        let tmp = dir.path().join("spool2.tmp");
+        let mut f = tokio::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create_new(true)
+            .open(&tmp)
+            .await
+            .unwrap();
+        f.write_all(&[0u8; NONCE_LEN]).await.unwrap();
+        f.write_all(b"only-prefix").await.unwrap();
+        f.flush().await.unwrap();
+
+        let guard = TmpGuard::new(tmp.clone());
+        let parts =
+            Response::builder().status(200).body(()).unwrap().into_parts().0;
+        let resp =
+            serve_uncached_spooled(parts, f, guard, 11, None, None).unwrap();
+        let collected = resp.into_body().collect().await.unwrap().to_bytes();
+        assert_eq!(&collected[..], b"only-prefix");
+        assert!(!tmp.exists());
     }
 }

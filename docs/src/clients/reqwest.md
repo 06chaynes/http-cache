@@ -26,11 +26,11 @@ After constructing our client, we will make a request to the [MDN Caching Docs](
 
 ```rust
 use reqwest::Client;
-use reqwest_middleware::{ClientBuilder, Result};
+use reqwest_middleware::ClientBuilder;
 use http_cache_reqwest::{Cache, CacheMode, RedbManager, HttpCache, HttpCacheOptions};
 
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let client = ClientBuilder::new(Client::new())
         .with(Cache(HttpCache {
           mode: CacheMode::Default,
@@ -100,9 +100,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
 ### Key Benefits of Streaming Cache
 
-- **Memory Efficiency**: Cache hits stream from disk in 64KB chunks without loading the full body into memory. Writes buffer the full body in memory before committing (bounded by `max_body_size`, default 100MB).
+- **Memory Efficiency**: Cache hits stream from disk in 64KB chunks without loading the full body into memory. On the write path, `StreamingCache` no longer buffers the upstream response — the network stream flows straight into the cache manager, which spools it to disk frame-by-frame (bounded RAM: roughly one frame, regardless of body size).
 - **Performance**: Cached responses can be streamed immediately without waiting for complete download
-- **Scalability**: Read-heavy workloads handle arbitrarily large cached bodies; bound write-path memory with `max_body_size`
+- **Scalability**: Read-heavy and write-heavy workloads both handle arbitrarily large bodies with bounded memory. `max_body_size` (default 100MB) caps which responses get cached, not write-path memory — an oversize response is simply not cached (decline, not error) and still streams through to the caller.
 
 ## Non-Cloneable Request Handling
 

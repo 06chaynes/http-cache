@@ -28,11 +28,11 @@
 //! use smol_macros::main;
 //!
 //! #[apply(main!)]
-//! async fn main() -> surf::Result<()> {
+//! async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 //!     let client = surf::Client::new()
 //!         .with(Cache(HttpCache {
 //!             mode: CacheMode::Default,
-//!             manager: RedbManager::new("./http-cache.redb").unwrap(),
+//!             manager: RedbManager::new("./http-cache.redb")?,
 //!             options: Default::default(),
 //!         }));
 //!
@@ -59,11 +59,11 @@
 //! use smol_macros::main;
 //!
 //! #[apply(main!)]
-//! async fn main() -> surf::Result<()> {
+//! async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 //!     let client = surf::Client::new()
 //!         .with(Cache(HttpCache {
 //!             mode: CacheMode::ForceCache, // Cache everything, ignore headers
-//!             manager: RedbManager::new("./http-cache.redb").unwrap(),
+//!             manager: RedbManager::new("./http-cache.redb")?,
 //!             options: Default::default(),
 //!         }));
 //!
@@ -121,7 +121,7 @@
 //! use smol_macros::main;
 //!
 //! #[apply(main!)]
-//! async fn main() -> surf::Result<()> {
+//! async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 //!     let options = HttpCacheOptions {
 //!         cache_key: Some(Arc::new(|parts: &http::request::Parts| {
 //!             // Include query parameters in cache key
@@ -133,7 +133,7 @@
 //!     let client = surf::Client::new()
 //!         .with(Cache(HttpCache {
 //!             mode: CacheMode::Default,
-//!             manager: RedbManager::new("./http-cache.redb").unwrap(),
+//!             manager: RedbManager::new("./http-cache.redb")?,
 //!             options,
 //!         }));
 //!

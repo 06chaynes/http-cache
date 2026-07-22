@@ -21,15 +21,15 @@
 //!
 //! ```no_run
 //! use reqwest::Client;
-//! use reqwest_middleware::{ClientBuilder, Result};
+//! use reqwest_middleware::ClientBuilder;
 //! use http_cache_reqwest::{Cache, CacheMode, RedbManager, HttpCache, HttpCacheOptions};
 //!
 //! #[tokio::main]
-//! async fn main() -> Result<()> {
+//! async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 //!     let client = ClientBuilder::new(Client::new())
 //!         .with(Cache(HttpCache {
 //!             mode: CacheMode::Default,
-//!             manager: RedbManager::new("./http-cache.redb").unwrap(),
+//!             manager: RedbManager::new("./http-cache.redb")?,
 //!             options: HttpCacheOptions::default(),
 //!         }))
 //!         .build();
@@ -494,25 +494,33 @@ fn convert_response(response: HttpResponse) -> Result<Response> {
 }
 
 #[cfg(feature = "streaming")]
-// Converts a reqwest Response to an http::Response with Full body for streaming cache processing
-async fn convert_reqwest_response_to_http_full_body(
+/// Final URL of the upstream response, carried through core's orchestrator
+/// in response extensions so the reqwest Response rebuilt on the way out
+/// reports the real URL instead of reqwest's no.url.provided.local
+/// placeholder.
+#[derive(Clone)]
+struct FinalUrl(::url::Url);
+
+#[cfg(feature = "streaming")]
+// Converts a reqwest Response into a genuinely streaming http::Response.
+// No body bytes are read here: reqwest::Body implements http_body::Body
+// (Data = Bytes, Error = reqwest::Error), so the network stream flows
+// through core's orchestrator and into the cache manager frame by frame.
+fn convert_reqwest_response_to_streaming(
     response: Response,
-) -> Result<http::Response<http_body_util::Full<bytes::Bytes>>> {
-    let status = response.status();
-    let version = response.version();
-    let headers = response.headers().clone();
-    let body_bytes = response.bytes().await.map_err(BoxError::from)?;
-
-    let mut http_response =
-        http::Response::builder().status(status).version(version);
-
-    for (name, value) in headers.iter() {
-        http_response = http_response.header(name, value);
-    }
-
-    http_response
-        .body(http_body_util::Full::new(body_bytes))
-        .map_err(BoxError::from)
+) -> http::Response<
+    http_body_util::combinators::UnsyncBoxBody<
+        bytes::Bytes,
+        http_cache::StreamingError,
+    >,
+> {
+    use http_body_util::BodyExt;
+    let url = response.url().clone();
+    let http_response: http::Response<reqwest::Body> = response.into();
+    let (mut parts, body) = http_response.into_parts();
+    parts.extensions.insert(FinalUrl(url));
+    let body = body.map_err(http_cache::StreamingError::client).boxed_unsync();
+    http::Response::from_parts(parts, body)
 }
 
 #[cfg(feature = "streaming")]
@@ -525,27 +533,28 @@ where
     <T::Body as http_body::Body>::Data: Send,
     <T::Body as http_body::Body>::Error: Send + Sync + 'static,
 {
-    let (parts, body) = response.into_parts();
+    let (mut parts, body) = response.into_parts();
+    let final_url = parts.extensions.remove::<FinalUrl>();
 
     // Use the cache manager's body_to_bytes_stream method for streaming
     let bytes_stream = T::body_to_bytes_stream(body);
-
-    // Use reqwest's Body::wrap_stream to create a streaming body
     let reqwest_body = reqwest::Body::wrap_stream(bytes_stream);
 
-    let mut http_response =
+    let mut builder =
         http::Response::builder().status(parts.status).version(parts.version);
-
     for (name, value) in parts.headers.iter() {
-        http_response = http_response.header(name, value);
+        builder = builder.header(name, value);
     }
-
-    let mut response = http_response.body(reqwest_body)?;
-
-    // Transfer extensions from the original response (preserves URL,
-    // HttpCacheMetadata, and any other data stored in extensions)
-    *response.extensions_mut() = parts.extensions;
-
+    // Transfer orchestrator extensions (HttpCacheMetadata etc.) into the
+    // builder BEFORE applying the URL, so the ResponseUrl the builder
+    // inserts is not clobbered.
+    if let Some(ext) = builder.extensions_mut() {
+        *ext = parts.extensions;
+    }
+    if let Some(FinalUrl(url)) = final_url {
+        builder = builder.url(url);
+    }
+    let response = builder.body(reqwest_body)?;
     Ok(Response::from(response))
 }
 
@@ -641,7 +650,7 @@ where
             .map_err(from_box_error)?;
 
         if can_cache {
-            let result = self
+            let mut result = self
                 .cache
                 .run(&parts, mode_override, |fetch_req| {
                     let mut req = req;
@@ -667,11 +676,17 @@ where
                         let resp = next.run(req, extensions).await.map_err(
                             |e| -> BoxError { e.to_string().into() },
                         )?;
-                        convert_reqwest_response_to_http_full_body(resp).await
+                        Ok(convert_reqwest_response_to_streaming(resp))
                     }
                 })
                 .await
                 .map_err(from_box_error)?;
+
+            if result.extensions().get::<FinalUrl>().is_none() {
+                if let Ok(u) = ::url::Url::parse(&parts.uri.to_string()) {
+                    result.extensions_mut().insert(FinalUrl(u));
+                }
+            }
 
             convert_streaming_body_to_reqwest::<T>(result).await.map_err(|e| {
                 to_middleware_error(HttpCacheError::Cache(e.to_string()))

@@ -109,10 +109,12 @@
     echo "\n----------\nTower middleware:\n"
     cd http-cache-tower && cargo criterion --all-features
 
-# Run memory profiling example to compare streaming vs traditional caching
+# Compare streaming vs traditional cache memory use. Each example also runs an
+# issue-#164 peak-RSS regression gate and exits non-zero if it regresses.
+# `manager-cacache` is required (not a default feature) for the buffered side.
 memory-profile:
-    cd http-cache-tower && cargo run --release --example tower_streaming_memory_profile --features streaming
-    cd http-cache-reqwest && cargo run --release --example reqwest_streaming_memory_profile --features streaming
+    cd http-cache-tower && cargo run --release --example tower_streaming_memory_profile --features streaming,manager-cacache
+    cd http-cache-reqwest && cargo run --release --example reqwest_streaming_memory_profile --features streaming,manager-cacache
 
 # Run examples
 @examples:

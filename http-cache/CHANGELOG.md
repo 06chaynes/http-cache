@@ -1,15 +1,30 @@
 # Changelog
 
-## [1.0.0-alpha.7] - 2026-05-29
+## [1.0.0-alpha.7] - 2026-07-22
 
 ### Added
 
 - `RedbManager` cache backend using redb for persistent, synchronous on-disk caching that requires no async runtime
 - `manager-redb` feature flag for enabling `RedbManager`
+- `StreamingCacheManager::update_metadata` for refreshing a stored entry's headers, policy, and user metadata without touching the body file. This is a required method, so existing implementations of the trait must add it.
+- `CachedRequestMethod` and `CacheEntryToken` response extensions, used by the streaming orchestrator to tell a manager which request method produced a response and which stored entry a cached response was served from
 
 ### Changed
 
 - Default cache manager changed from `manager-cacache` to `manager-redb`. `manager-cacache` (and `CACacheManager`) is now opt-in — enable the `manager-cacache` feature to keep using it. The `cacache` crate is no longer maintained upstream.
+- `RedbManager` holds an exclusive file lock on its database: a second manager (or process) opening the same path fails at construction. Share one instance via `Arc` instead. This differs from the previous default `CACacheManager`, which allowed concurrent access to one cache directory.
+- `RedbManager` stores are batched for durability: commits are flushed to disk every 64 writes (configurable via `from_database_with_flush_interval`) and on drop, so a crash can lose approximately the most recent 64 stores. Deletes commit durably, so invalidations survive a crash.
+- `StreamingManager` metadata now includes a blake3 body checksum, verified while streaming; corrupt entries error the stream and self-heal to a miss. Existing streaming cache entries from earlier alphas fail to decode and are treated as misses (re-fetched once).
+- `StreamingBody::from_file_with_size` now streams exactly `size` bytes and errors on a shorter file; it previously read to end of file, treating `size` as a hint.
+- `StreamingManager` no longer prewarms its in-memory metadata cache at startup; hydration is lazy, so `entry_count()` reads 0 after a restart until keys are accessed.
+- Non-cacheable responses on the streaming path are now passed through without buffering (`StreamingManager::Body` is `StreamingBody<UnsyncBoxBody<Bytes, StreamingError>>`). Upstream body failures on that path surface as stream errors while the body is read, not as a middleware error before the response is returned.
+- Concurrent operations on the same cache key in `StreamingManager` are serialized with per-key locks, so racing gets/puts can no longer drop freshly written entries.
+- `StreamingManager::put` writes the response body to disk one frame at a time instead of collecting it into memory first, so peak memory no longer scales with response size. It returns a body backed by the committed on-disk entry rather than an in-memory copy.
+- Responses larger than `max_body_size` are no longer an error: caching is declined and the response is served in full, uncached. A declared `Content-Length` over the limit skips writing to disk entirely. HEAD responses are exempt, since their `Content-Length` describes the entity rather than the empty body.
+- Responses whose received length does not match their declared `Content-Length` are served but not cached, so a truncated response is never stored (RFC 9111 s3.3). HEAD responses are exempt.
+- Hop-by-hop headers are no longer written into cached entries. This covers `connection`, `transfer-encoding`, the rest of the RFC 9111 s3.1 set, and any field names listed in a `Connection` header. Live responses are unaffected.
+- 304 revalidation on the streaming path updates the stored metadata in place instead of re-reading and rewriting the body file, so revalidating a large entry no longer costs a full read and write.
+- `StreamingCacheManager::put` documents when a stored entry becomes visible: at or after the returned body has been fully consumed. The bundled `StreamingManager` makes it visible before `put` returns, but implementations are not required to.
 
 ## [1.0.0-alpha.6] - 2026-04-17
 

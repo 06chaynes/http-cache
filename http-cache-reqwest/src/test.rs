@@ -56,7 +56,7 @@ fn test_errors() -> Result<()> {
 
     // Test HttpCacheError
     let reqwest_err = HttpCacheError::cache("test cache error".to_string());
-    assert!(format!("{:?}", &reqwest_err).contains("Cache"));
+    assert!(format!("{:?}", reqwest_err).contains("Cache"));
     assert_eq!(
         reqwest_err.to_string(),
         "Cache error: test cache error".to_string(),
@@ -69,7 +69,7 @@ async fn default_mode() -> Result<()> {
     let mock_server = MockServer::start().await;
     let m = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 1);
     let _mock_guard = mock_server.register_as_scoped(m).await;
-    let url = format!("{}/", &mock_server.uri());
+    let url = format!("{}/", mock_server.uri());
     let manager = create_cache_manager();
 
     // Construct reqwest client with cache defaults
@@ -86,7 +86,7 @@ async fn default_mode() -> Result<()> {
 
     // Try to load cached object
     let data =
-        CacheManager::get(&manager, &format!("{}:{}", GET, &url_parse(&url)?))
+        CacheManager::get(&manager, &format!("{}:{}", GET, url_parse(&url)?))
             .await?;
     assert!(data.is_some());
 
@@ -101,7 +101,7 @@ async fn default_mode_with_options() -> Result<()> {
     let mock_server = MockServer::start().await;
     let m = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 1);
     let _mock_guard = mock_server.register_as_scoped(m).await;
-    let url = format!("{}/", &mock_server.uri());
+    let url = format!("{}/", mock_server.uri());
     let manager = create_cache_manager();
 
     // Construct reqwest client with cache options override
@@ -124,7 +124,7 @@ async fn default_mode_with_options() -> Result<()> {
 
     // Try to load cached object
     let data =
-        CacheManager::get(&manager, &format!("{}:{}", GET, &url_parse(&url)?))
+        CacheManager::get(&manager, &format!("{}:{}", GET, url_parse(&url)?))
             .await?;
     assert!(data.is_some());
     Ok(())
@@ -135,7 +135,7 @@ async fn no_cache_mode() -> Result<()> {
     let mock_server = MockServer::start().await;
     let m = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 2);
     let _mock_guard = mock_server.register_as_scoped(m).await;
-    let url = format!("{}/", &mock_server.uri());
+    let url = format!("{}/", mock_server.uri());
     let manager = create_cache_manager();
 
     // Construct reqwest client with cache defaults
@@ -152,7 +152,7 @@ async fn no_cache_mode() -> Result<()> {
 
     // Try to load cached object
     let data =
-        CacheManager::get(&manager, &format!("{}:{}", GET, &url_parse(&url)?))
+        CacheManager::get(&manager, &format!("{}:{}", GET, url_parse(&url)?))
             .await?;
     assert!(data.is_some());
 
@@ -166,7 +166,7 @@ async fn reload_mode() -> Result<()> {
     let mock_server = MockServer::start().await;
     let m = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 2);
     let _mock_guard = mock_server.register_as_scoped(m).await;
-    let url = format!("{}/", &mock_server.uri());
+    let url = format!("{}/", mock_server.uri());
     let manager = create_cache_manager();
 
     // Construct reqwest client with cache options override
@@ -189,7 +189,7 @@ async fn reload_mode() -> Result<()> {
 
     // Try to load cached object
     let data =
-        CacheManager::get(&manager, &format!("{}:{}", GET, &url_parse(&url)?))
+        CacheManager::get(&manager, &format!("{}:{}", GET, url_parse(&url)?))
             .await?;
     assert!(data.is_some());
 
@@ -204,7 +204,7 @@ async fn custom_cache_key() -> Result<()> {
     let mock_server = MockServer::start().await;
     let m = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 1);
     let _mock_guard = mock_server.register_as_scoped(m).await;
-    let url = format!("{}/", &mock_server.uri());
+    let url = format!("{}/", mock_server.uri());
     let manager = create_cache_manager();
 
     // Construct reqwest client with cache defaults and custom cache key
@@ -227,7 +227,7 @@ async fn custom_cache_key() -> Result<()> {
     // Try to load cached object
     let data = CacheManager::get(
         &manager,
-        &format!("{}:{}:{:?}:test", GET, &url, http::Version::HTTP_11),
+        &format!("{}:{}:{:?}:test", GET, url, http::Version::HTTP_11),
     )
     .await?;
 
@@ -240,7 +240,7 @@ async fn custom_cache_mode_fn() -> Result<()> {
     let mock_server = MockServer::start().await;
     let m = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 2);
     let _mock_guard = mock_server.register_as_scoped(m).await;
-    let url = format!("{}/test.css", &mock_server.uri());
+    let url = format!("{}/test.css", mock_server.uri());
     let manager = create_cache_manager();
 
     // Construct reqwest client with cache defaults and custom cache mode
@@ -271,17 +271,17 @@ async fn custom_cache_mode_fn() -> Result<()> {
 
     // Try to load cached object
     let data =
-        CacheManager::get(&manager, &format!("{}:{}", GET, &url_parse(&url)?))
+        CacheManager::get(&manager, &format!("{}:{}", GET, url_parse(&url)?))
             .await?;
     assert!(data.is_some());
 
-    let url = format!("{}/", &mock_server.uri());
+    let url = format!("{}/", mock_server.uri());
     // To verify our endpoint receives the request rather than a cache hit
     client.get(url.clone()).send().await?;
 
     // Check no cache object was created
     let data =
-        CacheManager::get(&manager, &format!("{}:{}", GET, &url_parse(&url)?))
+        CacheManager::get(&manager, &format!("{}:{}", GET, url_parse(&url)?))
             .await?;
     assert!(data.is_none());
 
@@ -293,7 +293,7 @@ async fn override_cache_mode() -> Result<()> {
     let mock_server = MockServer::start().await;
     let m = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 2);
     let _mock_guard = mock_server.register_as_scoped(m).await;
-    let url = format!("{}/test.css", &mock_server.uri());
+    let url = format!("{}/test.css", mock_server.uri());
     let manager = create_cache_manager();
 
     // Construct reqwest client with cache defaults and custom cache mode
@@ -310,17 +310,17 @@ async fn override_cache_mode() -> Result<()> {
 
     // Try to load cached object
     let data =
-        CacheManager::get(&manager, &format!("{}:{}", GET, &url_parse(&url)?))
+        CacheManager::get(&manager, &format!("{}:{}", GET, url_parse(&url)?))
             .await?;
     assert!(data.is_some());
 
-    let url = format!("{}/", &mock_server.uri());
+    let url = format!("{}/", mock_server.uri());
     // To verify our endpoint receives the request rather than a cache hit
     client.get(url.clone()).with_extension(CacheMode::NoStore).send().await?;
 
     // Check no cache object was created
     let data =
-        CacheManager::get(&manager, &format!("{}:{}", GET, &url_parse(&url)?))
+        CacheManager::get(&manager, &format!("{}:{}", GET, url_parse(&url)?))
             .await?;
     assert!(data.is_none());
 
@@ -332,7 +332,7 @@ async fn no_status_headers() -> Result<()> {
     let mock_server = MockServer::start().await;
     let m = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 1);
     let _mock_guard = mock_server.register_as_scoped(m).await;
-    let url = format!("{}/test.css", &mock_server.uri());
+    let url = format!("{}/test.css", mock_server.uri());
     let manager = create_cache_manager();
 
     // Construct reqwest client with cache defaults and custom cache mode
@@ -357,7 +357,7 @@ async fn no_status_headers() -> Result<()> {
 
     // Try to load cached object
     let data =
-        CacheManager::get(&manager, &format!("{}:{}", GET, &url_parse(&url)?))
+        CacheManager::get(&manager, &format!("{}:{}", GET, url_parse(&url)?))
             .await?;
     assert!(data.is_some());
 
@@ -373,7 +373,7 @@ async fn cache_bust() -> Result<()> {
     let mock_server = MockServer::start().await;
     let m = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 2);
     let _mock_guard = mock_server.register_as_scoped(m).await;
-    let url = format!("{}/", &mock_server.uri());
+    let url = format!("{}/", mock_server.uri());
     let manager = create_cache_manager();
 
     // Construct reqwest client with cache defaults and custom cache mode
@@ -412,16 +412,16 @@ async fn cache_bust() -> Result<()> {
 
     // Try to load cached object
     let data =
-        CacheManager::get(&manager, &format!("{}:{}", GET, &url_parse(&url)?))
+        CacheManager::get(&manager, &format!("{}:{}", GET, url_parse(&url)?))
             .await?;
     assert!(data.is_some());
 
     // To verify our endpoint receives the request rather than a cache hit
-    client.get(format!("{}/bust-cache", &mock_server.uri())).send().await?;
+    client.get(format!("{}/bust-cache", mock_server.uri())).send().await?;
 
     // Check cache object was busted
     let data =
-        CacheManager::get(&manager, &format!("{}:{}", GET, &url_parse(&url)?))
+        CacheManager::get(&manager, &format!("{}:{}", GET, url_parse(&url)?))
             .await?;
     assert!(data.is_none());
 
@@ -440,7 +440,7 @@ async fn delete_after_non_get_head_method_request() -> Result<()> {
         .expect(1);
     let _post_guard = mock_server.register_as_scoped(post_mock).await;
 
-    let url = format!("{}/", &mock_server.uri());
+    let url = format!("{}/", mock_server.uri());
     let manager = create_cache_manager();
 
     // Construct reqwest client with cache defaults
@@ -457,7 +457,7 @@ async fn delete_after_non_get_head_method_request() -> Result<()> {
 
     // Try to load cached object
     let data =
-        CacheManager::get(&manager, &format!("{}:{}", GET, &url_parse(&url)?))
+        CacheManager::get(&manager, &format!("{}:{}", GET, url_parse(&url)?))
             .await?;
     assert!(data.is_some());
 
@@ -466,7 +466,7 @@ async fn delete_after_non_get_head_method_request() -> Result<()> {
     client.post(url.clone()).send().await?;
 
     let data =
-        CacheManager::get(&manager, &format!("{}:{}", GET, &url_parse(&url)?))
+        CacheManager::get(&manager, &format!("{}:{}", GET, url_parse(&url)?))
             .await?;
     assert!(data.is_none());
 
@@ -478,7 +478,7 @@ async fn default_mode_no_cache_response() -> Result<()> {
     let mock_server = MockServer::start().await;
     let m = build_mock("no-cache", TEST_BODY, 200, 2);
     let _mock_guard = mock_server.register_as_scoped(m).await;
-    let url = format!("{}/", &mock_server.uri());
+    let url = format!("{}/", mock_server.uri());
     let manager = create_cache_manager();
 
     // Construct reqwest client with cache defaults
@@ -495,7 +495,7 @@ async fn default_mode_no_cache_response() -> Result<()> {
 
     // Try to load cached object
     let data =
-        CacheManager::get(&manager, &format!("{}:{}", GET, &url_parse(&url)?))
+        CacheManager::get(&manager, &format!("{}:{}", GET, url_parse(&url)?))
             .await?;
     assert!(data.is_some());
 
@@ -517,7 +517,7 @@ async fn removes_warning() -> Result<()> {
         )
         .expect(1);
     let _mock_guard = mock_server.register_as_scoped(m).await;
-    let url = format!("{}/", &mock_server.uri());
+    let url = format!("{}/", mock_server.uri());
     let manager = create_cache_manager();
 
     // Construct reqwest client with cache defaults
@@ -534,7 +534,7 @@ async fn removes_warning() -> Result<()> {
 
     // Try to load cached object
     let data =
-        CacheManager::get(&manager, &format!("{}:{}", GET, &url_parse(&url)?))
+        CacheManager::get(&manager, &format!("{}:{}", GET, url_parse(&url)?))
             .await?;
     assert!(data.is_some());
 
@@ -550,7 +550,7 @@ async fn no_store_mode() -> Result<()> {
     let mock_server = MockServer::start().await;
     let m = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 2);
     let _mock_guard = mock_server.register_as_scoped(m).await;
-    let url = format!("{}/", &mock_server.uri());
+    let url = format!("{}/", mock_server.uri());
     let manager = create_cache_manager();
 
     // Construct reqwest client with NoStore mode
@@ -567,7 +567,7 @@ async fn no_store_mode() -> Result<()> {
 
     // Try to load cached object
     let data =
-        CacheManager::get(&manager, &format!("{}:{}", GET, &url_parse(&url)?))
+        CacheManager::get(&manager, &format!("{}:{}", GET, url_parse(&url)?))
             .await?;
     assert!(data.is_none());
 
@@ -582,7 +582,7 @@ async fn force_cache_mode() -> Result<()> {
     let mock_server = MockServer::start().await;
     let m = build_mock("max-age=0, public", TEST_BODY, 200, 1);
     let _mock_guard = mock_server.register_as_scoped(m).await;
-    let url = format!("{}/", &mock_server.uri());
+    let url = format!("{}/", mock_server.uri());
     let manager = create_cache_manager();
 
     // Construct reqwest client with ForceCache mode
@@ -599,7 +599,7 @@ async fn force_cache_mode() -> Result<()> {
 
     // Try to load cached object
     let data =
-        CacheManager::get(&manager, &format!("{}:{}", GET, &url_parse(&url)?))
+        CacheManager::get(&manager, &format!("{}:{}", GET, url_parse(&url)?))
             .await?;
     assert!(data.is_some());
 
@@ -614,7 +614,7 @@ async fn ignore_rules_mode() -> Result<()> {
     let mock_server = MockServer::start().await;
     let m = build_mock("no-store, max-age=0, public", TEST_BODY, 200, 1);
     let _mock_guard = mock_server.register_as_scoped(m).await;
-    let url = format!("{}/", &mock_server.uri());
+    let url = format!("{}/", mock_server.uri());
     let manager = create_cache_manager();
 
     // Construct reqwest client with IgnoreRules mode
@@ -631,7 +631,7 @@ async fn ignore_rules_mode() -> Result<()> {
 
     // Try to load cached object
     let data =
-        CacheManager::get(&manager, &format!("{}:{}", GET, &url_parse(&url)?))
+        CacheManager::get(&manager, &format!("{}:{}", GET, url_parse(&url)?))
             .await?;
     assert!(data.is_some());
 
@@ -649,7 +649,7 @@ async fn revalidation_304() -> Result<()> {
         .respond_with(ResponseTemplate::new(304))
         .expect(1);
     let mock_guard = mock_server.register_as_scoped(m).await;
-    let url = format!("{}/", &mock_server.uri());
+    let url = format!("{}/", mock_server.uri());
     let manager = create_cache_manager();
 
     // Construct reqwest client with cache defaults
@@ -669,7 +669,7 @@ async fn revalidation_304() -> Result<()> {
 
     // Try to load cached object
     let data =
-        CacheManager::get(&manager, &format!("{}:{}", GET, &url_parse(&url)?))
+        CacheManager::get(&manager, &format!("{}:{}", GET, url_parse(&url)?))
             .await?;
     assert!(data.is_some());
 
@@ -685,7 +685,7 @@ async fn revalidation_200() -> Result<()> {
     let m = build_mock("max-age=0, must-revalidate", TEST_BODY, 200, 1);
     let m_200 = build_mock("max-age=0, must-revalidate", b"updated", 200, 1);
     let mock_guard = mock_server.register_as_scoped(m).await;
-    let url = format!("{}/", &mock_server.uri());
+    let url = format!("{}/", mock_server.uri());
     let manager = create_cache_manager();
 
     // Construct reqwest client with cache defaults
@@ -705,7 +705,7 @@ async fn revalidation_200() -> Result<()> {
 
     // Try to load cached object
     let data =
-        CacheManager::get(&manager, &format!("{}:{}", GET, &url_parse(&url)?))
+        CacheManager::get(&manager, &format!("{}:{}", GET, url_parse(&url)?))
             .await?;
     assert!(data.is_some());
 
@@ -734,7 +734,7 @@ async fn no_duplicate_headers_on_revalidation() -> Result<()> {
         .expect(1);
 
     let mock_guard = mock_server.register_as_scoped(m).await;
-    let url = format!("{}/", &mock_server.uri());
+    let url = format!("{}/", mock_server.uri());
     let manager = create_cache_manager();
 
     let client = ClientBuilder::new(Client::new())
@@ -765,7 +765,7 @@ async fn revalidation_500() -> Result<()> {
         .respond_with(ResponseTemplate::new(500))
         .expect(1);
     let mock_guard = mock_server.register_as_scoped(m).await;
-    let url = format!("{}/", &mock_server.uri());
+    let url = format!("{}/", mock_server.uri());
     let manager = create_cache_manager();
 
     // Construct reqwest client with cache defaults
@@ -785,7 +785,7 @@ async fn revalidation_500() -> Result<()> {
 
     // Try to load cached object
     let data =
-        CacheManager::get(&manager, &format!("{}:{}", GET, &url_parse(&url)?))
+        CacheManager::get(&manager, &format!("{}:{}", GET, url_parse(&url)?))
             .await?;
     assert!(data.is_some());
 
@@ -805,7 +805,7 @@ mod only_if_cached_mode {
         let mock_server = MockServer::start().await;
         let m = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 0);
         let _mock_guard = mock_server.register_as_scoped(m).await;
-        let url = format!("{}/", &mock_server.uri());
+        let url = format!("{}/", mock_server.uri());
         let manager = create_cache_manager();
 
         // Construct reqwest client with OnlyIfCached mode
@@ -824,7 +824,7 @@ mod only_if_cached_mode {
         // Verify no entry was cached
         let data = CacheManager::get(
             &manager,
-            &format!("{}:{}", GET, &url_parse(&url)?),
+            &format!("{}:{}", GET, url_parse(&url)?),
         )
         .await?;
         assert!(data.is_none());
@@ -836,7 +836,7 @@ mod only_if_cached_mode {
         let mock_server = MockServer::start().await;
         let m = build_mock(CACHEABLE_PUBLIC, TEST_BODY, 200, 1);
         let _mock_guard = mock_server.register_as_scoped(m).await;
-        let url = format!("{}/", &mock_server.uri());
+        let url = format!("{}/", mock_server.uri());
         let manager = create_cache_manager();
 
         // First, load cache with Default mode
@@ -854,7 +854,7 @@ mod only_if_cached_mode {
         // Try to load cached object
         let data = CacheManager::get(
             &manager,
-            &format!("{}:{}", GET, &url_parse(&url)?),
+            &format!("{}:{}", GET, url_parse(&url)?),
         )
         .await?;
         assert!(data.is_some());
@@ -890,7 +890,7 @@ async fn head_request_caching() -> Result<()> {
         )
         .expect(1);
     let _mock_guard = mock_server.register_as_scoped(m).await;
-    let url = format!("{}/", &mock_server.uri());
+    let url = format!("{}/", mock_server.uri());
     let manager = create_cache_manager();
 
     // Construct reqwest client with cache defaults
@@ -912,7 +912,7 @@ async fn head_request_caching() -> Result<()> {
 
     // Try to load cached object - should use HEAD method in cache key
     let data =
-        CacheManager::get(&manager, &format!("HEAD:{}", &url_parse(&url)?))
+        CacheManager::get(&manager, &format!("HEAD:{}", url_parse(&url)?))
             .await?;
     assert!(data.is_some());
 
@@ -951,7 +951,7 @@ async fn head_request_cached_like_get() -> Result<()> {
         .expect(1);
 
     let mock_guard_get = mock_server.register_as_scoped(m_get).await;
-    let url = format!("{}/", &mock_server.uri());
+    let url = format!("{}/", mock_server.uri());
     let manager = create_cache_manager();
 
     let client = ClientBuilder::new(Client::new())
@@ -978,12 +978,12 @@ async fn head_request_cached_like_get() -> Result<()> {
 
     // Verify both GET and HEAD cache entries exist
     let get_data =
-        CacheManager::get(&manager, &format!("GET:{}", &url_parse(&url)?))
+        CacheManager::get(&manager, &format!("GET:{}", url_parse(&url)?))
             .await?;
     assert!(get_data.is_some());
 
     let head_data =
-        CacheManager::get(&manager, &format!("HEAD:{}", &url_parse(&url)?))
+        CacheManager::get(&manager, &format!("HEAD:{}", url_parse(&url)?))
             .await?;
     assert!(head_data.is_some());
 
@@ -1009,7 +1009,7 @@ async fn put_request_invalidates_cache() -> Result<()> {
         .expect(1);
 
     let mock_guard_get = mock_server.register_as_scoped(m_get).await;
-    let url = format!("{}/", &mock_server.uri());
+    let url = format!("{}/", mock_server.uri());
     let manager = create_cache_manager();
 
     let client = ClientBuilder::new(Client::new())
@@ -1025,7 +1025,7 @@ async fn put_request_invalidates_cache() -> Result<()> {
 
     // Verify it's cached
     let data =
-        CacheManager::get(&manager, &format!("GET:{}", &url_parse(&url)?))
+        CacheManager::get(&manager, &format!("GET:{}", url_parse(&url)?))
             .await?;
     assert!(data.is_some());
 
@@ -1038,7 +1038,7 @@ async fn put_request_invalidates_cache() -> Result<()> {
 
     // Verify cache was invalidated
     let data =
-        CacheManager::get(&manager, &format!("GET:{}", &url_parse(&url)?))
+        CacheManager::get(&manager, &format!("GET:{}", url_parse(&url)?))
             .await?;
     assert!(data.is_none());
 
@@ -1062,7 +1062,7 @@ async fn patch_request_invalidates_cache() -> Result<()> {
         .expect(1);
 
     let mock_guard_get = mock_server.register_as_scoped(m_get).await;
-    let url = format!("{}/", &mock_server.uri());
+    let url = format!("{}/", mock_server.uri());
     let manager = create_cache_manager();
 
     let client = ClientBuilder::new(Client::new())
@@ -1078,7 +1078,7 @@ async fn patch_request_invalidates_cache() -> Result<()> {
 
     // Verify it's cached
     let data =
-        CacheManager::get(&manager, &format!("GET:{}", &url_parse(&url)?))
+        CacheManager::get(&manager, &format!("GET:{}", url_parse(&url)?))
             .await?;
     assert!(data.is_some());
 
@@ -1091,7 +1091,7 @@ async fn patch_request_invalidates_cache() -> Result<()> {
 
     // Verify cache was invalidated
     let data =
-        CacheManager::get(&manager, &format!("GET:{}", &url_parse(&url)?))
+        CacheManager::get(&manager, &format!("GET:{}", url_parse(&url)?))
             .await?;
     assert!(data.is_none());
 
@@ -1115,7 +1115,7 @@ async fn delete_request_invalidates_cache() -> Result<()> {
         .expect(1);
 
     let mock_guard_get = mock_server.register_as_scoped(m_get).await;
-    let url = format!("{}/", &mock_server.uri());
+    let url = format!("{}/", mock_server.uri());
     let manager = create_cache_manager();
 
     let client = ClientBuilder::new(Client::new())
@@ -1131,7 +1131,7 @@ async fn delete_request_invalidates_cache() -> Result<()> {
 
     // Verify it's cached
     let data =
-        CacheManager::get(&manager, &format!("GET:{}", &url_parse(&url)?))
+        CacheManager::get(&manager, &format!("GET:{}", url_parse(&url)?))
             .await?;
     assert!(data.is_some());
 
@@ -1144,7 +1144,7 @@ async fn delete_request_invalidates_cache() -> Result<()> {
 
     // Verify cache was invalidated
     let data =
-        CacheManager::get(&manager, &format!("GET:{}", &url_parse(&url)?))
+        CacheManager::get(&manager, &format!("GET:{}", url_parse(&url)?))
             .await?;
     assert!(data.is_none());
 
@@ -1162,7 +1162,7 @@ async fn options_request_not_cached() -> Result<()> {
         )
         .expect(2); // Should be called twice since not cached
     let _mock_guard = mock_server.register_as_scoped(m).await;
-    let url = format!("{}/", &mock_server.uri());
+    let url = format!("{}/", mock_server.uri());
     let manager = create_cache_manager();
 
     let client = ClientBuilder::new(Client::new())
@@ -1180,7 +1180,7 @@ async fn options_request_not_cached() -> Result<()> {
 
     // Verify it's not cached
     let data =
-        CacheManager::get(&manager, &format!("OPTIONS:{}", &url_parse(&url)?))
+        CacheManager::get(&manager, &format!("OPTIONS:{}", url_parse(&url)?))
             .await?;
     assert!(data.is_none());
 
@@ -1428,6 +1428,41 @@ mod streaming_tests {
         Ok(())
     }
 
+    /// A HEAD response carries the entity's Content-Length with an empty
+    /// body; the orchestrator must tag it with `CachedRequestMethod` or the
+    /// manager's completeness check declines it and HEAD is never cached.
+    #[tokio::test]
+    async fn test_streaming_cache_head_response_is_cached() -> Result<()> {
+        let manager = create_streaming_cache_manager().await;
+        let cache = HttpStreamingCache {
+            mode: CacheMode::Default,
+            manager,
+            options: Default::default(),
+        };
+
+        let request = Request::builder()
+            .method("HEAD")
+            .uri("https://example.com/head")
+            .body(())
+            .unwrap();
+        let (parts, _) = request.into_parts();
+        let analysis = cache.analyze_request(&parts, None)?;
+
+        let response = Response::builder()
+            .status(200)
+            .header("cache-control", "max-age=3600")
+            .header("content-length", "13")
+            .body(Full::new(Bytes::new()))
+            .unwrap();
+        cache.process_response(analysis.clone(), response, None).await?;
+
+        assert!(
+            cache.lookup_cached_response(&analysis.cache_key).await?.is_some(),
+            "HEAD response must be cached"
+        );
+        Ok(())
+    }
+
     #[tokio::test]
     async fn test_streaming_cache_no_cache_mode() -> Result<()> {
         let manager = create_streaming_cache_manager().await;
@@ -1530,24 +1565,24 @@ mod streaming_tests {
             .build();
 
         // Test 1: Force cache 200 response despite no-cache headers
-        let success_url = format!("{}/api/data", &mock_server.uri());
+        let success_url = format!("{}/api/data", mock_server.uri());
         let response = client.get(&success_url).send().await?;
         assert_eq!(response.status(), 200);
 
         // Verify it was cached despite no-cache headers
-        let cache_key = format!("{}:{}", GET, &url_parse(&success_url)?);
+        let cache_key = format!("{}:{}", GET, url_parse(&success_url)?);
         let cached_data = CacheManager::get(&manager, &cache_key).await?;
         assert!(cached_data.is_some());
         let (cached_response, _) = cached_data.unwrap();
         assert_eq!(cached_response.body, TEST_BODY);
 
         // Test 2: Don't cache 429 response despite cacheable headers
-        let rate_limit_url = format!("{}/api/rate-limited", &mock_server.uri());
+        let rate_limit_url = format!("{}/api/rate-limited", mock_server.uri());
         let response = client.get(&rate_limit_url).send().await?;
         assert_eq!(response.status(), 429);
 
         // Verify it was NOT cached despite cacheable headers
-        let cache_key = format!("{}:{}", GET, &url_parse(&rate_limit_url)?);
+        let cache_key = format!("{}:{}", GET, url_parse(&rate_limit_url)?);
         let cached_data = CacheManager::get(&manager, &cache_key).await?;
         assert!(cached_data.is_none());
 
@@ -2586,6 +2621,208 @@ mod bincode_migration {
         assert_eq!(res.status(), 200);
         assert_eq!(res.bytes().await?, &b"new postcard data"[..]);
 
+        Ok(())
+    }
+}
+
+#[cfg(feature = "streaming")]
+mod streaming_issue_164 {
+    use super::*;
+    use crate::StreamingCache;
+    use http_cache::{CacheMode, StreamingManager};
+
+    /// Over-cap cacheable response: must pass through successfully
+    /// (previously errored the whole request) and must never be cached.
+    #[tokio::test]
+    async fn oversized_response_passes_through_uncached() -> Result<()> {
+        let mock_server = MockServer::start().await;
+        let body = vec![0xCD_u8; 8192]; // 8 KiB
+        let m = Mock::given(method(GET)).respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("cache-control", "public, max-age=3600")
+                .set_body_bytes(body),
+        );
+        let _guard = mock_server.register_as_scoped(m).await;
+        let url = format!("{}/", mock_server.uri());
+
+        let tmp = tempfile::TempDir::new()?;
+        let manager = StreamingManager::with_max_body_size(
+            tmp.path().to_path_buf(),
+            100,
+            1024, // 1 KiB cap < 8 KiB body
+        )
+        .await?;
+        let client = ClientBuilder::new(Client::new())
+            .with(StreamingCache::new(manager, CacheMode::Default))
+            .build();
+
+        for _ in 0..2 {
+            let res = client.get(&url).send().await?;
+            assert_eq!(
+                res.headers().get("x-cache").unwrap().to_str().unwrap(),
+                "MISS",
+                "over-cap response must never become a HIT"
+            );
+            let got = res.bytes().await?;
+            assert_eq!(got.len(), 8192);
+        }
+        Ok(())
+    }
+
+    /// Anti-regression test for issue #164's adapter half: the middleware
+    /// must not buffer the upstream body. A hand-rolled chunked server sends
+    /// one chunk, then waits for the client to observe it before sending the
+    /// rest, so a buffering adapter deadlocks and the 10s timeouts fire.
+    ///
+    /// The response is `no-store`, so this pins the pass-through path; the
+    /// cacheable-miss path spools to EOF before the first byte.
+    #[tokio::test]
+    async fn first_byte_arrives_before_upstream_eof() -> Result<()> {
+        use futures_util::StreamExt;
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+        let addr = listener.local_addr()?;
+        let (ack_tx, ack_rx) = tokio::sync::oneshot::channel::<()>();
+
+        tokio::spawn(async move {
+            let (mut sock, _) = listener.accept().await.unwrap();
+            let mut buf = [0u8; 4096];
+            let _ = sock.read(&mut buf).await.unwrap(); // request head
+            sock.write_all(
+                b"HTTP/1.1 200 OK\r\n\
+                  cache-control: no-store\r\n\
+                  transfer-encoding: chunked\r\n\
+                  \r\n\
+                  10\r\nfirst-chunk-data\r\n",
+            )
+            .await
+            .unwrap();
+            sock.flush().await.unwrap();
+            // Hold the body open until the client acks the first chunk.
+            let _ = ack_rx.await;
+            sock.write_all(b"E\r\nsecond-chunk-d\r\n0\r\n\r\n").await.unwrap();
+        });
+
+        let tmp = tempfile::TempDir::new()?;
+        let manager =
+            StreamingManager::new(tmp.path().to_path_buf(), 100).await?;
+        let client = ClientBuilder::new(Client::new())
+            .with(StreamingCache::new(manager, CacheMode::Default))
+            .build();
+
+        let res = tokio::time::timeout(
+            std::time::Duration::from_secs(10),
+            client.get(format!("http://{addr}/")).send(),
+        )
+        .await
+        .expect(
+            "send() must return headers before the upstream body finishes \
+             — a timeout here means the middleware is buffering bodies \
+             again (issue #164 regression)",
+        )?;
+        let mut stream = res.bytes_stream();
+        // The 16-byte first chunk may arrive as several stream items.
+        let first_chunk_len = b"first-chunk-data".len();
+        let mut first = Vec::new();
+        while first.len() < first_chunk_len {
+            let chunk = tokio::time::timeout(
+                std::time::Duration::from_secs(10),
+                stream.next(),
+            )
+            .await
+            .expect(
+                "first chunk must arrive before upstream EOF — a timeout \
+                 here means the middleware is buffering bodies again \
+                 (issue #164 regression)",
+            )
+            .expect("stream ended before the first chunk")?;
+            first.extend_from_slice(&chunk);
+        }
+        assert_eq!(&first[..], b"first-chunk-data");
+        let _ = ack_tx.send(());
+        let mut rest = Vec::new();
+        while let Some(c) = stream.next().await {
+            rest.extend_from_slice(&c?);
+        }
+        assert_eq!(&rest[..], b"second-chunk-d");
+        Ok(())
+    }
+
+    /// End-to-end MISS -> HIT round trip. The final URL must survive the
+    /// streaming middleware on both (regression: it used to come back as
+    /// http://no.url.provided.local).
+    #[tokio::test]
+    async fn final_url_preserved() -> Result<()> {
+        let mock_server = MockServer::start().await;
+        let m = Mock::given(method(GET)).respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("cache-control", "public, max-age=3600")
+                .set_body_bytes(b"url-test".to_vec()),
+        );
+        let _guard = mock_server.register_as_scoped(m).await;
+        let url = format!("{}/", mock_server.uri());
+
+        let tmp = tempfile::TempDir::new()?;
+        let manager =
+            StreamingManager::new(tmp.path().to_path_buf(), 100).await?;
+        let client = ClientBuilder::new(Client::new())
+            .with(StreamingCache::new(manager, CacheMode::Default))
+            .build();
+
+        let res = client.get(&url).send().await?;
+        assert_eq!(res.headers().get("x-cache").unwrap(), "MISS");
+        assert_eq!(res.url().as_str(), url, "MISS must preserve final URL");
+        assert_eq!(res.bytes().await?, &b"url-test"[..]);
+
+        let res = client.get(&url).send().await?;
+        assert_eq!(res.headers().get("x-cache").unwrap(), "HIT");
+        assert_eq!(res.url().as_str(), url, "HIT must preserve final URL");
+        assert_eq!(res.bytes().await?, &b"url-test"[..]);
+        Ok(())
+    }
+
+    /// 304 revalidation on the streaming path is a metadata-only refresh via
+    /// `update_metadata`; the stored entry must pick up the revalidated
+    /// headers.
+    #[tokio::test]
+    async fn revalidation_304_updates_stored_metadata() -> Result<()> {
+        let mock_server = MockServer::start().await;
+        let m = build_mock("public, must-revalidate", TEST_BODY, 200, 1);
+        let m304 = Mock::given(method(GET))
+            .respond_with(
+                ResponseTemplate::new(304)
+                    .insert_header("cache-control", "public, max-age=999"),
+            )
+            .expect(1);
+        let mock_guard = mock_server.register_as_scoped(m).await;
+        let url = format!("{}/", mock_server.uri());
+
+        let tmp = tempfile::TempDir::new()?;
+        let manager =
+            StreamingManager::new(tmp.path().to_path_buf(), 100).await?;
+        let probe = manager.clone();
+        let client = ClientBuilder::new(Client::new())
+            .with(StreamingCache::new(manager, CacheMode::Default))
+            .build();
+
+        let res = client.get(url.clone()).send().await?;
+        assert_eq!(res.bytes().await?, TEST_BODY);
+
+        drop(mock_guard);
+        let _mock_guard = mock_server.register_as_scoped(m304).await;
+
+        let res = client.get(url.clone()).send().await?;
+        assert_eq!(res.bytes().await?, TEST_BODY);
+
+        let key = format!("{}:{}", GET, url_parse(&url)?);
+        let (stored, _) =
+            StreamingCacheManager::get(&probe, &key).await?.unwrap();
+        assert_eq!(
+            stored.headers().get("cache-control").unwrap(),
+            "public, max-age=999",
+            "304 must refresh the stored metadata"
+        );
         Ok(())
     }
 }

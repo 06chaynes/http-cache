@@ -1,6 +1,6 @@
 # Changelog
 
-## [1.0.0-alpha.7] - 2026-05-29
+## [1.0.0-alpha.7] - 2026-07-22
 
 ### Added
 
@@ -10,6 +10,7 @@
 
 - Updated `http-cache` dependency to 1.0.0-alpha.7
 - Default feature changed from `manager-cacache` to `manager-redb`; enable `manager-cacache` explicitly to keep using `CACacheManager`
+- `HttpCacheStreamingService` inherits the streaming write path from `StreamingManager`: cache-miss bodies are no longer buffered in memory, and `put` returns a body backed by the on-disk entry
 
 ## [1.0.0-alpha.6] - 2026-04-17
 

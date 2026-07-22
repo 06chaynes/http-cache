@@ -51,6 +51,44 @@ use crate::error::StreamingError;
 #[cfg(feature = "streaming")]
 const STREAM_BUFFER_SIZE: usize = 64 * 1024;
 
+/// End-of-stream integrity check for the `File` variant.
+#[cfg(feature = "streaming")]
+pub struct FileCheck {
+    hasher: blake3::Hasher,
+    expected: [u8; 32],
+    on_corrupt: Box<dyn FnOnce() + Send>,
+}
+
+#[cfg(feature = "streaming")]
+impl FileCheck {
+    /// Compares the streamed hash against the expected one; fires
+    /// `on_corrupt` and returns the error on mismatch.
+    fn finish(self) -> Result<(), StreamingError> {
+        if self.hasher.finalize().as_bytes() == &self.expected {
+            return Ok(());
+        }
+        (self.on_corrupt)();
+        Err(StreamingError::new(Box::new(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "cached body checksum mismatch",
+        ))))
+    }
+
+    /// Fires `on_corrupt` without a hash compare (truncated stream).
+    fn corrupt(self) {
+        (self.on_corrupt)();
+    }
+}
+
+#[cfg(feature = "streaming")]
+impl fmt::Debug for FileCheck {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("FileCheck")
+            .field("expected", &self.expected)
+            .finish_non_exhaustive()
+    }
+}
+
 // When streaming feature is enabled, include the File variant
 #[cfg(feature = "streaming")]
 pin_project! {
@@ -81,6 +119,7 @@ pin_project! {
             buffer: BytesMut,
             done: bool,
             size: u64,
+            check: Option<Box<FileCheck>>,
         },
     }
 }
@@ -135,11 +174,9 @@ impl<B> StreamingBody<B> {
     /// # Cursor contract
     ///
     /// The caller must position `file` at the start of the body bytes before
-    /// calling this function. Streaming uses the current cursor position and
-    /// reads until EOF — correctness relies on the caller having already
-    /// advanced past any file header (e.g. the 16-byte nonce header written
-    /// by `StreamingManager`) and on the file length exactly matching
-    /// `16 + size` so EOF lands on the body boundary.
+    /// calling this function. Exactly `size` bytes are streamed from the
+    /// current cursor position; trailing file content is ignored and a file
+    /// shorter than `size` yields a stream error.
     ///
     /// `size` is used to provide accurate size hints to downstream consumers.
     #[cfg(feature = "streaming")]
@@ -150,6 +187,32 @@ impl<B> StreamingBody<B> {
             buffer: BytesMut::with_capacity(STREAM_BUFFER_SIZE),
             done: false,
             size,
+            check: None,
+        }
+    }
+
+    /// Like [`from_file_with_size`](Self::from_file_with_size), but hashes
+    /// the streamed bytes and compares against `checksum` when the stream
+    /// completes. On mismatch the final frame is replaced with an error and
+    /// `on_corrupt` is invoked once.
+    #[cfg(feature = "streaming")]
+    #[must_use]
+    pub fn from_file_verified(
+        file: tokio::fs::File,
+        size: u64,
+        checksum: [u8; 32],
+        on_corrupt: impl FnOnce() + Send + 'static,
+    ) -> Self {
+        Self::File {
+            reader: file,
+            buffer: BytesMut::with_capacity(STREAM_BUFFER_SIZE),
+            done: false,
+            size,
+            check: Some(Box::new(FileCheck {
+                hasher: blake3::Hasher::new(),
+                expected: checksum,
+                on_corrupt: Box::new(on_corrupt),
+            })),
         }
     }
 }
@@ -188,8 +251,17 @@ where
                     })
                 })
             }
-            StreamingBodyProj::File { reader, buffer, done, .. } => {
+            StreamingBodyProj::File { reader, buffer, done, size, check } => {
                 if *done {
+                    return Poll::Ready(None);
+                }
+                if *size == 0 {
+                    *done = true;
+                    if let Some(c) = check.take() {
+                        if let Err(e) = c.finish() {
+                            return Poll::Ready(Some(Err(e)));
+                        }
+                    }
                     return Poll::Ready(None);
                 }
 
@@ -206,10 +278,32 @@ where
                         if filled_len == 0 {
                             *done = true;
                             buffer.clear();
-                            Poll::Ready(None)
+                            if let Some(c) = check.take() {
+                                c.corrupt();
+                            }
+                            Poll::Ready(Some(Err(StreamingError::new(
+                                Box::new(std::io::Error::new(
+                                    std::io::ErrorKind::UnexpectedEof,
+                                    "cached body file shorter than expected",
+                                )),
+                            ))))
                         } else {
-                            // Truncate to actual bytes read and freeze
-                            buffer.truncate(filled_len);
+                            // Never yield more than the remaining body bytes.
+                            let take = (*size).min(filled_len as u64) as usize;
+                            buffer.truncate(take);
+                            *size -= take as u64;
+                            if let Some(c) = check.as_deref_mut() {
+                                c.hasher.update(&buffer[..take]);
+                            }
+                            if *size == 0 {
+                                *done = true;
+                                if let Some(c) = check.take() {
+                                    if let Err(e) = c.finish() {
+                                        buffer.clear();
+                                        return Poll::Ready(Some(Err(e)));
+                                    }
+                                }
+                            }
                             let bytes = buffer.split().freeze();
                             Poll::Ready(Some(Ok(Frame::data(bytes))))
                         }
@@ -380,5 +474,56 @@ where
             .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {
                 Box::new(std::io::Error::other(format!("Stream error: {e}")))
             })
+    }
+}
+
+#[cfg(all(test, feature = "streaming"))]
+mod tests {
+    use super::*;
+    use http_body_util::BodyExt;
+    use tokio::io::AsyncWriteExt;
+
+    async fn file_with(content: &[u8]) -> (tokio::fs::File, tempfile::TempDir) {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("body.bin");
+        let mut f = tokio::fs::File::create(&path).await.unwrap();
+        f.write_all(content).await.unwrap();
+        f.sync_all().await.unwrap();
+        drop(f);
+        (tokio::fs::File::open(&path).await.unwrap(), dir)
+    }
+
+    #[tokio::test]
+    async fn file_body_stops_at_size() {
+        let (f, _dir) = file_with(b"0123456789trailing-garbage").await;
+        let body: StreamingBody<http_body_util::Empty<Bytes>> =
+            StreamingBody::from_file_with_size(f, 10);
+        let collected = body.collect().await.unwrap().to_bytes();
+        assert_eq!(collected.as_ref(), b"0123456789");
+    }
+
+    #[tokio::test]
+    async fn file_body_errors_on_truncated_file() {
+        let (f, _dir) = file_with(b"short").await;
+        let body: StreamingBody<http_body_util::Empty<Bytes>> =
+            StreamingBody::from_file_with_size(f, 100);
+        assert!(body.collect().await.is_err());
+    }
+
+    #[tokio::test]
+    async fn file_body_size_hint_reports_remaining() {
+        use http_body::Body;
+        let payload = vec![7u8; STREAM_BUFFER_SIZE + 100];
+        let (f, _dir) = file_with(&payload).await;
+        let mut body: StreamingBody<http_body_util::Empty<Bytes>> =
+            StreamingBody::from_file_with_size(f, payload.len() as u64);
+        assert_eq!(body.size_hint().exact(), Some(payload.len() as u64));
+        let frame =
+            std::future::poll_fn(|cx| Pin::new(&mut body).poll_frame(cx))
+                .await
+                .unwrap()
+                .unwrap();
+        let n = frame.into_data().unwrap().len() as u64;
+        assert_eq!(body.size_hint().exact(), Some(payload.len() as u64 - n));
     }
 }

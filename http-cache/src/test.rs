@@ -84,6 +84,39 @@ fn response_methods_work() -> Result<()> {
 }
 
 #[test]
+fn update_headers_keeps_headers_with_unconvertible_values() -> Result<()> {
+    let url = Url::from_str("http://example.com")?;
+    let mut res = HttpResponse {
+        body: TEST_BODY.to_vec(),
+        headers: HttpHeaders::new(),
+        status: 200,
+        url,
+        version: HttpVersion::Http11,
+        metadata: None,
+    };
+    res.headers
+        .insert("content-disposition".to_string(), "attachment".to_string());
+    res.headers.insert("etag".to_string(), "\"old\"".to_string());
+    let mut parts =
+        http::Response::builder().status(304).body(()).unwrap().into_parts().0;
+    parts.headers.insert(
+        "content-disposition",
+        http::HeaderValue::from_bytes(b"attachment; filename=\"na\xEFve.pdf\"")
+            .unwrap(),
+    );
+    parts.headers.insert("etag", http::HeaderValue::from_static("\"new\""));
+    res.update_headers(&parts)?;
+    // Unconvertible value: cached header survives instead of vanishing.
+    assert_eq!(
+        res.headers.get("content-disposition").map(String::as_str),
+        Some("attachment")
+    );
+    // Convertible value: replaced as before.
+    assert_eq!(res.headers.get("etag").map(String::as_str), Some("\"new\""));
+    Ok(())
+}
+
+#[test]
 fn version_http() -> Result<()> {
     assert_eq!(format!("{:?}", HttpVersion::Http09), "Http09");
     assert_eq!(format!("{}", HttpVersion::Http09), "HTTP/0.9");
@@ -187,24 +220,24 @@ mod with_cacache {
             http::Response::builder().status(200).body(TEST_BODY.to_vec())?;
         let policy = CachePolicy::new(&req, &res);
         manager
-            .put(format!("{}:{}", GET, &url), http_res.clone(), policy.clone())
+            .put(format!("{}:{}", GET, url), http_res.clone(), policy.clone())
             .await?;
-        let data = manager.get(&format!("{}:{}", GET, &url)).await?;
+        let data = manager.get(&format!("{}:{}", GET, url)).await?;
         assert!(data.is_some());
         let test_data = data.unwrap();
         assert_eq!(test_data.0.body, TEST_BODY);
         assert_eq!(test_data.0.metadata, Some(b"Metadata".to_vec()));
         let clone = manager.clone();
-        let clonedata = clone.get(&format!("{}:{}", GET, &url)).await?;
+        let clonedata = clone.get(&format!("{}:{}", GET, url)).await?;
         assert!(clonedata.is_some());
         assert_eq!(clonedata.unwrap().0.body, TEST_BODY);
-        manager.delete(&format!("{}:{}", GET, &url)).await?;
-        let data = manager.get(&format!("{}:{}", GET, &url)).await?;
+        manager.delete(&format!("{}:{}", GET, url)).await?;
+        let data = manager.get(&format!("{}:{}", GET, url)).await?;
         assert!(data.is_none());
 
-        manager.put(format!("{}:{}", GET, &url), http_res, policy).await?;
+        manager.put(format!("{}:{}", GET, url), http_res, policy).await?;
         manager.clear().await?;
-        let data = manager.get(&format!("{}:{}", GET, &url)).await?;
+        let data = manager.get(&format!("{}:{}", GET, url)).await?;
         assert!(data.is_none());
         Ok(())
     }
@@ -270,7 +303,7 @@ mod cacache_bincode_migration {
         let url = Url::from_str("http://example.com/legacy")?;
         let cache_dir = tempfile::tempdir().unwrap();
         let manager = CACacheManager::new(cache_dir.path().to_path_buf(), true);
-        let cache_key = format!("GET:{}", &url);
+        let cache_key = format!("GET:{}", url);
 
         // Construct a legacy bincode payload matching what 0.16/0.21 wrote
         let mut headers = HashMap::new();
@@ -325,7 +358,7 @@ mod cacache_bincode_migration {
         let url = Url::from_str("http://example.com/headers")?;
         let cache_dir = tempfile::tempdir().unwrap();
         let manager = CACacheManager::new(cache_dir.path().to_path_buf(), true);
-        let cache_key = format!("GET:{}", &url);
+        let cache_key = format!("GET:{}", url);
 
         let mut headers = HashMap::new();
         headers.insert("content-type".to_string(), "text/html".to_string());
@@ -475,9 +508,9 @@ mod with_redb {
             http::Response::builder().status(200).body(TEST_BODY.to_vec())?;
         let policy = CachePolicy::new(&req, &res);
         manager
-            .put(format!("{}:{}", GET, &url), http_res.clone(), policy.clone())
+            .put(format!("{}:{}", GET, url), http_res.clone(), policy.clone())
             .await?;
-        let data = manager.get(&format!("{}:{}", GET, &url)).await?;
+        let data = manager.get(&format!("{}:{}", GET, url)).await?;
         assert!(data.is_some());
         let test_data = data.unwrap();
         assert_eq!(test_data.0.body, TEST_BODY);
@@ -485,19 +518,19 @@ mod with_redb {
         // The CachePolicy round-trips through postcard intact.
         assert_eq!(test_data.1.is_storable(), policy.is_storable());
         let clone = manager.clone();
-        let clonedata = clone.get(&format!("{}:{}", GET, &url)).await?;
+        let clonedata = clone.get(&format!("{}:{}", GET, url)).await?;
         assert!(clonedata.is_some());
         assert_eq!(clonedata.unwrap().0.body, TEST_BODY);
-        manager.delete(&format!("{}:{}", GET, &url)).await?;
-        let data = manager.get(&format!("{}:{}", GET, &url)).await?;
+        manager.delete(&format!("{}:{}", GET, url)).await?;
+        let data = manager.get(&format!("{}:{}", GET, url)).await?;
         assert!(data.is_none());
 
-        manager.put(format!("{}:{}", GET, &url), http_res, policy).await?;
+        manager.put(format!("{}:{}", GET, url), http_res, policy).await?;
         manager.clear().await?;
-        let data = manager.get(&format!("{}:{}", GET, &url)).await?;
+        let data = manager.get(&format!("{}:{}", GET, url)).await?;
         assert!(data.is_none());
         // Clone shares the same live database, so it sees the clear too.
-        assert!(clone.get(&format!("{}:{}", GET, &url)).await?.is_none());
+        assert!(clone.get(&format!("{}:{}", GET, url)).await?.is_none());
         Ok(())
     }
 
@@ -508,7 +541,7 @@ mod with_redb {
         let url = url_parse("http://example.com/persist")?;
         let cache_dir = tempfile::tempdir().unwrap();
         let db_path = cache_dir.path().join("cache.redb");
-        let key = format!("{}:{}", GET, &url);
+        let key = format!("{}:{}", GET, url);
         let req = http::Request::get("http://example.com/persist").body(())?;
         let res =
             http::Response::builder().status(200).body(TEST_BODY.to_vec())?;
@@ -524,6 +557,41 @@ mod with_redb {
         let data = manager.get(&key).await?;
         assert!(data.is_some(), "entry should persist across instances");
         assert_eq!(data.unwrap().0.body, TEST_BODY);
+        Ok(())
+    }
+
+    // Writes are committed without fsync and made durable every 64 writes
+    // and on drop; entries stored under either path must survive a reopen.
+    #[tokio::test]
+    async fn redb_batched_writes_persist_across_instances() -> Result<()> {
+        let url = url_parse("http://example.com/flush")?;
+        let cache_dir = tempfile::tempdir().unwrap();
+        let db_path = cache_dir.path().join("cache.redb");
+        let req = http::Request::get("http://example.com/flush").body(())?;
+        let res =
+            http::Response::builder().status(200).body(TEST_BODY.to_vec())?;
+        let policy = CachePolicy::new(&req, &res);
+
+        {
+            let manager = RedbManager::new(&db_path)?;
+            for i in 0..65 {
+                manager
+                    .put(
+                        format!("{}:{}/{}", GET, url, i),
+                        sample_response(&url),
+                        policy.clone(),
+                    )
+                    .await?;
+            }
+        }
+
+        let manager = RedbManager::new(&db_path)?;
+        for i in 0..65 {
+            assert!(
+                manager.get(&format!("{}:{}/{}", GET, url, i)).await?.is_some(),
+                "entry {i} should persist across instances"
+            );
+        }
         Ok(())
     }
 
@@ -569,7 +637,7 @@ mod with_redb {
             let cache_dir = tempfile::tempdir().unwrap();
             let manager =
                 RedbManager::new(cache_dir.path().join("cache.redb"))?;
-            let key = format!("{}:{}", GET, &url);
+            let key = format!("{}:{}", GET, url);
             let req = http::Request::get("http://example.com/smol").body(())?;
             let res = http::Response::builder()
                 .status(200)
@@ -612,26 +680,26 @@ mod with_moka {
             http::Response::builder().status(200).body(TEST_BODY.to_vec())?;
         let policy = CachePolicy::new(&req, &res);
         manager
-            .put(format!("{}:{}", GET, &url), http_res.clone(), policy.clone())
+            .put(format!("{}:{}", GET, url), http_res.clone(), policy.clone())
             .await?;
-        let data = manager.get(&format!("{}:{}", GET, &url)).await?;
+        let data = manager.get(&format!("{}:{}", GET, url)).await?;
         assert!(data.is_some());
         let response = data.unwrap();
         assert_eq!(response.0.body, TEST_BODY);
         assert_eq!(response.0.metadata, Some(b"Metadata".to_vec()));
         let clone = manager.clone();
-        let clonedata = clone.get(&format!("{}:{}", GET, &url)).await?;
+        let clonedata = clone.get(&format!("{}:{}", GET, url)).await?;
         assert!(clonedata.is_some());
         let response = clonedata.unwrap();
         assert_eq!(response.0.body, TEST_BODY);
         assert_eq!(response.0.metadata, Some(b"Metadata".to_vec()));
-        manager.delete(&format!("{}:{}", GET, &url)).await?;
-        let data = manager.get(&format!("{}:{}", GET, &url)).await?;
+        manager.delete(&format!("{}:{}", GET, url)).await?;
+        let data = manager.get(&format!("{}:{}", GET, url)).await?;
         assert!(data.is_none());
 
-        manager.put(format!("{}:{}", GET, &url), http_res, policy).await?;
+        manager.put(format!("{}:{}", GET, url), http_res, policy).await?;
         manager.clear().await?;
-        let data = manager.get(&format!("{}:{}", GET, &url)).await?;
+        let data = manager.get(&format!("{}:{}", GET, url)).await?;
         assert!(data.is_none());
         Ok(())
     }
@@ -686,21 +754,21 @@ mod with_foyer {
             http::Response::builder().status(200).body(TEST_BODY.to_vec())?;
         let policy = CachePolicy::new(&req, &res);
         manager
-            .put(format!("{}:{}", GET, &url), http_res.clone(), policy.clone())
+            .put(format!("{}:{}", GET, url), http_res.clone(), policy.clone())
             .await?;
-        let data = manager.get(&format!("{}:{}", GET, &url)).await?;
+        let data = manager.get(&format!("{}:{}", GET, url)).await?;
         assert!(data.is_some());
         let response = data.unwrap();
         assert_eq!(response.0.body, TEST_BODY);
         assert_eq!(response.0.metadata, Some(b"Metadata".to_vec()));
         let clone = manager.clone();
-        let clonedata = clone.get(&format!("{}:{}", GET, &url)).await?;
+        let clonedata = clone.get(&format!("{}:{}", GET, url)).await?;
         assert!(clonedata.is_some());
         let response = clonedata.unwrap();
         assert_eq!(response.0.body, TEST_BODY);
         assert_eq!(response.0.metadata, Some(b"Metadata".to_vec()));
-        manager.delete(&format!("{}:{}", GET, &url)).await?;
-        let data = manager.get(&format!("{}:{}", GET, &url)).await?;
+        manager.delete(&format!("{}:{}", GET, url)).await?;
+        let data = manager.get(&format!("{}:{}", GET, url)).await?;
         assert!(data.is_none());
 
         // Note: FoyerManager doesn't have a clear() method like cacache/moka

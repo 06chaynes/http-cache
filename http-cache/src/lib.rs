@@ -573,7 +573,7 @@ fn extract_url_from_request_parts(parts: &request::Parts) -> Result<Url> {
     let scheme = determine_scheme(host, &parts.headers)?;
 
     // Create base URL using the URL helper for cross-crate compatibility
-    let mut base_url = url_parse(&format!("{}://{}/", &scheme, host))
+    let mut base_url = url_parse(&format!("{}://{}/", scheme, host))
         .map_err(|_| -> BoxError { BadHeader.into() })?;
 
     // Set the path and query from the URI using helpers
@@ -606,7 +606,10 @@ fn determine_scheme(host: &str, headers: &http::HeaderMap) -> Result<String> {
     }
 }
 
-/// Represents HTTP headers in either legacy or modern format
+/// Represents HTTP headers in either legacy or modern format.
+///
+/// Values are `String`s, so header values that are not valid UTF-8 cannot
+/// be represented and are skipped during conversion from `http::HeaderMap`.
 #[derive(Debug, Clone)]
 pub enum HttpHeaders {
     /// Modern header representation - allows multiple values per key
@@ -961,13 +964,15 @@ impl HttpResponse {
 
     /// Update the headers from `http::response::Parts`
     pub fn update_headers(&mut self, parts: &response::Parts) -> Result<()> {
-        // Clear keys that appear in the new headers, then append all values
-        for name in parts.headers.keys() {
+        // Clear-then-append per key. The From conversion keeps a key only
+        // when at least one of its values converts to a string, so headers
+        // whose values cannot be represented survive untouched.
+        let incoming: HashMap<String, Vec<String>> =
+            HttpHeaders::from(&parts.headers).into();
+        for (name, values) in incoming {
             self.headers.remove(name.as_str());
-        }
-        for (name, value) in parts.headers.iter() {
-            if let Ok(v) = value.to_str() {
-                self.headers.append(name.as_str().to_string(), v.to_string());
+            for value in values {
+                self.headers.append(name.clone(), value);
             }
         }
         Ok(())
@@ -1031,6 +1036,11 @@ pub trait StreamingCacheManager: Send + Sync + 'static {
             Into<StreamingError> + Send + Sync + 'static;
 
     /// Attempts to cache a response with a streaming body and related policy.
+    ///
+    /// After `put()` resolves, the cache entry is durable and visible
+    /// at-or-after full consumption of the returned body. The current
+    /// implementation commits before returning; callers must not rely on
+    /// the stronger property.
     fn put<B>(
         &self,
         cache_key: String,
@@ -1046,6 +1056,23 @@ pub trait StreamingCacheManager: Send + Sync + 'static {
         <Self::Body as http_body::Body>::Data: Send,
         <Self::Body as http_body::Body>::Error:
             Into<StreamingError> + Send + Sync + 'static;
+
+    /// Update the stored headers, cache policy, and user metadata for an
+    /// existing entry WITHOUT touching the body file. Used by 304
+    /// revalidation, where the body is known-unchanged.
+    ///
+    /// If `token` is `Some`, the update is applied only when the stored
+    /// entry still matches that identity; `Ok(false)` means the entry no
+    /// longer exists or was concurrently replaced — callers should serve
+    /// the response and skip re-caching.
+    fn update_metadata(
+        &self,
+        cache_key: &str,
+        headers: &http::HeaderMap,
+        policy: CachePolicy,
+        user_metadata: Option<Vec<u8>>,
+        token: Option<&CacheEntryToken>,
+    ) -> impl Future<Output = Result<bool>> + Send;
 
     /// Converts a generic body to the manager's body type for non-cacheable responses.
     /// This is called when a response should not be cached but still needs to be returned
@@ -1969,6 +1996,24 @@ pub struct HttpCache<T: CacheManager> {
 #[derive(Debug, Clone)]
 pub(crate) struct CachedUserMetadata(pub Option<Vec<u8>>);
 
+/// Request method of the request that produced a response, attached to the
+/// response's extensions by the streaming orchestrator before it calls
+/// [`StreamingCacheManager::put`]. Managers use it to special-case HEAD:
+/// a HEAD response's `Content-Length` describes the entity, not the
+/// (empty) stored body (RFC 9110 §8.6), so size/completeness checks that
+/// compare received bytes against `Content-Length` must be skipped.
+#[derive(Clone, Debug)]
+pub struct CachedRequestMethod(pub http::Method);
+
+/// Opaque identity of the specific stored entry revision a response was
+/// served from, attached to responses returned by
+/// [`StreamingCacheManager::get`]. Passing it back to `update_metadata`
+/// lets the manager refuse to apply a metadata update to an entry that was
+/// concurrently replaced (which would otherwise staple one revision's
+/// headers onto another revision's body).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CacheEntryToken(pub Vec<u8>);
+
 /// Streaming version of HTTP cache that supports streaming request/response bodies
 /// without buffering them in memory.
 #[derive(Debug, Clone)]
@@ -2092,6 +2137,34 @@ fn apply_modify_response_shim<B>(
     }
 }
 
+/// Replaces `dst` entries for every header name present in `src`, preserving
+/// multi-valued headers (clear-then-append; naive `insert`/`extend` drops or
+/// doubles values like `Set-Cookie`).
+fn merge_headers(dst: &mut http::HeaderMap, src: &http::HeaderMap) {
+    for name in src.keys() {
+        dst.remove(name);
+    }
+    for (name, value) in src.iter() {
+        dst.append(name.clone(), value.clone());
+    }
+}
+
+/// RFC 7234 s4.4: the GET and HEAD cache keys to invalidate after a
+/// successful (2xx/3xx) response to a non-GET/HEAD request, or `None` when
+/// the status does not warrant invalidation.
+fn get_head_invalidation_keys(
+    options: &HttpCacheOptions,
+    parts: &request::Parts,
+    status: StatusCode,
+) -> Option<(String, String)> {
+    (status.is_success() || status.is_redirection()).then(|| {
+        (
+            options.create_cache_key(parts, Some("GET")),
+            options.create_cache_key(parts, Some("HEAD")),
+        )
+    })
+}
+
 // ============================================================================
 // HttpStreamingCache orchestrator methods
 // ============================================================================
@@ -2156,6 +2229,20 @@ where
         }
 
         Ok(())
+    }
+
+    /// See [`get_head_invalidation_keys`].
+    async fn invalidate_get_head(
+        &self,
+        parts: &request::Parts,
+        status: StatusCode,
+    ) {
+        if let Some((get_key, head_key)) =
+            get_head_invalidation_keys(&self.options, parts, status)
+        {
+            self.manager.delete(&get_key).await.ok();
+            self.manager.delete(&head_key).await.ok();
+        }
     }
 
     /// The main streaming cache orchestrator.
@@ -2376,15 +2463,7 @@ where
         let before_req = policy.before_request(parts, SystemTime::now());
         match before_req {
             BeforeRequest::Fresh(fresh_parts) => {
-                // Update headers from the policy result, preserving multi-valued headers
-                for name in fresh_parts.headers.keys() {
-                    cached_res.headers_mut().remove(name);
-                }
-                for (name, value) in fresh_parts.headers.iter() {
-                    cached_res
-                        .headers_mut()
-                        .append(name.clone(), value.clone());
-                }
+                merge_headers(cached_res.headers_mut(), &fresh_parts.headers);
                 if self.options.cache_status_headers {
                     response_cache_status(&mut cached_res, HitOrMiss::HIT);
                     response_cache_lookup_status(
@@ -2454,18 +2533,10 @@ where
                                     new_parts,
                                 ) => {
                                     policy = new_policy;
-                                    // Update cached response headers, preserving multi-valued headers
-                                    for name in new_parts.headers.keys() {
-                                        cached_res.headers_mut().remove(name);
-                                    }
-                                    for (name, value) in
-                                        new_parts.headers.iter()
-                                    {
-                                        cached_res.headers_mut().append(
-                                            name.clone(),
-                                            value.clone(),
-                                        );
-                                    }
+                                    merge_headers(
+                                        cached_res.headers_mut(),
+                                        &new_parts.headers,
+                                    );
                                 }
                             }
                             if self.options.cache_status_headers {
@@ -2485,28 +2556,47 @@ where
                                 &req_url,
                             );
 
-                            // Re-cache the updated response.  Preserve
-                            // original user metadata from the cached
-                            // response instead of regenerating it (which
-                            // may produce different or empty results).
-                            let request_url =
-                                extract_url_from_request_parts(parts)?;
+                            // Preserve the cached response's original user
+                            // metadata instead of regenerating it.
                             let metadata = cached_res
                                 .extensions()
                                 .get::<CachedUserMetadata>()
                                 .and_then(|m| m.0.clone());
 
-                            let res = self
+                            // Metadata-only refresh: the body is
+                            // known-unchanged (that's what 304 means), so
+                            // never re-read or rewrite the body file. Any
+                            // failure here must not break the response —
+                            // cached_res is already valid to serve.
+                            let cache_key =
+                                self.options.create_cache_key(parts, None);
+                            let token = cached_res
+                                .extensions()
+                                .get::<CacheEntryToken>()
+                                .cloned();
+                            match self
                                 .manager
-                                .put(
-                                    self.options.create_cache_key(parts, None),
-                                    cached_res,
+                                .update_metadata(
+                                    &cache_key,
+                                    cached_res.headers(),
                                     policy,
-                                    request_url,
                                     metadata,
+                                    token.as_ref(),
                                 )
-                                .await?;
-                            Ok(res)
+                                .await
+                            {
+                                Ok(true) => {}
+                                Ok(false) => log::debug!(
+                                    "streaming 304: entry vanished or was \
+                                     replaced during revalidation; serving \
+                                     without re-cache"
+                                ),
+                                Err(e) => log::debug!(
+                                    "streaming 304: metadata update failed; \
+                                     serving without re-cache: {e}"
+                                ),
+                            }
+                            Ok(cached_res)
                         } else if status == StatusCode::OK {
                             // 200 OK — fresh response, create new policy
                             // and cache
@@ -2572,6 +2662,9 @@ where
                             }
 
                             if is_cacheable {
+                                cond_res.extensions_mut().insert(
+                                    CachedRequestMethod(parts.method.clone()),
+                                );
                                 let res = self
                                     .manager
                                     .put(
@@ -2699,6 +2792,20 @@ impl<T: CacheManager> HttpCache<T> {
     ) -> Result<()> {
         let parts = middleware.parts()?;
         self.run_no_cache_from_parts(&parts).await
+    }
+
+    /// See [`get_head_invalidation_keys`].
+    async fn invalidate_get_head(
+        &self,
+        parts: &request::Parts,
+        status: StatusCode,
+    ) {
+        if let Some((get_key, head_key)) =
+            get_head_invalidation_keys(&self.options, parts, status)
+        {
+            self.manager.delete(&get_key).await.ok();
+            self.manager.delete(&head_key).await.ok();
+        }
     }
 
     /// Attempts to run the passed middleware along with the cache
@@ -2866,41 +2973,17 @@ impl<T: CacheManager> HttpCache<T> {
                 .manager
                 .put(self.options.create_cache_key(&parts, None), res, policy)
                 .await?;
-            // RFC 7234 s4.4: invalidate GET and HEAD keys for non-GET/HEAD successful responses
             if !is_get_head {
-                let status = StatusCode::from_u16(res.status)?;
-                if status.is_success() || status.is_redirection() {
-                    self.manager
-                        .delete(
-                            &self.options.create_cache_key(&parts, Some("GET")),
-                        )
-                        .await
-                        .ok();
-                    self.manager
-                        .delete(
-                            &self
-                                .options
-                                .create_cache_key(&parts, Some("HEAD")),
-                        )
-                        .await
-                        .ok();
-                }
+                self.invalidate_get_head(
+                    &parts,
+                    StatusCode::from_u16(res.status)?,
+                )
+                .await;
             }
             Ok(res)
         } else if !is_get_head {
-            let status = StatusCode::from_u16(res.status)?;
-            if status.is_success() || status.is_redirection() {
-                self.manager
-                    .delete(&self.options.create_cache_key(&parts, Some("GET")))
-                    .await
-                    .ok();
-                self.manager
-                    .delete(
-                        &self.options.create_cache_key(&parts, Some("HEAD")),
-                    )
-                    .await
-                    .ok();
-            }
+            self.invalidate_get_head(&parts, StatusCode::from_u16(res.status)?)
+                .await;
             Ok(res)
         } else {
             Ok(res)
@@ -3095,25 +3178,12 @@ where
     {
         // For non-cacheable requests based on initial analysis, convert them to manager's body type
         if !analysis.should_cache {
-            // RFC 7234 s4.4: invalidate GET and HEAD cache for non-GET/HEAD on success/redirect
             if !analysis.is_get_head {
-                let status = response.status();
-                if status.is_success() || status.is_redirection() {
-                    self.manager
-                        .delete(&self.options.create_cache_key(
-                            &analysis.request_parts,
-                            Some("GET"),
-                        ))
-                        .await
-                        .ok();
-                    self.manager
-                        .delete(&self.options.create_cache_key(
-                            &analysis.request_parts,
-                            Some("HEAD"),
-                        ))
-                        .await
-                        .ok();
-                }
+                self.invalidate_get_head(
+                    &analysis.request_parts,
+                    response.status(),
+                )
+                .await;
             }
             let mut converted_response =
                 self.manager.convert_body(response).await?;
@@ -3160,25 +3230,12 @@ where
 
         // If response-based override says NoStore, don't cache
         if effective_cache_mode == CacheMode::NoStore {
-            // RFC 7234 s4.4: invalidate GET and HEAD cache for non-GET/HEAD on success/redirect
             if !analysis.is_get_head {
-                let status_code = StatusCode::from_u16(http_response.status)?;
-                if status_code.is_success() || status_code.is_redirection() {
-                    self.manager
-                        .delete(&self.options.create_cache_key(
-                            &analysis.request_parts,
-                            Some("GET"),
-                        ))
-                        .await
-                        .ok();
-                    self.manager
-                        .delete(&self.options.create_cache_key(
-                            &analysis.request_parts,
-                            Some("HEAD"),
-                        ))
-                        .await
-                        .ok();
-                }
+                self.invalidate_get_head(
+                    &analysis.request_parts,
+                    StatusCode::from_u16(http_response.status)?,
+                )
+                .await;
             }
             let mut converted_response =
                 self.manager.convert_body(response).await?;
@@ -3223,6 +3280,9 @@ where
                 &mut response,
                 &request_url,
             );
+            response.extensions_mut().insert(CachedRequestMethod(
+                analysis.request_parts.method.clone(),
+            ));
 
             // Cache the response using the streaming manager
             let mut cached_response = self
@@ -3236,25 +3296,12 @@ where
                 )
                 .await?;
 
-            // RFC 7234 s4.4: invalidate GET and HEAD cache for non-GET/HEAD on success/redirect
             if !analysis.is_get_head {
-                let status_code = StatusCode::from_u16(http_response.status)?;
-                if status_code.is_success() || status_code.is_redirection() {
-                    self.manager
-                        .delete(&self.options.create_cache_key(
-                            &analysis.request_parts,
-                            Some("GET"),
-                        ))
-                        .await
-                        .ok();
-                    self.manager
-                        .delete(&self.options.create_cache_key(
-                            &analysis.request_parts,
-                            Some("HEAD"),
-                        ))
-                        .await
-                        .ok();
-                }
+                self.invalidate_get_head(
+                    &analysis.request_parts,
+                    StatusCode::from_u16(http_response.status)?,
+                )
+                .await;
             }
 
             // Add cache miss headers (response is being stored for first time)
@@ -3270,25 +3317,12 @@ where
             }
             Ok(cached_response)
         } else {
-            // RFC 7234 s4.4: invalidate GET and HEAD cache for non-GET/HEAD on success/redirect
             if !analysis.is_get_head {
-                let status_code = StatusCode::from_u16(http_response.status)?;
-                if status_code.is_success() || status_code.is_redirection() {
-                    self.manager
-                        .delete(&self.options.create_cache_key(
-                            &analysis.request_parts,
-                            Some("GET"),
-                        ))
-                        .await
-                        .ok();
-                    self.manager
-                        .delete(&self.options.create_cache_key(
-                            &analysis.request_parts,
-                            Some("HEAD"),
-                        ))
-                        .await
-                        .ok();
-                }
+                self.invalidate_get_head(
+                    &analysis.request_parts,
+                    StatusCode::from_u16(http_response.status)?,
+                )
+                .await;
             }
             // Don't cache, just convert to manager's body type
             let mut converted_response =
@@ -3328,18 +3362,7 @@ where
     ) -> Result<Response<Self::Body>> {
         let (mut parts, body) = cached_response.into_parts();
 
-        // Update headers from the 304 response, preserving multi-valued
-        // headers correctly. `HeaderMap::extend` from another `HeaderMap`
-        // appends rather than replaces, so naive `extend` would double
-        // same-named headers. Mirror the clear-then-append pattern used by
-        // `HttpResponse::update_headers` and the streaming conditional-fetch
-        // header merges.
-        for name in fresh_parts.headers.keys() {
-            parts.headers.remove(name);
-        }
-        for (name, value) in fresh_parts.headers.iter() {
-            parts.headers.append(name.clone(), value.clone());
-        }
+        merge_headers(&mut parts.headers, &fresh_parts.headers);
 
         let mut response = Response::from_parts(parts, body);
         if self.options.cache_status_headers {
@@ -3373,25 +3396,12 @@ impl<T: CacheManager> HttpCacheInterface for HttpCache<T> {
         metadata: Option<Vec<u8>>,
     ) -> Result<Response<Vec<u8>>> {
         if !analysis.should_cache {
-            // RFC 7234 s4.4: invalidate GET and HEAD cache for non-GET/HEAD on success/redirect
             if !analysis.is_get_head {
-                let status = response.status();
-                if status.is_success() || status.is_redirection() {
-                    self.manager
-                        .delete(&self.options.create_cache_key(
-                            &analysis.request_parts,
-                            Some("GET"),
-                        ))
-                        .await
-                        .ok();
-                    self.manager
-                        .delete(&self.options.create_cache_key(
-                            &analysis.request_parts,
-                            Some("HEAD"),
-                        ))
-                        .await
-                        .ok();
-                }
+                self.invalidate_get_head(
+                    &analysis.request_parts,
+                    response.status(),
+                )
+                .await;
             }
             return Ok(response);
         }
@@ -3423,25 +3433,12 @@ impl<T: CacheManager> HttpCacheInterface for HttpCache<T> {
 
         // If response-based override says NoStore, don't cache
         if effective_cache_mode == CacheMode::NoStore {
-            // RFC 7234 s4.4: invalidate GET and HEAD cache for non-GET/HEAD on success/redirect
             if !analysis.is_get_head {
-                let status = StatusCode::from_u16(http_response.status)?;
-                if status.is_success() || status.is_redirection() {
-                    self.manager
-                        .delete(&self.options.create_cache_key(
-                            &analysis.request_parts,
-                            Some("GET"),
-                        ))
-                        .await
-                        .ok();
-                    self.manager
-                        .delete(&self.options.create_cache_key(
-                            &analysis.request_parts,
-                            Some("HEAD"),
-                        ))
-                        .await
-                        .ok();
-                }
+                self.invalidate_get_head(
+                    &analysis.request_parts,
+                    StatusCode::from_u16(http_response.status)?,
+                )
+                .await;
             }
             let response = Response::from_parts(parts, body);
             return Ok(response);
@@ -3467,25 +3464,12 @@ impl<T: CacheManager> HttpCacheInterface for HttpCache<T> {
                 .put(analysis.cache_key, http_response, policy)
                 .await?;
 
-            // RFC 7234 s4.4: invalidate GET and HEAD cache for non-GET/HEAD on success/redirect
             if !analysis.is_get_head {
-                let status = StatusCode::from_u16(cached_response.status)?;
-                if status.is_success() || status.is_redirection() {
-                    self.manager
-                        .delete(&self.options.create_cache_key(
-                            &analysis.request_parts,
-                            Some("GET"),
-                        ))
-                        .await
-                        .ok();
-                    self.manager
-                        .delete(&self.options.create_cache_key(
-                            &analysis.request_parts,
-                            Some("HEAD"),
-                        ))
-                        .await
-                        .ok();
-                }
+                self.invalidate_get_head(
+                    &analysis.request_parts,
+                    StatusCode::from_u16(cached_response.status)?,
+                )
+                .await;
             }
 
             // Convert back to standard Response
@@ -3500,25 +3484,12 @@ impl<T: CacheManager> HttpCacheInterface for HttpCache<T> {
 
             Ok(response)
         } else {
-            // RFC 7234 s4.4: invalidate GET and HEAD cache for non-GET/HEAD on success/redirect
             if !analysis.is_get_head {
-                let status = StatusCode::from_u16(http_response.status)?;
-                if status.is_success() || status.is_redirection() {
-                    self.manager
-                        .delete(&self.options.create_cache_key(
-                            &analysis.request_parts,
-                            Some("GET"),
-                        ))
-                        .await
-                        .ok();
-                    self.manager
-                        .delete(&self.options.create_cache_key(
-                            &analysis.request_parts,
-                            Some("HEAD"),
-                        ))
-                        .await
-                        .ok();
-                }
+                self.invalidate_get_head(
+                    &analysis.request_parts,
+                    StatusCode::from_u16(http_response.status)?,
+                )
+                .await;
             }
             // Don't cache, return original response
             let response = Response::from_parts(parts, body);
