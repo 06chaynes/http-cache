@@ -11,6 +11,7 @@
 
 ### Changed
 
+- MSRV bumped from 1.88.0 to 1.89.0
 - Default cache manager changed from `manager-cacache` to `manager-redb`. `manager-cacache` (and `CACacheManager`) is now opt-in — enable the `manager-cacache` feature to keep using it. The `cacache` crate is no longer maintained upstream.
 - `RedbManager` holds an exclusive file lock on its database: a second manager (or process) opening the same path fails at construction. Share one instance via `Arc` instead. This differs from the previous default `CACacheManager`, which allowed concurrent access to one cache directory.
 - `RedbManager` stores are batched for durability: commits are flushed to disk every 64 writes (configurable via `from_database_with_flush_interval`) and on drop, so a crash can lose approximately the most recent 64 stores. Deletes commit durably, so invalidations survive a crash.

@@ -13,7 +13,7 @@ categories = [
     "web-programming::http-client"
 ]
 edition = "2021"
-rust-version = "1.88.0"
+rust-version = "1.89.0"
 
 [dependencies]
 http-cache = { version = "1.0.0-alpha.7", path = "../http-cache", default-features = false }

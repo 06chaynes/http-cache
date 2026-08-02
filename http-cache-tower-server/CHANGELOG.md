@@ -8,6 +8,7 @@
 
 ### Changed
 
+- MSRV bumped from 1.88.0 to 1.89.0
 - Updated `http-cache` dependency to 1.0.0-alpha.7
 - Default feature changed from `manager-cacache` to `manager-redb`; enable `manager-cacache` explicitly to keep using `CACacheManager`
 
