@@ -6,6 +6,7 @@
 
 - MSRV bumped from 1.88.0 to 1.89.0
 - Updated `http-cache` dependency to 1.0.0-alpha.7
+- Updated `quick_cache` to 0.7.0
 
 ## [1.0.0-alpha.6] - 2026-04-17
 
