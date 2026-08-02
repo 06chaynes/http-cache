@@ -2596,10 +2596,14 @@ mod tests {
                 >,
             > {
                 if self.yielded > 0 {
+                    // Size via an opened handle, not DirEntry::metadata:
+                    // Windows serves a stale directory-entry size for a file
+                    // being written, but a by-handle query is current.
                     let spooled: u64 = std::fs::read_dir(&self.tmp_dir)
                         .unwrap()
                         .filter_map(|e| e.ok())
-                        .filter_map(|e| e.metadata().ok())
+                        .filter_map(|e| std::fs::File::open(e.path()).ok())
+                        .filter_map(|f| f.metadata().ok())
                         .map(|m| m.len())
                         .sum();
                     let expected =

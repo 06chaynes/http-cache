@@ -70,5 +70,5 @@ jobs:
         env:
           RUSTDOCFLAGS: --cfg docsrs -Dwarnings
       - run: |
-          cargo doc --no-deps --document-private-items --no-default-features --features manager-cacache,manager-moka,manager-foyer,json,rate-limiting,http-headers-compat,url-standard
-          cargo test --doc --no-default-features --features manager-cacache,manager-moka,manager-foyer,json,rate-limiting,http-headers-compat,url-standard
+          cargo doc --no-deps --document-private-items --no-default-features --features manager-cacache,manager-moka,manager-foyer,manager-redb,json,rate-limiting,http-headers-compat,url-standard
+          cargo test --doc --no-default-features --features manager-cacache,manager-moka,manager-foyer,manager-redb,json,rate-limiting,http-headers-compat,url-standard
