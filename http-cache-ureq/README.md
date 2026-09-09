@@ -15,7 +15,9 @@ Provides a simple caching wrapper around [ureq](https://github.com/algesten/ureq
 
 ## Minimum Supported Rust Version (MSRV)
 
-1.90.0
+1.89.0
+
+See the [MSRV policy](https://github.com/06chaynes/http-cache#minimum-supported-rust-version-msrv).
 
 ## Install
 

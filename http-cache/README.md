@@ -20,7 +20,19 @@ See the [Provided Client Implementations](#provided-client-implementations) sect
 
 ## Minimum Supported Rust Version (MSRV)
 
-1.90.0
+1.89.0
+
+Each crate's `rust-version` covers its **default features**, resolved with
+`resolver = "3"`. Optional backends may require a newer toolchain; that
+requirement is not part of the guarantee.
+
+MSRV is raised only when a default-feature dependency forces it, and
+dependencies are not held back to avoid it. An MSRV increase is not a breaking
+change and may land in any release, including a patch.
+
+On an older toolchain: the resolver is chosen by your own workspace, not by
+this one. Edition 2024 packages use `resolver = "3"` by default; on an earlier
+edition, set it explicitly or pin with `cargo update <dep> --precise <ver>`.
 
 ## Install
 

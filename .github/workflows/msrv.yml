@@ -25,6 +25,7 @@ jobs:
           - http-cache-surf
           - http-cache-ureq
           - http-cache-tower
+          - http-cache-tower-server
           - http-cache-quickcache
     steps:
       - uses: actions/checkout@v6

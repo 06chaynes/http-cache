@@ -4,7 +4,8 @@
 
 ### Changed
 
-- Migrated to the 2024 edition. MSRV is unchanged at 1.90.0, which is already well above the 1.85.0 the edition requires
+- Migrated to the 2024 edition, which requires Rust 1.85.0 or newer
+- MSRV lowered from 1.90.0 to 1.89.0. `rust-version` now covers default features resolved with `resolver = "3"`; see the MSRV policy in the README
 
 ## [1.0.0-alpha.8] - 2026-09-08
 
