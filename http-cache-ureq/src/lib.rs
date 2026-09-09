@@ -206,10 +206,10 @@ pub use http_cache::{BadRequest, HttpCacheError};
 use std::{collections::HashMap, result::Result, str::FromStr};
 
 pub use http::request::Parts;
-use http::{header::CACHE_CONTROL, Method};
+use http::{Method, header::CACHE_CONTROL};
 use http_cache::{
-    url_parse, BoxError, CacheManager, HitOrMiss, HttpResponse, Middleware,
-    Url, XCACHE, XCACHELOOKUP,
+    BoxError, CacheManager, HitOrMiss, HttpResponse, Middleware, Url, XCACHE,
+    XCACHELOOKUP, url_parse,
 };
 
 pub use http_cache::{

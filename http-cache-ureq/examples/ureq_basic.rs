@@ -10,7 +10,7 @@
 
 use http_cache_ureq::{CACacheManager, CachedAgent};
 use std::time::Instant;
-use wiremock::{matchers::method, Mock, MockServer, ResponseTemplate};
+use wiremock::{Mock, MockServer, ResponseTemplate, matchers::method};
 
 fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let tokio_rt = tokio::runtime::Runtime::new()?;

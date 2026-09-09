@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+
+- Migrated to the 2024 edition. MSRV is unchanged at 1.90.0, which is already well above the 1.85.0 the edition requires
+
 ## [1.0.0-alpha.9] - 2026-09-08
 
 ### Changed

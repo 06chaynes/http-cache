@@ -344,12 +344,12 @@ use std::str::FromStr;
 
 pub use http::request::Parts;
 use http::{
-    header::{HeaderName, CACHE_CONTROL},
     Extensions, HeaderValue, Method,
+    header::{CACHE_CONTROL, HeaderName},
 };
 use http_cache::{
-    url_parse, BoxError, HitOrMiss, Middleware, Result, Url, XCACHE,
-    XCACHELOOKUP,
+    BoxError, HitOrMiss, Middleware, Result, Url, XCACHE, XCACHELOOKUP,
+    url_parse,
 };
 use reqwest::{Request, Response, ResponseBuilderExt};
 #[cfg(all(feature = "reqwest-middleware", feature = "middlewest"))]
@@ -758,10 +758,10 @@ where
                 .await
                 .map_err(from_box_error)?;
 
-            if result.extensions().get::<FinalUrl>().is_none() {
-                if let Ok(u) = ::url::Url::parse(&parts.uri.to_string()) {
-                    result.extensions_mut().insert(FinalUrl(u));
-                }
+            if result.extensions().get::<FinalUrl>().is_none()
+                && let Ok(u) = ::url::Url::parse(&parts.uri.to_string())
+            {
+                result.extensions_mut().insert(FinalUrl(u));
             }
 
             convert_streaming_body_to_reqwest::<T>(result).await.map_err(|e| {

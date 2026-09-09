@@ -19,8 +19,8 @@ use std::time::Duration;
 use tempfile::tempdir;
 use tokio::time::sleep;
 use wiremock::{
-    matchers::{method, path},
     Mock, MockServer, ResponseTemplate,
+    matchers::{method, path},
 };
 
 // Memory tracking allocator
@@ -44,7 +44,9 @@ impl MemoryTracker {
 
 unsafe impl GlobalAlloc for MemoryTracker {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        let ptr = System.alloc(layout);
+        // SAFETY: the caller upholds `GlobalAlloc::alloc`'s contract, which is
+        // exactly what `System` requires.
+        let ptr = unsafe { System.alloc(layout) };
         if !ptr.is_null() {
             self.allocations.fetch_add(layout.size(), Ordering::Relaxed);
         }
@@ -52,7 +54,9 @@ unsafe impl GlobalAlloc for MemoryTracker {
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-        System.dealloc(ptr, layout);
+        // SAFETY: `ptr` came from `alloc` with this same `layout`, per the
+        // caller's obligation.
+        unsafe { System.dealloc(ptr, layout) };
         self.allocations.fetch_sub(layout.size(), Ordering::Relaxed);
     }
 }
@@ -186,7 +190,9 @@ async fn run_memory_analysis() {
     println!("============================================================");
     println!("This analysis measures memory efficiency differences between");
     println!("traditional buffered caching and file-based streaming caching.");
-    println!("Measurements are taken during cache hits to compare memory usage patterns.");
+    println!(
+        "Measurements are taken during cache hits to compare memory usage patterns."
+    );
     println!();
 
     let payload_sizes = [
@@ -343,8 +349,8 @@ const GATE_CHUNK_COUNT: usize = 4096;
 /// instead of committing; 512MiB gives 2x headroom.
 const GATE_MAX_BODY_SIZE: u64 = 512 * 1024 * 1024;
 
-fn gate_body_stream(
-) -> impl futures_util::Stream<Item = Result<bytes::Bytes, std::convert::Infallible>>
+fn gate_body_stream()
+-> impl futures_util::Stream<Item = Result<bytes::Bytes, std::convert::Infallible>>
 {
     futures_util::stream::iter((0..GATE_CHUNK_COUNT).map(|_| {
         Ok::<_, std::convert::Infallible>(bytes::Bytes::from_static(
@@ -357,7 +363,7 @@ fn gate_body_stream(
 /// copies of `GATE_CHUNK` as one cacheable response, without ever holding
 /// more than one chunk in memory at a time. Returns the bound address.
 async fn serve_gate_body() -> std::net::SocketAddr {
-    use axum::{body::Body, response::Response, routing::get, Router};
+    use axum::{Router, body::Body, response::Response, routing::get};
 
     let app = Router::new().route(
         "/gate",

@@ -6,7 +6,7 @@ use http_cache_reqwest::Cache;
 use http_cache_semantics::CachePolicy;
 use reqwest::Client;
 use reqwest_middleware::ClientBuilder;
-use wiremock::{matchers::method, Mock, MockServer, ResponseTemplate};
+use wiremock::{Mock, MockServer, ResponseTemplate, matchers::method};
 
 use macro_rules_attribute::apply;
 use smol_macros::test;

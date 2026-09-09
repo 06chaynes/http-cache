@@ -151,17 +151,16 @@ use http::{
     request::{self, Parts},
 };
 use http_cache::{
-    url_parse, BadHeader, BoxError, CacheManager, HitOrMiss, HttpResponse,
-    Middleware, Result, Url, XCACHE, XCACHELOOKUP,
+    BadHeader, BoxError, CacheManager, HitOrMiss, HttpResponse, Middleware,
+    Result, Url, XCACHE, XCACHELOOKUP, url_parse,
 };
 pub use http_cache::{CacheMode, HttpCache, HttpHeaders};
-use http_types::{
-    headers::HeaderValue as HttpTypesHeaderValue,
-    Response as HttpTypesResponse, StatusCode as HttpTypesStatusCode,
-    Version as HttpTypesVersion,
-};
 use http_types::{Method as HttpTypesMethod, Request};
-use surf::{middleware::Next, Client};
+use http_types::{
+    Response as HttpTypesResponse, StatusCode as HttpTypesStatusCode,
+    Version as HttpTypesVersion, headers::HeaderValue as HttpTypesHeaderValue,
+};
+use surf::{Client, middleware::Next};
 
 // Re-export managers and cache types
 #[cfg(feature = "manager-cacache")]

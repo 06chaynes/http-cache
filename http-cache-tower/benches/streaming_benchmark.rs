@@ -1,5 +1,5 @@
 use bytes::Bytes;
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use http::{Request, Response, StatusCode};
 use http_body_util::{BodyExt, Full};
 use http_cache::{CACacheManager, StreamingManager};

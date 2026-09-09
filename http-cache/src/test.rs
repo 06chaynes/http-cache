@@ -1,8 +1,8 @@
 use crate::{
-    error, url_parse, CacheMode, HitOrMiss, HttpHeaders, HttpResponse,
-    HttpVersion, Result, Url,
+    CacheMode, HitOrMiss, HttpHeaders, HttpResponse, HttpVersion, Result, Url,
+    error, url_parse,
 };
-use http::{header::CACHE_CONTROL, StatusCode};
+use http::{StatusCode, header::CACHE_CONTROL};
 
 use std::str::FromStr;
 
@@ -804,8 +804,8 @@ mod with_foyer {
 #[cfg(feature = "manager-cacache")]
 mod interface_tests {
     use crate::{
-        url_parse, CACacheManager, CacheMode, HttpCache, HttpCacheInterface,
-        HttpCacheOptions,
+        CACacheManager, CacheMode, HttpCache, HttpCacheInterface,
+        HttpCacheOptions, url_parse,
     };
     use http::{Request, Response, StatusCode};
     use std::{
@@ -1545,11 +1545,11 @@ mod metadata_provider_tests {
 #[cfg(all(test, feature = "rate-limiting"))]
 mod rate_limiting_tests {
     use super::*;
+    use crate::HttpCacheOptions;
     use crate::rate_limiting::{
         CacheAwareRateLimiter, DirectRateLimiter, DomainRateLimiter, Quota,
     };
     use crate::url_hostname;
-    use crate::HttpCacheOptions;
     use std::num::NonZero;
     use std::sync::{Arc, Mutex};
     use std::time::{Duration, Instant};
@@ -1571,8 +1571,7 @@ mod rate_limiting_tests {
         fn until_key_ready(
             &self,
             key: &str,
-        ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send + '_>>
-        {
+        ) -> std::pin::Pin<Box<dyn Future<Output = ()> + Send + '_>> {
             let key = key.to_string();
             Box::pin(async move {
                 self.calls.lock().unwrap().push(key);

@@ -626,7 +626,9 @@ mod tests {
                             .body(Full::new(Bytes::from(TEST_BODY)))?)
                     } else {
                         // This shouldn't be called on second request if cached properly
-                        panic!("Service called twice when response should be cached")
+                        panic!(
+                            "Service called twice when response should be cached"
+                        )
                     }
                 })
             }

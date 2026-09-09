@@ -16,11 +16,11 @@
 //! Run with: cargo run --example axum_basic --features manager-cacache
 
 use axum::{
+    BoxError, Router,
     error_handling::HandleErrorLayer,
     extract::Path,
     response::{IntoResponse, Response},
     routing::get,
-    BoxError, Router,
 };
 use http::StatusCode;
 use http_cache::CACacheManager;

@@ -10,9 +10,9 @@ use std::pin::Pin;
 
 #[cfg(feature = "rate-limiting")]
 pub use governor::{
-    clock::DefaultClock,
-    state::{keyed::DefaultKeyedStateStore, InMemoryState},
     DefaultDirectRateLimiter, DefaultKeyedRateLimiter, Quota, RateLimiter,
+    clock::DefaultClock,
+    state::{InMemoryState, keyed::DefaultKeyedStateStore},
 };
 
 /// A trait for rate limiting that can be implemented by different rate limiting strategies

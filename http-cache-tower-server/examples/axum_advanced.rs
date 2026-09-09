@@ -76,11 +76,11 @@
 //! ```
 
 use axum::{
+    BoxError, Router,
     error_handling::HandleErrorLayer,
     extract::{Query, State},
     response::{IntoResponse, Response},
     routing::{delete, get},
-    BoxError, Router,
 };
 use http::{Request, StatusCode};
 use http_cache::CACacheManager;

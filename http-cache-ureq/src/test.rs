@@ -3,8 +3,8 @@ use http_cache::{CacheKey, *};
 use std::{sync::Arc, time::Duration};
 use tempfile::TempDir;
 use wiremock::{
-    matchers::{header, method, path},
     Mock, MockServer, ResponseTemplate,
+    matchers::{header, method, path},
 };
 
 const GET: &str = "GET";
@@ -1150,8 +1150,7 @@ mod rate_limiting_tests {
         fn until_key_ready(
             &self,
             key: &str,
-        ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send + '_>>
-        {
+        ) -> std::pin::Pin<Box<dyn Future<Output = ()> + Send + '_>> {
             let key = key.to_string();
             Box::pin(async move {
                 self.calls.lock().unwrap().push(key);

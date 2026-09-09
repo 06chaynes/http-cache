@@ -117,7 +117,7 @@
 #![deny(unsafe_code)]
 
 use bytes::Bytes;
-use http::{header::HeaderValue, Request, Response};
+use http::{Request, Response, header::HeaderValue};
 use http_body::{Body as HttpBody, Frame};
 use http_body_util::BodyExt;
 use http_cache::{CacheManager, HttpResponse, HttpVersion};
@@ -126,8 +126,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::error::Error as StdError;
 use std::pin::Pin;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::task::{Context, Poll};
 use std::time::{Duration, SystemTime};
 use tower::{Layer, Service};
@@ -159,11 +159,7 @@ impl CacheMetrics {
     pub fn hit_rate(&self) -> f64 {
         let hits = self.hits.load(Ordering::Relaxed);
         let total = hits + self.misses.load(Ordering::Relaxed);
-        if total == 0 {
-            0.0
-        } else {
-            hits as f64 / total as f64
-        }
+        if total == 0 { 0.0 } else { hits as f64 / total as f64 }
     }
 
     /// Reset all metrics to zero.
@@ -903,21 +899,16 @@ fn should_cache(
     }
 
     // RFC 7234: Check for Expires header if no Cache-Control
-    if let Some(expires) = res_parts.headers.get(http::header::EXPIRES) {
-        if let Ok(expires_str) = expires.to_str() {
-            if let Some(ttl) = parse_expires(expires_str) {
-                let ttl = apply_ttl_constraints(ttl, options);
-                return Some(ttl);
-            }
-        }
+    if let Some(expires) = res_parts.headers.get(http::header::EXPIRES)
+        && let Ok(expires_str) = expires.to_str()
+        && let Some(ttl) = parse_expires(expires_str)
+    {
+        let ttl = apply_ttl_constraints(ttl, options);
+        return Some(ttl);
     }
 
     // No explicit caching directive
-    if options.cache_by_default {
-        options.default_ttl
-    } else {
-        None
-    }
+    if options.cache_by_default { options.default_ttl } else { None }
 }
 
 /// Apply min/max TTL constraints from options.

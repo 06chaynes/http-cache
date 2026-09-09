@@ -13,7 +13,7 @@ use http_cache::{CacheMode, HttpCache, HttpCacheOptions};
 use http_cache_surf::{CACacheManager, Cache};
 use std::time::Instant;
 use surf::Client;
-use wiremock::{matchers::method, Mock, MockServer, ResponseTemplate};
+use wiremock::{Mock, MockServer, ResponseTemplate, matchers::method};
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {

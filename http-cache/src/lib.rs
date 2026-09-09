@@ -336,7 +336,7 @@ use std::{
 };
 
 use http::{
-    header::CACHE_CONTROL, request, response, HeaderValue, Response, StatusCode,
+    HeaderValue, Response, StatusCode, header::CACHE_CONTROL, request, response,
 };
 use http_cache_semantics::{AfterResponse, BeforeRequest, CachePolicy};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -416,11 +416,7 @@ pub fn url_hostname(url: &Url) -> Option<&str> {
     #[cfg(feature = "url-ada")]
     {
         let hostname = url.hostname();
-        if hostname.is_empty() {
-            None
-        } else {
-            Some(hostname)
-        }
+        if hostname.is_empty() { None } else { Some(hostname) }
     }
     #[cfg(not(feature = "url-ada"))]
     {
@@ -1028,8 +1024,9 @@ pub trait StreamingCacheManager: Send + Sync + 'static {
     fn get(
         &self,
         cache_key: &str,
-    ) -> impl Future<Output = Result<Option<(Response<Self::Body>, CachePolicy)>>>
-           + Send
+    ) -> impl Future<
+        Output = Result<Option<(Response<Self::Body>, CachePolicy)>>,
+    > + Send
     where
         <Self::Body as http_body::Body>::Data: Send,
         <Self::Body as http_body::Body>::Error:
@@ -1802,12 +1799,11 @@ impl HttpCacheOptions {
         http_response: &HttpResponse,
         original_mode: CacheMode,
     ) -> CacheMode {
-        if let Some(response_cache_mode_fn) = &self.response_cache_mode_fn {
-            if let Some(override_mode) =
+        if let Some(response_cache_mode_fn) = &self.response_cache_mode_fn
+            && let Some(override_mode) =
                 response_cache_mode_fn(request_parts, http_response)
-            {
-                return override_mode;
-            }
+        {
+            return override_mode;
         }
         original_mode
     }
@@ -2300,10 +2296,9 @@ where
 
             // Handle warning headers per RFC 7234 §4.3.4
             if let Some(warning_code) = response_warning_code(&cached_response)
+                && (100..200).contains(&warning_code)
             {
-                if (100..200).contains(&warning_code) {
-                    response_remove_warning(&mut cached_response);
-                }
+                response_remove_warning(&mut cached_response);
             }
 
             // 5. Branch on cache mode
@@ -2936,10 +2931,9 @@ impl<T: CacheManager> HttpCache<T> {
         // Allow response-based cache mode override
         if let Some(response_cache_mode_fn) =
             &self.options.response_cache_mode_fn
+            && let Some(override_mode) = response_cache_mode_fn(&parts, &res)
         {
-            if let Some(override_mode) = response_cache_mode_fn(&parts, &res) {
-                mode = override_mode;
-            }
+            mode = override_mode;
         }
 
         let is_cacheable = self.options.should_cache_response(

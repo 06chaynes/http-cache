@@ -257,10 +257,10 @@ where
                 }
                 if *size == 0 {
                     *done = true;
-                    if let Some(c) = check.take() {
-                        if let Err(e) = c.finish() {
-                            return Poll::Ready(Some(Err(e)));
-                        }
+                    if let Some(c) = check.take()
+                        && let Err(e) = c.finish()
+                    {
+                        return Poll::Ready(Some(Err(e)));
                     }
                     return Poll::Ready(None);
                 }
@@ -297,11 +297,11 @@ where
                             }
                             if *size == 0 {
                                 *done = true;
-                                if let Some(c) = check.take() {
-                                    if let Err(e) = c.finish() {
-                                        buffer.clear();
-                                        return Poll::Ready(Some(Err(e)));
-                                    }
+                                if let Some(c) = check.take()
+                                    && let Err(e) = c.finish()
+                                {
+                                    buffer.clear();
+                                    return Poll::Ready(Some(Err(e)));
                                 }
                             }
                             let bytes = buffer.split().freeze();

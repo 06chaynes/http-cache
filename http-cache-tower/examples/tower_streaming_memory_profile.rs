@@ -42,7 +42,9 @@ impl MemoryTracker {
 
 unsafe impl GlobalAlloc for MemoryTracker {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        let ptr = System.alloc(layout);
+        // SAFETY: the caller upholds `GlobalAlloc::alloc`'s contract, which is
+        // exactly what `System` requires.
+        let ptr = unsafe { System.alloc(layout) };
         if !ptr.is_null() {
             self.allocations.fetch_add(layout.size(), Ordering::Relaxed);
         }
@@ -50,7 +52,9 @@ unsafe impl GlobalAlloc for MemoryTracker {
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-        System.dealloc(ptr, layout);
+        // SAFETY: `ptr` came from `alloc` with this same `layout`, per the
+        // caller's obligation.
+        unsafe { System.dealloc(ptr, layout) };
         self.allocations.fetch_sub(layout.size(), Ordering::Relaxed);
     }
 }
@@ -404,7 +408,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("==================================================");
     println!("This analysis measures memory efficiency differences between");
     println!("traditional buffered caching and file-based streaming caching.");
-    println!("Measurements are taken during cache hits to compare memory usage patterns.\n");
+    println!(
+        "Measurements are taken during cache hits to compare memory usage patterns.\n"
+    );
 
     // Memory profiling analysis for different payload sizes
     let payload_sizes = vec![

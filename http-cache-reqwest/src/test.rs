@@ -10,8 +10,8 @@ use reqwest::Client;
 #[cfg(any(feature = "streaming", feature = "rate-limiting"))]
 use wiremock::matchers::path;
 use wiremock::{
-    matchers::{header, method},
     Mock, MockServer, ResponseTemplate,
+    matchers::{header, method},
 };
 
 /// Helper function to create a temporary cache manager
@@ -2053,9 +2053,8 @@ mod streaming_tests {
             fn until_key_ready(
                 &self,
                 key: &str,
-            ) -> std::pin::Pin<
-                Box<dyn std::future::Future<Output = ()> + Send + '_>,
-            > {
+            ) -> std::pin::Pin<Box<dyn Future<Output = ()> + Send + '_>>
+            {
                 let key = key.to_string();
                 Box::pin(async move {
                     self.calls.lock().unwrap().push(key);
@@ -2152,9 +2151,8 @@ mod streaming_tests {
             fn until_key_ready(
                 &self,
                 key: &str,
-            ) -> std::pin::Pin<
-                Box<dyn std::future::Future<Output = ()> + Send + '_>,
-            > {
+            ) -> std::pin::Pin<Box<dyn Future<Output = ()> + Send + '_>>
+            {
                 let key = key.to_string();
                 Box::pin(async move {
                     self.calls.lock().unwrap().push(key);
@@ -2252,8 +2250,7 @@ mod rate_limiting_tests {
         fn until_key_ready(
             &self,
             key: &str,
-        ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send + '_>>
-        {
+        ) -> std::pin::Pin<Box<dyn Future<Output = ()> + Send + '_>> {
             let key = key.to_string();
             Box::pin(async move {
                 self.calls.lock().unwrap().push(key);

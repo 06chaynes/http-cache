@@ -2,7 +2,7 @@ use crate::{BadRequest, Cache, HttpCacheError};
 
 use http_cache::*;
 use surf::Client;
-use wiremock::{matchers::method, Mock, MockServer, ResponseTemplate};
+use wiremock::{Mock, MockServer, ResponseTemplate, matchers::method};
 
 #[tokio::test]
 async fn test_non_cloneable_request_graceful_fallback() -> Result<()> {
@@ -1089,9 +1089,8 @@ mod with_moka {
             fn until_key_ready(
                 &self,
                 key: &str,
-            ) -> std::pin::Pin<
-                Box<dyn std::future::Future<Output = ()> + Send + '_>,
-            > {
+            ) -> std::pin::Pin<Box<dyn Future<Output = ()> + Send + '_>>
+            {
                 let key = key.to_string();
                 Box::pin(async move {
                     self.calls.lock().unwrap().push(key);

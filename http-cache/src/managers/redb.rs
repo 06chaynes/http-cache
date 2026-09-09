@@ -23,8 +23,8 @@
 //! database — the drop-time flush must acquire the writer lock.
 
 use std::path::Path;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::{CacheManager, HttpResponse, Result};
 
@@ -102,10 +102,10 @@ impl FlushState {
 
 impl Drop for FlushState {
     fn drop(&mut self) {
-        if self.unflushed.load(Ordering::Relaxed) > 0 {
-            if let Err(e) = self.flush() {
-                log::warn!("redb flush on drop failed: {e}");
-            }
+        if self.unflushed.load(Ordering::Relaxed) > 0
+            && let Err(e) = self.flush()
+        {
+            log::warn!("redb flush on drop failed: {e}");
         }
     }
 }

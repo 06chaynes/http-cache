@@ -10,7 +10,7 @@ use http_cache_reqwest::StreamingCache;
 use reqwest::Client;
 use reqwest_middleware::ClientBuilder;
 use std::time::Instant;
-use wiremock::{matchers::method, Mock, MockServer, ResponseTemplate};
+use wiremock::{Mock, MockServer, ResponseTemplate, matchers::method};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {

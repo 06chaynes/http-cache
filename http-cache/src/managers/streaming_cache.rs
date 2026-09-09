@@ -74,14 +74,14 @@ use std::{
 };
 
 use crate::{
+    HttpHeaders, StreamingCacheManager, Url,
     body::StreamingBody,
     error::{Result, StreamingError},
-    HttpHeaders, StreamingCacheManager, Url,
 };
 use bytes::{Buf, Bytes};
 use http::{Response, Version};
 use http_body::Body;
-use http_body_util::{combinators::UnsyncBoxBody, BodyExt};
+use http_body_util::{BodyExt, combinators::UnsyncBoxBody};
 use http_cache_semantics::CachePolicy;
 use moka::future::Cache;
 use rand::RngExt;
@@ -1207,18 +1207,17 @@ impl StreamingCacheManager for StreamingManager {
         }
 
         // RFC 9111 §3.3: never store a response we know is incomplete.
-        if !is_head {
-            if let Some(cl) = content_length {
-                if cl != written {
-                    log::debug!(
-                        "put: content-length {cl} != received {written}; \
-                         serving uncached (incomplete response)"
-                    );
-                    return serve_uncached_spooled(
-                        parts, file, guard, written, None, None,
-                    );
-                }
-            }
+        if !is_head
+            && let Some(cl) = content_length
+            && cl != written
+        {
+            log::debug!(
+                "put: content-length {cl} != received {written}; \
+                 serving uncached (incomplete response)"
+            );
+            return serve_uncached_spooled(
+                parts, file, guard, written, None, None,
+            );
         }
         if let Err(e) = file.sync_all().await {
             log::debug!("put: fsync failed; serving uncached: {e}");
@@ -1380,10 +1379,10 @@ impl StreamingCacheManager for StreamingManager {
 
         // Identity check: refuse to staple this revision's headers onto a
         // concurrently-stored replacement entry's body.
-        if let Some(t) = token {
-            if t.0.as_slice() != metadata.nonce {
-                return Ok(false);
-            }
+        if let Some(t) = token
+            && t.0.as_slice() != metadata.nonce
+        {
+            return Ok(false);
         }
 
         metadata.headers = stored_headers(headers);
@@ -2703,11 +2702,9 @@ mod tests {
             .unwrap();
 
         // Nothing cached, no spool file ever created.
-        assert!(manager
-            .get("GET:https://example.com/big")
-            .await
-            .unwrap()
-            .is_none());
+        assert!(
+            manager.get("GET:https://example.com/big").await.unwrap().is_none()
+        );
         let tmp_entries = std::fs::read_dir(dir.path().join("tmp"))
             .map(|rd| rd.count())
             .unwrap_or(0);
@@ -2839,11 +2836,13 @@ mod tests {
             )
             .await
             .unwrap();
-        assert!(manager
-            .get("GET:https://example.com/exact")
-            .await
-            .unwrap()
-            .is_some());
+        assert!(
+            manager
+                .get("GET:https://example.com/exact")
+                .await
+                .unwrap()
+                .is_some()
+        );
     }
 
     /// Content-Length lie (RFC 9111 §3.3): upstream declared 100 bytes but sent
@@ -2871,11 +2870,13 @@ mod tests {
             .unwrap();
         let bytes = returned.into_body().collect().await.unwrap().to_bytes();
         assert_eq!(&bytes[..], b"short");
-        assert!(manager
-            .get("GET:https://example.com/truncated")
-            .await
-            .unwrap()
-            .is_none());
+        assert!(
+            manager
+                .get("GET:https://example.com/truncated")
+                .await
+                .unwrap()
+                .is_none()
+        );
     }
 
     /// Upstream body error mid-stream: put() errors (unchanged contract) and
@@ -2905,11 +2906,13 @@ mod tests {
             )
             .await;
         assert!(result.is_err(), "upstream error must propagate");
-        assert!(manager
-            .get("GET:https://example.com/reset")
-            .await
-            .unwrap()
-            .is_none());
+        assert!(
+            manager
+                .get("GET:https://example.com/reset")
+                .await
+                .unwrap()
+                .is_none()
+        );
         let tmp_entries =
             std::fs::read_dir(dir.path().join("tmp")).unwrap().count();
         assert_eq!(tmp_entries, 0, "tmp must be cleaned on upstream error");
@@ -3029,11 +3032,13 @@ mod tests {
             .unwrap();
         let bytes = returned.into_body().collect().await.unwrap().to_bytes();
         assert_eq!(&bytes[..], b"never cached");
-        assert!(manager
-            .get("GET:https://example.com/zero")
-            .await
-            .unwrap()
-            .is_none());
+        assert!(
+            manager
+                .get("GET:https://example.com/zero")
+                .await
+                .unwrap()
+                .is_none()
+        );
     }
 
     /// Pass-through decline is true streaming: put() returns without consuming
@@ -3218,8 +3223,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_serve_uncached_spooled_chains_prefix_pending_rest_and_unlinks(
-    ) {
+    async fn test_serve_uncached_spooled_chains_prefix_pending_rest_and_unlinks()
+     {
         let dir = TempDir::new().unwrap();
         let tmp = dir.path().join("spool.tmp");
 

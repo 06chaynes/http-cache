@@ -149,7 +149,7 @@
 
 use bytes::Bytes;
 use http::{
-    header::CACHE_CONTROL, request, HeaderValue, Method, Request, Response,
+    HeaderValue, Method, Request, Response, header::CACHE_CONTROL, request,
 };
 use http_body::Body;
 use http_body_util::BodyExt;
@@ -160,15 +160,15 @@ pub use http_cache::CACacheManager;
 #[cfg(feature = "manager-redb")]
 pub use http_cache::RedbManager;
 
+#[cfg(feature = "streaming")]
+use http_cache::StreamingError;
 #[cfg(feature = "rate-limiting")]
 pub use http_cache::rate_limiting::{
     CacheAwareRateLimiter, DirectRateLimiter, DomainRateLimiter, Quota,
 };
-#[cfg(feature = "streaming")]
-use http_cache::StreamingError;
 use http_cache::{
-    url_parse, BoxError, CacheManager, CacheMode, HitOrMiss, HttpCache,
-    HttpCacheOptions, HttpResponse, Middleware, Url, XCACHE, XCACHELOOKUP,
+    BoxError, CacheManager, CacheMode, HitOrMiss, HttpCache, HttpCacheOptions,
+    HttpResponse, Middleware, Url, XCACHE, XCACHELOOKUP, url_parse,
 };
 #[cfg(feature = "streaming")]
 use http_cache::{HttpStreamingCache, StreamingCacheManager};
