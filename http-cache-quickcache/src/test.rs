@@ -125,6 +125,7 @@ async fn default_mode_with_options() -> Result<()> {
                 response_cache_mode_fn: None,
                 cache_bust: None,
                 cache_status_headers: true,
+                default_ttl: None,
                 max_ttl: None,
                 metadata_provider: None,
                 modify_response: None,
