@@ -213,6 +213,51 @@ async fn no_cache_mode() -> Result<()> {
     Ok(())
 }
 
+/// `NoCache` revalidates a stored response with a conditional request, like
+/// the `no-cache` mode of the Fetch standard and make-fetch-happen, rather
+/// than fetching it again in full.
+#[tokio::test]
+async fn no_cache_mode_revalidates_with_conditional_request() -> Result<()> {
+    let mock_server = MockServer::start().await;
+    let m = Mock::given(method(GET))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("cache-control", CACHEABLE_PUBLIC)
+                .insert_header("etag", "\"v1\"")
+                .set_body_bytes(TEST_BODY),
+        )
+        .expect(1);
+    let m_304 = Mock::given(method(GET))
+        .and(header("if-none-match", "\"v1\""))
+        .respond_with(
+            ResponseTemplate::new(304).insert_header("etag", "\"v1\""),
+        )
+        .expect(1);
+    let mock_guard = mock_server.register_as_scoped(m).await;
+    let url = format!("{}/", mock_server.uri());
+    let manager = create_cache_manager();
+
+    let client = ClientBuilder::new(Client::new())
+        .with(Cache(HttpCache {
+            mode: CacheMode::NoCache,
+            manager: manager.clone(),
+            options: Default::default(),
+        }))
+        .build();
+
+    // Cold pass to load cache
+    client.get(url.clone()).send().await?;
+
+    drop(mock_guard);
+    let _mock_guard = mock_server.register_as_scoped(m_304).await;
+
+    // Only a conditional request is answered, with a 304 served from cache
+    let res = client.get(url).send().await?;
+    assert_eq!(res.status(), 200, "expected a conditional request");
+    assert_eq!(res.bytes().await?, TEST_BODY);
+    Ok(())
+}
+
 #[tokio::test]
 async fn reload_mode() -> Result<()> {
     let mock_server = MockServer::start().await;
@@ -2931,6 +2976,56 @@ mod streaming_issue_164 {
             "public, max-age=999",
             "304 must refresh the stored metadata"
         );
+        Ok(())
+    }
+}
+
+#[cfg(feature = "streaming")]
+mod streaming_cache_modes {
+    use super::*;
+    use crate::StreamingCache;
+    use http_cache::{CacheMode, StreamingManager};
+
+    /// Streaming counterpart of `no_cache_mode_revalidates_with_conditional_request`.
+    #[tokio::test]
+    async fn no_cache_mode_revalidates_with_conditional_request() -> Result<()>
+    {
+        let mock_server = MockServer::start().await;
+        let m = Mock::given(method(GET))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("cache-control", CACHEABLE_PUBLIC)
+                    .insert_header("etag", "\"v1\"")
+                    .set_body_bytes(TEST_BODY),
+            )
+            .expect(1);
+        let m304 = Mock::given(method(GET))
+            .and(header("if-none-match", "\"v1\""))
+            .respond_with(
+                ResponseTemplate::new(304).insert_header("etag", "\"v1\""),
+            )
+            .expect(1);
+        let mock_guard = mock_server.register_as_scoped(m).await;
+        let url = format!("{}/", mock_server.uri());
+
+        let tmp = tempfile::TempDir::new()?;
+        let manager =
+            StreamingManager::new(tmp.path().to_path_buf(), 100).await?;
+        let client = ClientBuilder::new(Client::new())
+            .with(StreamingCache::new(manager, CacheMode::NoCache))
+            .build();
+
+        // Cold pass to load cache
+        let res = client.get(url.clone()).send().await?;
+        assert_eq!(res.bytes().await?, TEST_BODY);
+
+        drop(mock_guard);
+        let _mock_guard = mock_server.register_as_scoped(m304).await;
+
+        // Only a conditional request is answered, with a 304 served from cache
+        let res = client.get(url).send().await?;
+        assert_eq!(res.status(), 200, "expected a conditional request");
+        assert_eq!(res.bytes().await?, TEST_BODY);
         Ok(())
     }
 }

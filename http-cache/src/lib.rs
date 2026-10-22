@@ -2313,17 +2313,21 @@ where
                     .await
                 }
                 CacheMode::NoCache => {
-                    // Force a fresh fetch with no-cache directive, but
-                    // note that we had a cache lookup hit.
-                    let url = extract_url_from_request_parts(parts)?;
-                    self.apply_rate_limiting(&url).await;
-                    let response = fetch(FetchRequest::FreshNoCache).await?;
-                    let mut res =
-                        self.remote_fetch_and_cache(analysis, response).await?;
-                    if self.options.cache_status_headers {
-                        response_cache_lookup_status(&mut res, HitOrMiss::HIT);
-                    }
-                    Ok(res)
+                    // The no-cache directive makes the policy treat even a
+                    // fresh response as stale, so it is revalidated.
+                    // Mirrors `Middleware::force_no_cache` in HttpCache::run.
+                    let mut analysis = analysis;
+                    analysis.request_parts.headers.insert(
+                        CACHE_CONTROL,
+                        HeaderValue::from_static("no-cache"),
+                    );
+                    self.conditional_fetch(
+                        &analysis,
+                        fetch,
+                        cached_response,
+                        policy,
+                    )
+                    .await
                 }
                 CacheMode::ForceCache
                 | CacheMode::OnlyIfCached
@@ -2468,6 +2472,8 @@ where
                 let fetch_result = if matches {
                     fetch(FetchRequest::Conditional(Box::new(stale_parts)))
                         .await
+                } else if analysis.cache_mode == CacheMode::NoCache {
+                    fetch(FetchRequest::FreshNoCache).await
                 } else {
                     fetch(FetchRequest::Fresh).await
                 };
@@ -2844,12 +2850,11 @@ impl<T: CacheManager> HttpCache<T> {
                         .await
                 }
                 CacheMode::NoCache => {
+                    // The no-cache directive makes the policy treat even a
+                    // fresh response as stale, so it is revalidated.
                     middleware.force_no_cache()?;
-                    let mut res = self.remote_fetch(&mut middleware).await?;
-                    if self.options.cache_status_headers {
-                        res.cache_lookup_status(HitOrMiss::HIT);
-                    }
-                    Ok(res)
+                    self.conditional_fetch(middleware, cached_response, policy)
+                        .await
                 }
                 CacheMode::ForceCache
                 | CacheMode::OnlyIfCached
