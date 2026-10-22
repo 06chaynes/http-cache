@@ -1720,3 +1720,182 @@ mod rate_limiting_tests {
         assert_eq!(host3, "localhost");
     }
 }
+
+mod ttl_tests {
+    use crate::{CacheOptions, HttpCacheOptions};
+    use http::{Request, Response};
+    use std::time::{Duration, SystemTime};
+
+    const MIN: Duration = Duration::from_secs(60);
+    const HOUR: Duration = Duration::from_secs(60 * 60);
+    const DAY: Duration = Duration::from_secs(24 * 60 * 60);
+
+    fn http_date(offset_from_now: Duration, future: bool) -> String {
+        let now = SystemTime::now();
+        httpdate::fmt_http_date(if future {
+            now + offset_from_now
+        } else {
+            now - offset_from_now
+        })
+    }
+
+    /// The time-to-live of a freshly received response with `headers`.
+    fn ttl(options: &HttpCacheOptions, headers: &[(&str, &str)]) -> Duration {
+        let (req, _) =
+            Request::get("https://example.com/").body(()).unwrap().into_parts();
+        let mut res = Response::builder();
+        for (name, value) in headers {
+            res = res.header(*name, *value);
+        }
+        let (res, _) = res.body(()).unwrap().into_parts();
+        options.create_cache_policy(&req, &res).time_to_live(SystemTime::now())
+    }
+
+    /// Asserts `actual` is `expected`, allowing for time passing in the test.
+    #[track_caller]
+    fn assert_ttl(actual: Duration, expected: Duration) {
+        assert!(
+            actual <= expected && actual + Duration::from_secs(5) > expected,
+            "expected a ttl of {expected:?}, got {actual:?}"
+        );
+    }
+
+    fn options(
+        default_ttl: Option<Duration>,
+        max_ttl: Option<Duration>,
+    ) -> HttpCacheOptions {
+        HttpCacheOptions { default_ttl, max_ttl, ..Default::default() }
+    }
+
+    #[test]
+    fn no_expiration_is_stale_without_default_ttl() {
+        assert_ttl(ttl(&options(None, None), &[]), Duration::ZERO);
+        assert_ttl(ttl(&options(None, Some(HOUR)), &[]), Duration::ZERO);
+    }
+
+    #[test]
+    fn default_ttl_applies_without_expiration() {
+        assert_ttl(ttl(&options(Some(MIN), None), &[]), MIN);
+        assert_ttl(ttl(&options(Some(MIN), Some(HOUR)), &[]), MIN);
+        let headers = [("cache-control", "public")];
+        assert_ttl(ttl(&options(Some(MIN), None), &headers), MIN);
+    }
+
+    #[test]
+    fn max_ttl_caps_default_ttl() {
+        assert_ttl(ttl(&options(Some(DAY), Some(HOUR)), &[]), HOUR);
+    }
+
+    #[test]
+    fn max_age_takes_precedence_over_default_ttl() {
+        let headers = [("cache-control", "max-age=3600")];
+        assert_ttl(ttl(&options(Some(MIN), None), &headers), HOUR);
+        let headers = [("cache-control", "max-age=0")];
+        assert_ttl(ttl(&options(Some(MIN), None), &headers), Duration::ZERO);
+    }
+
+    #[test]
+    fn max_ttl_caps_max_age() {
+        let headers = [("cache-control", "max-age=86400")];
+        assert_ttl(ttl(&options(None, Some(HOUR)), &headers), HOUR);
+        let headers = [("cache-control", "max-age=60")];
+        assert_ttl(ttl(&options(None, Some(HOUR)), &headers), MIN);
+    }
+
+    #[test]
+    fn max_ttl_counts_from_age() {
+        let headers = [("cache-control", "max-age=86400"), ("age", "600")];
+        assert_ttl(ttl(&options(None, Some(HOUR)), &headers), HOUR - 10 * MIN);
+    }
+
+    #[test]
+    fn expires_takes_precedence_over_default_ttl() {
+        let expires = http_date(HOUR, true);
+        let headers = [("expires", expires.as_str())];
+        assert_ttl(ttl(&options(Some(MIN), None), &headers), HOUR);
+    }
+
+    #[test]
+    fn max_ttl_keeps_shorter_expires() {
+        let expires = http_date(10 * MIN, true);
+        let headers = [("expires", expires.as_str())];
+        assert_ttl(ttl(&options(Some(MIN), Some(HOUR)), &headers), 10 * MIN);
+    }
+
+    #[test]
+    fn max_ttl_caps_expires() {
+        let expires = http_date(DAY, true);
+        let headers = [("expires", expires.as_str())];
+        assert_ttl(ttl(&options(None, Some(HOUR)), &headers), HOUR);
+    }
+
+    #[test]
+    fn past_or_invalid_expires_is_stale_despite_default_ttl() {
+        let expires = http_date(HOUR, false);
+        for expires in [expires.as_str(), "0"] {
+            let headers = [("expires", expires)];
+            assert_ttl(
+                ttl(&options(Some(MIN), None), &headers),
+                Duration::ZERO,
+            );
+        }
+    }
+
+    #[test]
+    fn default_ttl_replaces_heuristic() {
+        let last_modified = http_date(10 * DAY, false);
+        let headers = [("last-modified", last_modified.as_str())];
+        // 10% of the time since it was last modified
+        assert_ttl(ttl(&options(None, None), &headers), DAY);
+        assert_ttl(ttl(&options(None, Some(HOUR)), &headers), HOUR);
+        assert_ttl(ttl(&options(Some(MIN), None), &headers), MIN);
+    }
+
+    #[test]
+    fn default_ttl_does_not_override_no_cache_or_no_store() {
+        for cache_control in ["no-cache", "no-store"] {
+            let headers = [("cache-control", cache_control)];
+            assert_ttl(
+                ttl(&options(Some(MIN), None), &headers),
+                Duration::ZERO,
+            );
+        }
+        let headers = [("pragma", "no-cache")];
+        assert_ttl(ttl(&options(Some(MIN), None), &headers), Duration::ZERO);
+    }
+
+    #[test]
+    fn shared_cache_uses_s_maxage() {
+        let shared = |default_ttl, max_ttl| HttpCacheOptions {
+            cache_options: Some(CacheOptions {
+                shared: true,
+                ..Default::default()
+            }),
+            ..options(default_ttl, max_ttl)
+        };
+        let headers = [("cache-control", "s-maxage=600")];
+        assert_ttl(ttl(&shared(Some(MIN), None), &headers), 10 * MIN);
+        assert_ttl(ttl(&shared(None, Some(MIN)), &headers), MIN);
+    }
+
+    #[test]
+    fn private_cache_ignores_s_maxage() {
+        let private = |default_ttl, max_ttl| HttpCacheOptions {
+            cache_options: Some(CacheOptions {
+                shared: false,
+                ..Default::default()
+            }),
+            ..options(default_ttl, max_ttl)
+        };
+        let headers = [("cache-control", "s-maxage=600")];
+        assert_ttl(ttl(&private(Some(MIN), None), &headers), MIN);
+        assert_ttl(ttl(&private(None, None), &headers), Duration::ZERO);
+    }
+
+    #[test]
+    fn directives_are_read_across_headers() {
+        let headers =
+            [("cache-control", "public"), ("cache-control", "max-age=86400")];
+        assert_ttl(ttl(&options(Some(MIN), Some(HOUR)), &headers), HOUR);
+    }
+}

@@ -2,10 +2,21 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added `HttpCacheOptions::default_ttl` to set how long responses without a `max-age` directive or `Expires` header stay fresh, instead of using the `Last-Modified` heuristic
+
 ### Changed
 
 - Migrated to the 2024 edition, which requires Rust 1.85.0 or newer
 - MSRV lowered from 1.90.0 to 1.89.0. `rust-version` now covers default features resolved with `resolver = "3"`; see the MSRV policy in the README
+- `max_ttl` is now only a limit. A response without an explicit expiration is no longer fresh for `max_ttl`, set `default_ttl` to the same duration to keep that behavior
+
+### Fixed
+
+- `max_ttl` no longer extends shorter lifetimes from an `Expires` header or the `Last-Modified` heuristic to `max_ttl`, and now also caps `s-maxage` in shared caches
+- `max_ttl` no longer drops a `Pragma: no-cache` from responses without a `Cache-Control` header
+- The crate documentation no longer suggests `max_ttl` expires responses in `CacheMode::IgnoreRules`, which does not check freshness
 
 ## [1.0.0-alpha.8] - 2026-09-08
 

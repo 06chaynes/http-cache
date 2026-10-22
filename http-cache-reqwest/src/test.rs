@@ -182,6 +182,77 @@ async fn max_ttl_applies_to_buffered_responses() -> Result<()> {
     Ok(())
 }
 
+/// `(default_ttl, max_ttl, expected upstream hits)` for two requests to a
+/// response without caching headers.
+const TTL_WITHOUT_EXPIRATION: [(Option<Duration>, Option<Duration>, u64); 4] = [
+    (None, None, 2),
+    (None, Some(Duration::from_secs(3600)), 2),
+    (Some(Duration::from_secs(3600)), None, 1),
+    (Some(Duration::from_secs(3600)), Some(Duration::ZERO), 2),
+];
+
+fn build_mock_without_caching_headers(expect: u64) -> Mock {
+    Mock::given(method(GET))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(TEST_BODY))
+        .expect(expect)
+}
+
+#[tokio::test]
+async fn default_ttl_applies_to_buffered_responses() -> Result<()> {
+    for (default_ttl, max_ttl, expected_hits) in TTL_WITHOUT_EXPIRATION {
+        let mock_server = MockServer::start().await;
+        let m = build_mock_without_caching_headers(expected_hits);
+        let _mock_guard = mock_server.register_as_scoped(m).await;
+        let url = format!("{}/", mock_server.uri());
+
+        let client = ClientBuilder::new(Client::new())
+            .with(Cache(HttpCache {
+                mode: CacheMode::Default,
+                manager: create_cache_manager(),
+                options: HttpCacheOptions {
+                    default_ttl,
+                    max_ttl,
+                    ..Default::default()
+                },
+            }))
+            .build();
+
+        for _ in 0..2 {
+            let response = client.get(&url).send().await?;
+            assert_eq!(response.bytes().await?, TEST_BODY);
+        }
+    }
+    Ok(())
+}
+
+#[cfg(feature = "streaming")]
+#[tokio::test]
+async fn default_ttl_applies_to_streaming_responses() -> Result<()> {
+    use crate::StreamingCache;
+    use http_cache::StreamingManager;
+
+    for (default_ttl, max_ttl, expected_hits) in TTL_WITHOUT_EXPIRATION {
+        let mock_server = MockServer::start().await;
+        let m = build_mock_without_caching_headers(expected_hits);
+        let _mock_guard = mock_server.register_as_scoped(m).await;
+        let url = format!("{}/", mock_server.uri());
+
+        let client = ClientBuilder::new(Client::new())
+            .with(StreamingCache::with_options(
+                StreamingManager::with_temp_dir(100).await?,
+                CacheMode::Default,
+                HttpCacheOptions { default_ttl, max_ttl, ..Default::default() },
+            ))
+            .build();
+
+        for _ in 0..2 {
+            let response = client.get(&url).send().await?;
+            assert_eq!(response.bytes().await?, TEST_BODY);
+        }
+    }
+    Ok(())
+}
+
 #[tokio::test]
 async fn no_cache_mode() -> Result<()> {
     let mock_server = MockServer::start().await;

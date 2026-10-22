@@ -116,9 +116,10 @@
 //! # fn main() {}
 //! ```
 //!
-//! ## Maximum TTL Control
+//! ## Default and Maximum TTL
 //!
-//! Set a maximum time-to-live for cached responses, particularly useful with `CacheMode::IgnoreRules`:
+//! Set a time-to-live for responses that don't specify their own expiration, and cap how long
+//! any response is considered fresh:
 //!
 //! ```rust
 //! # #[cfg(feature = "manager-cacache")]
@@ -128,14 +129,16 @@
 //!
 //! let manager = CACacheManager::new("./cache".into(), true);
 //!
-//! // Limit cache duration to 5 minutes regardless of server headers
 //! let options = HttpCacheOptions {
-//!     max_ttl: Some(Duration::from_secs(300)), // 5 minutes
+//!     // Responses without `max-age` or `Expires` are fresh for 1 minute
+//!     default_ttl: Some(Duration::from_secs(60)),
+//!     // No response is fresh for longer than 5 minutes
+//!     max_ttl: Some(Duration::from_secs(300)),
 //!     ..Default::default()
 //! };
 //!
 //! let cache = HttpCache {
-//!     mode: CacheMode::IgnoreRules, // Ignore server cache-control headers
+//!     mode: CacheMode::Default,
 //!     manager,
 //!     options,
 //! };
@@ -336,7 +339,9 @@ use std::{
 };
 
 use http::{
-    HeaderValue, Response, StatusCode, header::CACHE_CONTROL, request, response,
+    HeaderValue, Response, StatusCode,
+    header::{CACHE_CONTROL, EXPIRES, PRAGMA},
+    request, response,
 };
 use http_cache_semantics::{AfterResponse, BeforeRequest, CachePolicy};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -1645,9 +1650,25 @@ pub struct HttpCacheOptions {
     pub modify_response: Option<ModifyResponse>,
     /// Determines if the cache status headers should be added to the response.
     pub cache_status_headers: bool,
+    /// Time-to-live for responses that don't specify their own expiration.
+    ///
+    /// Applies when a response has no `max-age` directive and no `Expires`
+    /// header (nor `s-maxage` in a shared cache). It replaces the heuristic
+    /// based on `Last-Modified`, see [`CacheOptions::cache_heuristic`].
+    ///
+    /// Doesn't make responses cacheable that are not allowed to be stored,
+    /// and `no-cache` responses are still revalidated on every use.
+    /// An invalid or past `Expires` header marks a response as already stale,
+    /// so this doesn't apply to those either.
+    ///
+    /// When `None`, responses without an explicit expiration only use the heuristic.
+    pub default_ttl: Option<Duration>,
     /// Maximum time-to-live for cached responses.
-    /// When set, this overrides any longer cache durations specified by the server.
-    /// Particularly useful with `CacheMode::IgnoreRules` to provide expiration control.
+    ///
+    /// When set, this caps any longer lifetime specified by the server, as well
+    /// as heuristic lifetimes and `default_ttl`. Shorter lifetimes are kept.
+    /// It does not make responses without an expiration cacheable, use
+    /// `default_ttl` for that.
     pub max_ttl: Option<Duration>,
     /// Rate limiter that applies only on cache misses.
     /// When enabled, requests that result in cache hits are returned immediately,
@@ -1672,6 +1693,7 @@ impl Default for HttpCacheOptions {
             cache_bust: None,
             modify_response: None,
             cache_status_headers: true,
+            default_ttl: None,
             max_ttl: None,
             #[cfg(feature = "rate-limiting")]
             rate_limiter: None,
@@ -1695,6 +1717,7 @@ impl Debug for HttpCacheOptions {
                 .field("cache_bust", &"Fn(&request::Parts) -> Vec<String>")
                 .field("modify_response", &"Fn(&mut ModifyResponse)")
                 .field("cache_status_headers", &self.cache_status_headers)
+                .field("default_ttl", &self.default_ttl)
                 .field("max_ttl", &self.max_ttl)
                 .field("rate_limiter", &"Option<CacheAwareRateLimiter>")
                 .field(
@@ -1717,6 +1740,7 @@ impl Debug for HttpCacheOptions {
                 .field("cache_bust", &"Fn(&request::Parts) -> Vec<String>")
                 .field("modify_response", &"Fn(&mut ModifyResponse)")
                 .field("cache_status_headers", &self.cache_status_headers)
+                .field("default_ttl", &self.default_ttl)
                 .field("max_ttl", &self.max_ttl)
                 .field(
                     "metadata_provider",
@@ -1833,73 +1857,40 @@ impl HttpCacheOptions {
         response_parts: &response::Parts,
     ) -> CachePolicy {
         let cache_options = self.cache_options.unwrap_or_default();
-
-        // If max_ttl is specified, we need to modify the response headers to enforce it
-        if let Some(max_ttl) = self.max_ttl {
-            // Parse existing cache-control header
-            let cache_control = response_parts
-                .headers
-                .get("cache-control")
-                .and_then(|v| v.to_str().ok())
-                .unwrap_or("");
-
-            // Extract existing max-age if present
-            let existing_max_age =
-                cache_control.split(',').find_map(|directive| {
-                    let directive = directive.trim();
-                    if directive.starts_with("max-age=") {
-                        directive.strip_prefix("max-age=")?.parse::<u64>().ok()
-                    } else {
-                        None
-                    }
-                });
-
-            // Convert max_ttl to seconds
-            let max_ttl_seconds = max_ttl.as_secs();
-
-            // Apply max_ttl by setting max-age to the minimum of existing max-age and max_ttl
-            let effective_max_age = match existing_max_age {
-                Some(existing) => std::cmp::min(existing, max_ttl_seconds),
-                None => max_ttl_seconds,
-            };
-
-            // Build new cache-control header
-            let mut new_directives = Vec::new();
-
-            // Add non-max-age directives from existing cache-control
-            for directive in cache_control.split(',').map(|d| d.trim()) {
-                if !directive.starts_with("max-age=") && !directive.is_empty() {
-                    new_directives.push(directive.to_string());
-                }
-            }
-
-            // Add our effective max-age
-            new_directives.push(format!("max-age={}", effective_max_age));
-
-            let new_cache_control = new_directives.join(", ");
-
-            // Create modified response parts - we have to clone since response::Parts has private fields
-            let mut modified_response_parts = response_parts.clone();
-            modified_response_parts.headers.insert(
-                "cache-control",
-                HeaderValue::from_str(&new_cache_control)
-                    .unwrap_or_else(|_| HeaderValue::from_static("max-age=0")),
-            );
-
-            CachePolicy::new_options(
-                request_parts,
-                &modified_response_parts,
-                SystemTime::now(),
-                cache_options,
-            )
-        } else {
+        let now = SystemTime::now();
+        let new_policy = |response_parts: &response::Parts| {
             CachePolicy::new_options(
                 request_parts,
                 response_parts,
-                SystemTime::now(),
+                now,
                 cache_options,
             )
+        };
+
+        // `default_ttl` stands in for the heuristic freshness lifetime, so
+        // it only applies when the server gave no explicit expiration.
+        let mut policy = match self.default_ttl {
+            Some(default_ttl)
+                if !has_explicit_expiration(
+                    response_parts,
+                    cache_options.shared,
+                ) =>
+            {
+                new_policy(&with_max_age(response_parts, default_ttl))
+            }
+            _ => new_policy(response_parts),
+        };
+
+        // `max_ttl` caps the freshness lifetime however it was determined:
+        // `max-age`, `s-maxage`, `Expires`, heuristics or `default_ttl`.
+        // The lifetime counts from the response's age, like `max-age` does.
+        if let Some(max_ttl) = self.max_ttl
+            && policy.time_to_live(now) + policy.age(now) > max_ttl
+        {
+            policy = new_policy(&with_max_age(response_parts, max_ttl));
         }
+
+        policy
     }
 
     /// Determines if a response should be cached based on cache mode and HTTP semantics
@@ -2133,6 +2124,75 @@ fn merge_headers(dst: &mut http::HeaderMap, src: &http::HeaderMap) {
     for (name, value) in src.iter() {
         dst.append(name.clone(), value.clone());
     }
+}
+
+/// The directives of every `Cache-Control` header on a response, trimmed.
+fn cache_control_directives(
+    parts: &response::Parts,
+) -> impl Iterator<Item = &str> {
+    parts
+        .headers
+        .get_all(CACHE_CONTROL)
+        .iter()
+        .filter_map(|value| value.to_str().ok())
+        .flat_map(|value| value.split(','))
+        .map(str::trim)
+        .filter(|directive| !directive.is_empty())
+}
+
+/// Whether `directive` is `name`, with or without an argument. Names are
+/// case-sensitive, like `http-cache-semantics` parses them.
+fn is_directive(directive: &str, name: &str) -> bool {
+    directive.split('=').next().is_some_and(|key| key.trim() == name)
+}
+
+/// RFC 9111 s4.2.1: whether the response states its own freshness lifetime,
+/// matching the conditions `http-cache-semantics` checks. An `Expires` that is
+/// invalid or in the past still counts, as it marks the response as stale.
+fn has_explicit_expiration(parts: &response::Parts, shared: bool) -> bool {
+    parts.headers.contains_key(EXPIRES)
+        || cache_control_directives(parts).any(|directive| {
+            is_directive(directive, "max-age")
+                || (shared && is_directive(directive, "s-maxage"))
+        })
+}
+
+/// Copies `parts` with its freshness lifetime set to `ttl`, by replacing the
+/// `max-age` and `s-maxage` directives. `max-age` takes precedence over
+/// `Expires` and heuristics, so other headers are left alone.
+fn with_max_age(parts: &response::Parts, ttl: Duration) -> response::Parts {
+    let seconds = ttl.as_secs();
+    let mut directives: Vec<String> = cache_control_directives(parts)
+        .filter(|directive| !is_directive(directive, "max-age"))
+        .map(|directive| {
+            if is_directive(directive, "s-maxage") {
+                format!("s-maxage={seconds}")
+            } else {
+                directive.to_string()
+            }
+        })
+        .collect();
+    directives.push(format!("max-age={seconds}"));
+
+    // `Pragma: no-cache` only counts when there is no `Cache-Control` header,
+    // which we're about to add.
+    if !parts.headers.contains_key(CACHE_CONTROL)
+        && parts
+            .headers
+            .get(PRAGMA)
+            .and_then(|value| value.to_str().ok())
+            .is_some_and(|value| value.contains("no-cache"))
+    {
+        directives.push("no-cache".to_string());
+    }
+
+    let mut parts = parts.clone();
+    parts.headers.insert(
+        CACHE_CONTROL,
+        HeaderValue::from_str(&directives.join(", "))
+            .unwrap_or_else(|_| HeaderValue::from_static("max-age=0")),
+    );
+    parts
 }
 
 /// RFC 7234 s4.4: the GET and HEAD cache keys to invalidate after a

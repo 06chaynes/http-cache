@@ -172,9 +172,9 @@
 //! }
 //! ```
 //!
-//! ## Maximum TTL Control
+//! ## Default and Maximum TTL
 //!
-//! Set a maximum time-to-live for cached responses, particularly useful with `CacheMode::IgnoreRules`:
+//! Set a time-to-live for responses without their own expiration, and a maximum for all responses:
 //!
 //! ```no_run
 //! use http_cache_ureq::{CachedAgent, RedbManager, CacheMode, HttpCacheOptions};
@@ -184,8 +184,9 @@
 //!     smol::block_on(async {
 //!         let agent = CachedAgent::builder()
 //!             .cache_manager(RedbManager::new("./http-cache.redb")?)
-//!             .cache_mode(CacheMode::IgnoreRules) // Ignore server cache-control headers
+//!             .cache_mode(CacheMode::Default)
 //!             .cache_options(HttpCacheOptions {
+//!                 default_ttl: Some(Duration::from_secs(60)), // 1 minute when the server doesn't say
 //!                 max_ttl: Some(Duration::from_secs(300)), // Limit cache to 5 minutes regardless of server headers
 //!                 ..Default::default()
 //!             })

@@ -856,7 +856,7 @@ async fn max_ttl_with_ignore_rules() {
         .cache_manager(manager.clone())
         .cache_mode(CacheMode::IgnoreRules) // Ignore cache-control headers
         .cache_options(HttpCacheOptions {
-            max_ttl: Some(Duration::from_secs(300)), // 5 minutes - provides expiration control
+            max_ttl: Some(Duration::from_secs(300)), // No effect, IgnoreRules doesn't check freshness
             ..Default::default()
         })
         .build()
