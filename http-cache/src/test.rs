@@ -1803,6 +1803,13 @@ mod ttl_tests {
     }
 
     #[test]
+    fn max_ttl_keeps_no_store_from_another_header() {
+        let headers =
+            [("cache-control", "max-age=60"), ("cache-control", "no-store")];
+        assert_ttl(ttl(&options(None, Some(HOUR)), &headers), Duration::ZERO);
+    }
+
+    #[test]
     fn max_ttl_counts_from_age() {
         let headers = [("cache-control", "max-age=86400"), ("age", "600")];
         assert_ttl(ttl(&options(None, Some(HOUR)), &headers), HOUR - 10 * MIN);

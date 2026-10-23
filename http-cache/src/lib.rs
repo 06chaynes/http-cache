@@ -1650,7 +1650,8 @@ pub struct HttpCacheOptions {
     pub modify_response: Option<ModifyResponse>,
     /// Determines if the cache status headers should be added to the response.
     pub cache_status_headers: bool,
-    /// Time-to-live for responses that don't specify their own expiration.
+    /// Time-to-live for responses that don't specify their own expiration,
+    /// truncated to whole seconds.
     ///
     /// Applies when a response has no `max-age` directive and no `Expires`
     /// header (nor `s-maxage` in a shared cache). It replaces the heuristic
@@ -1663,7 +1664,7 @@ pub struct HttpCacheOptions {
     ///
     /// When `None`, responses without an explicit expiration only use the heuristic.
     pub default_ttl: Option<Duration>,
-    /// Maximum time-to-live for cached responses.
+    /// Maximum time-to-live for cached responses, truncated to whole seconds.
     ///
     /// When set, this caps any longer lifetime specified by the server, as well
     /// as heuristic lifetimes and `default_ttl`. Shorter lifetimes are kept.
@@ -2195,6 +2196,16 @@ fn with_max_age(parts: &response::Parts, ttl: Duration) -> response::Parts {
     parts
 }
 
+/// Removes a policy's possibly synthesized `Cache-Control`, unless the 304 sent one.
+fn drop_policy_cache_control(
+    headers: &mut http::HeaderMap,
+    not_modified: Option<&http::HeaderMap>,
+) {
+    if !not_modified.is_some_and(|h| h.contains_key(CACHE_CONTROL)) {
+        headers.remove(CACHE_CONTROL);
+    }
+}
+
 /// RFC 7234 s4.4: the GET and HEAD cache keys to invalidate after a
 /// successful (2xx/3xx) response to a non-GET/HEAD request, or `None` when
 /// the status does not warrant invalidation.
@@ -2511,7 +2522,8 @@ where
         let parts = &analysis.request_parts;
         let before_req = policy.before_request(parts, SystemTime::now());
         match before_req {
-            BeforeRequest::Fresh(fresh_parts) => {
+            BeforeRequest::Fresh(mut fresh_parts) => {
+                drop_policy_cache_control(&mut fresh_parts.headers, None);
                 merge_headers(cached_res.headers_mut(), &fresh_parts.headers);
                 if self.options.cache_status_headers {
                     response_cache_status(&mut cached_res, HitOrMiss::HIT);
@@ -2575,21 +2587,27 @@ where
                                 SystemTime::now(),
                             );
                             match after_res {
-                                AfterResponse::Modified(
-                                    new_policy,
-                                    new_parts,
-                                )
+                                AfterResponse::Modified(_, mut new_parts)
                                 | AfterResponse::NotModified(
-                                    new_policy,
-                                    new_parts,
+                                    _,
+                                    mut new_parts,
                                 ) => {
-                                    policy = new_policy;
+                                    drop_policy_cache_control(
+                                        &mut new_parts.headers,
+                                        Some(&cond_parts.headers),
+                                    );
                                     merge_headers(
                                         cached_res.headers_mut(),
                                         &new_parts.headers,
                                     );
                                 }
                             }
+                            let (stored_parts, body) = cached_res.into_parts();
+                            policy = self
+                                .options
+                                .create_cache_policy(parts, &stored_parts);
+                            cached_res =
+                                Response::from_parts(stored_parts, body);
                             if self.options.cache_status_headers {
                                 response_cache_status(
                                     &mut cached_res,
@@ -3045,7 +3063,8 @@ impl<T: CacheManager> HttpCache<T> {
         let parts = middleware.parts()?;
         let before_req = policy.before_request(&parts, SystemTime::now());
         match before_req {
-            BeforeRequest::Fresh(parts) => {
+            BeforeRequest::Fresh(mut parts) => {
+                drop_policy_cache_control(&mut parts.headers, None);
                 cached_res.update_headers(&parts)?;
                 if self.options.cache_status_headers {
                     cached_res.cache_status(HitOrMiss::HIT);
@@ -3081,18 +3100,25 @@ impl<T: CacheManager> HttpCache<T> {
                     }
                     Ok(cached_res)
                 } else if cond_res.status == 304 {
+                    let cond_parts = cond_res.parts()?;
                     let after_res = policy.after_response(
                         &parts,
-                        &cond_res.parts()?,
+                        &cond_parts,
                         SystemTime::now(),
                     );
                     match after_res {
-                        AfterResponse::Modified(new_policy, parts)
-                        | AfterResponse::NotModified(new_policy, parts) => {
-                            policy = new_policy;
+                        AfterResponse::Modified(_, mut parts)
+                        | AfterResponse::NotModified(_, mut parts) => {
+                            drop_policy_cache_control(
+                                &mut parts.headers,
+                                Some(&cond_parts.headers),
+                            );
                             cached_res.update_headers(&parts)?;
                         }
                     }
+                    policy = self
+                        .options
+                        .create_cache_policy(&parts, &cached_res.parts()?);
                     if self.options.cache_status_headers {
                         cached_res.cache_status(HitOrMiss::HIT);
                         cached_res.cache_lookup_status(HitOrMiss::HIT);

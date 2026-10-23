@@ -17,6 +17,9 @@
 - `max_ttl` no longer extends shorter lifetimes from an `Expires` header or the `Last-Modified` heuristic to `max_ttl`, and now also caps `s-maxage` in shared caches
 - `max_ttl` no longer drops a `Pragma: no-cache` from responses without a `Cache-Control` header
 - The crate documentation no longer suggests `max_ttl` expires responses in `CacheMode::IgnoreRules`, which does not check freshness
+- `max_ttl` no longer drops `no-store` or `private` directives sent in a separate `Cache-Control` header
+- `CacheMode::NoCache` now revalidates cached responses with conditional requests
+- `default_ttl` and `max_ttl` now apply again after a 304, and the `Cache-Control` they synthesize is no longer added to responses
 
 ## [1.0.0-alpha.8] - 2026-09-08
 

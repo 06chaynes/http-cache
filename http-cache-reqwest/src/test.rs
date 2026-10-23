@@ -4,8 +4,9 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-use crate::client_middleware::ClientBuilder;
+use crate::client_middleware::{self, ClientBuilder};
 use http_cache::*;
+use http_cache_semantics::CachePolicy;
 use reqwest::Client;
 #[cfg(any(feature = "streaming", feature = "rate-limiting"))]
 use wiremock::matchers::path;
@@ -249,6 +250,118 @@ async fn default_ttl_applies_to_streaming_responses() -> Result<()> {
             let response = client.get(&url).send().await?;
             assert_eq!(response.bytes().await?, TEST_BODY);
         }
+    }
+    Ok(())
+}
+
+const HOUR: Duration = Duration::from_secs(3600);
+
+/// `(origin cache-control, default_ttl, max_ttl)` for a stored response
+/// revalidated by a 304 that repeats its `cache-control`, each fresh for `HOUR`.
+const TTL_AFTER_REVALIDATION: [(
+    Option<&str>,
+    Option<Duration>,
+    Option<Duration>,
+); 2] = [(None, Some(HOUR), None), (Some("max-age=86400"), None, Some(HOUR))];
+
+/// Sends two requests through `cache` in `NoCache` mode, the second answered
+/// by a 304, and returns that response with the cache key.
+async fn revalidate(
+    cache: impl client_middleware::Middleware,
+    cache_control: Option<&str>,
+) -> Result<(reqwest::Response, String)> {
+    const ETAG: &str = "\"v1\"";
+    let template = |status: u16| {
+        let template =
+            ResponseTemplate::new(status).insert_header("etag", ETAG);
+        match cache_control {
+            Some(value) => template.insert_header("cache-control", value),
+            None => template,
+        }
+    };
+    let mock_server = MockServer::start().await;
+    Mock::given(method(GET))
+        .and(header("if-none-match", ETAG))
+        .respond_with(template(304))
+        .expect(1)
+        .mount(&mock_server)
+        .await;
+    Mock::given(method(GET))
+        .respond_with(template(200).set_body_bytes(TEST_BODY))
+        .expect(1)
+        .mount(&mock_server)
+        .await;
+    let url = format!("{}/", mock_server.uri());
+    let client = ClientBuilder::new(Client::new()).with(cache).build();
+
+    client.get(&url).send().await?;
+    let res = client.get(&url).send().await?;
+    Ok((res, format!("{}:{}", GET, url_parse(&url)?)))
+}
+
+/// Asserts the revalidated `res` has the origin's `cache_control`, and that
+/// `policy` keeps it fresh for `HOUR`.
+#[track_caller]
+fn assert_revalidated(
+    res: &reqwest::Response,
+    policy: &CachePolicy,
+    cache_control: Option<&str>,
+) {
+    assert_eq!(
+        res.headers().get("cache-control").and_then(|v| v.to_str().ok()),
+        cache_control
+    );
+    let ttl = policy.time_to_live(SystemTime::now());
+    assert!(
+        ttl <= HOUR && ttl + Duration::from_secs(5) > HOUR,
+        "expected a ttl of {HOUR:?}, got {ttl:?}"
+    );
+}
+
+#[tokio::test]
+async fn ttl_applies_after_revalidating_buffered_responses() -> Result<()> {
+    for (cache_control, default_ttl, max_ttl) in TTL_AFTER_REVALIDATION {
+        let manager = create_cache_manager();
+        let (res, key) = revalidate(
+            Cache(HttpCache {
+                mode: CacheMode::NoCache,
+                manager: manager.clone(),
+                options: HttpCacheOptions {
+                    default_ttl,
+                    max_ttl,
+                    ..Default::default()
+                },
+            }),
+            cache_control,
+        )
+        .await?;
+        let (_, policy) =
+            CacheManager::get(&manager, &key).await?.expect("stored");
+        assert_revalidated(&res, &policy, cache_control);
+    }
+    Ok(())
+}
+
+#[cfg(feature = "streaming")]
+#[tokio::test]
+async fn ttl_applies_after_revalidating_streaming_responses() -> Result<()> {
+    use crate::StreamingCache;
+    use http_cache::StreamingManager;
+
+    for (cache_control, default_ttl, max_ttl) in TTL_AFTER_REVALIDATION {
+        let manager = StreamingManager::with_temp_dir(100).await?;
+        let (res, key) = revalidate(
+            StreamingCache::with_options(
+                manager.clone(),
+                CacheMode::NoCache,
+                HttpCacheOptions { default_ttl, max_ttl, ..Default::default() },
+            ),
+            cache_control,
+        )
+        .await?;
+        let (_, policy) =
+            StreamingCacheManager::get(&manager, &key).await?.expect("stored");
+        assert_revalidated(&res, &policy, cache_control);
     }
     Ok(())
 }
