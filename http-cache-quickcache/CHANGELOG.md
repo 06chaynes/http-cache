@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- Exposed `parking_lot` and `custom-hasher` features to control the corresponding `quick_cache` features. Both remain enabled by default.
+
 ## [1.0.0-alpha.9] - 2026-10-22
 
 ### Changed

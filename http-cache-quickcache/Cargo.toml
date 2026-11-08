@@ -19,7 +19,7 @@ rust-version = "1.89.0"
 postcard = { version = "1.1", default-features = false, features = ["alloc"] }
 http-cache-semantics = "3.0.0"
 serde = { version = "1.0.217", features = ["derive"] }
-quick_cache = "0.7.0"
+quick_cache = { version = "0.7.0", default-features = false }
 http = "1.2.0"
 
 [dependencies.http-cache]
@@ -49,7 +49,9 @@ default-features = false
 features = ["reqwest-middleware", "manager-cacache"]
 
 [features]
-default = ["url-standard"]
+default = ["url-standard", "parking_lot", "custom-hasher"]
+parking_lot = ["quick_cache/parking_lot"]
+custom-hasher = ["quick_cache/custom-hasher"]
 url-standard = ["http-cache/url-standard", "http-cache-reqwest/url-standard"]
 url-ada = ["http-cache/url-ada", "http-cache-reqwest/url-ada"]
 http-headers-compat = ["http-cache/http-headers-compat"]

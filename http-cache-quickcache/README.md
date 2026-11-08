@@ -86,6 +86,26 @@ async fn handle_request(
 }
 ```
 
+## Features
+
+The default features are `url-standard`, `parking_lot`, and `custom-hasher`.
+
+- `parking_lot`: enables QuickCache's `parking_lot` synchronization primitives.
+  When disabled, QuickCache uses standard library synchronization unless its
+  `sharded-lock` feature is enabled elsewhere.
+- `custom-hasher`: enables QuickCache's fast default hasher (currently foldhash).
+  When disabled, QuickCache uses the standard library's default hasher.
+
+To disable both QuickCache features while keeping the standard URL backend:
+
+```toml
+http-cache-quickcache = { version = "1.0.0-alpha.9", default-features = false, features = ["url-standard"] }
+```
+
+A URL backend (`url-standard` or `url-ada`) must be enabled. You can opt back into
+`parking_lot` and `custom-hasher` independently. Cargo unifies dependency features,
+so another dependency can still enable these features on `quick_cache`.
+
 ## Documentation
 
 - [API Docs](https://docs.rs/http-cache-quickcache)
