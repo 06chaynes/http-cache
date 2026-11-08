@@ -1352,9 +1352,19 @@ pub enum CacheMode {
     /// Always revalidates cached responses.
     ///
     /// This mode:
+    /// - Sends `Cache-Control: no-cache` on cacheable requests, even on a cache miss
     /// - Makes conditional requests if a cached response exists
-    /// - Makes normal requests if no cached response exists
+    /// - Makes unconditional requests if no cached response exists
     /// - Updates the cache with responses
+    ///
+    /// The request directive asks intermediary caches to validate stored responses
+    /// with the origin server before reusing them ([RFC 9111 §5.2.1.4]).
+    /// This uses `no-cache` on both hits and misses, replacing any existing
+    /// `Cache-Control` value. This differs from [Fetch's header generation], which
+    /// adds `max-age=0` when `Cache-Control` is absent.
+    ///
+    /// [RFC 9111 §5.2.1.4]: https://www.rfc-editor.org/rfc/rfc9111.html#section-5.2.1.4
+    /// [Fetch's header generation]: https://fetch.spec.whatwg.org/#http-network-or-cache-fetch
     ///
     /// Use this when you want to ensure content freshness while still benefiting
     /// from conditional requests (304 Not Modified responses).
@@ -2454,7 +2464,13 @@ where
                 _ => {
                     let url = extract_url_from_request_parts(parts)?;
                     self.apply_rate_limiting(&url).await;
-                    let response = fetch(FetchRequest::Fresh).await?;
+                    let fetch_request =
+                        if analysis.cache_mode == CacheMode::NoCache {
+                            FetchRequest::FreshNoCache
+                        } else {
+                            FetchRequest::Fresh
+                        };
+                    let response = fetch(fetch_request).await?;
                     self.remote_fetch_and_cache(analysis, response).await
                 }
             }
@@ -2978,6 +2994,10 @@ impl<T: CacheManager> HttpCache<T> {
                         res.cache_lookup_status(HitOrMiss::MISS);
                     }
                     Ok(res)
+                }
+                CacheMode::NoCache => {
+                    middleware.force_no_cache()?;
+                    self.remote_fetch(&mut middleware).await
                 }
                 _ => self.remote_fetch(&mut middleware).await,
             }

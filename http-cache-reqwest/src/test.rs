@@ -563,6 +563,7 @@ async fn no_cache_mode() -> Result<()> {
 async fn no_cache_mode_revalidates_with_conditional_request() -> Result<()> {
     let mock_server = MockServer::start().await;
     let m = Mock::given(method(GET))
+        .and(header("cache-control", "no-cache"))
         .respond_with(
             ResponseTemplate::new(200)
                 .insert_header("cache-control", CACHEABLE_PUBLIC)
@@ -572,6 +573,7 @@ async fn no_cache_mode_revalidates_with_conditional_request() -> Result<()> {
         .expect(1);
     let m_304 = Mock::given(method(GET))
         .and(header("if-none-match", "\"v1\""))
+        .and(header("cache-control", "no-cache"))
         .respond_with(
             ResponseTemplate::new(304).insert_header("etag", "\"v1\""),
         )
@@ -3439,6 +3441,7 @@ mod streaming_cache_modes {
     {
         let mock_server = MockServer::start().await;
         let m = Mock::given(method(GET))
+            .and(header("cache-control", "no-cache"))
             .respond_with(
                 ResponseTemplate::new(200)
                     .insert_header("cache-control", CACHEABLE_PUBLIC)
@@ -3448,6 +3451,7 @@ mod streaming_cache_modes {
             .expect(1);
         let m304 = Mock::given(method(GET))
             .and(header("if-none-match", "\"v1\""))
+            .and(header("cache-control", "no-cache"))
             .respond_with(
                 ResponseTemplate::new(304).insert_header("etag", "\"v1\""),
             )
