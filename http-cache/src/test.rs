@@ -76,10 +76,7 @@ fn response_methods_work() -> Result<()> {
     let parts = http_res.into_parts().0;
     let cloned_headers = parts.headers.clone();
     res.update_headers(&parts)?;
-    assert!(res.must_revalidate());
     assert_eq!(res.parts()?.headers, cloned_headers);
-    res.headers.remove(CACHE_CONTROL.as_str());
-    assert!(!res.must_revalidate());
     Ok(())
 }
 
@@ -1905,4 +1902,28 @@ mod ttl_tests {
             [("cache-control", "public"), ("cache-control", "max-age=86400")];
         assert_ttl(ttl(&options(Some(MIN), Some(HOUR)), &headers), HOUR);
     }
+}
+
+#[test]
+fn allows_stale_on_error_directives() -> Result<()> {
+    let cases = [
+        ("public, max-age=0", true, true),
+        ("Must-Revalidate", true, false),
+        ("no-cache", true, false),
+        ("no-cache=\"set-cookie\"", true, false),
+        ("proxy-revalidate", true, false),
+        ("proxy-revalidate", false, true),
+        ("s-maxage=0", true, false),
+        ("s-maxage=0", false, true),
+    ];
+    for (cache_control, shared, allowed) in cases {
+        let mut headers = http::HeaderMap::new();
+        headers.insert(CACHE_CONTROL, cache_control.parse()?);
+        assert_eq!(
+            crate::allows_stale_on_error(&headers, shared),
+            allowed,
+            "with {cache_control:?}, shared {shared}"
+        );
+    }
+    Ok(())
 }

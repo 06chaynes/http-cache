@@ -509,7 +509,7 @@ mod with_moka {
     #[tokio::test]
     async fn revalidation_500() -> Result<()> {
         let mock_server = MockServer::start().await;
-        let m = build_mock(MUST_REVALIDATE, TEST_BODY, 200, 1);
+        let m = build_mock("public, max-age=0", TEST_BODY, 200, 1);
         let m_500 = Mock::given(method(GET))
             .respond_with(ResponseTemplate::new(500))
             .expect(1);
@@ -545,6 +545,42 @@ mod with_moka {
         assert!(res.header("warning").is_some());
         assert_eq!(res.header(XCACHELOOKUP).unwrap(), HIT);
         assert_eq!(res.header(XCACHE).unwrap(), HIT);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn revalidation_500_must_revalidate() -> Result<()> {
+        let mock_server = MockServer::start().await;
+        let m = build_mock(MUST_REVALIDATE, TEST_BODY, 200, 1);
+        let m_500 = Mock::given(method(GET))
+            .respond_with(ResponseTemplate::new(500))
+            .expect(1);
+        let mock_guard = mock_server.register_as_scoped(m).await;
+        let url = format!("{}/", mock_server.uri());
+        let manager = MokaManager::default();
+        let req = Request::new(Method::Get, url_parse(&url)?);
+
+        // Construct Surf client with cache defaults
+        let client = Client::new().with(Cache(HttpCache {
+            mode: CacheMode::Default,
+            manager: manager.clone(),
+            options: Default::default(),
+        }));
+
+        // Cold pass to load cache
+        client.send(req.clone()).await?;
+
+        drop(mock_guard);
+
+        let _mock_guard = mock_server.register_as_scoped(m_500).await;
+
+        // must-revalidate forbids serving the stale response, so the 500 is
+        // passed on
+        let res = client.send(req).await?;
+        assert_eq!(res.status(), 500);
+        assert!(res.header("warning").is_none());
+        assert_eq!(res.header(XCACHELOOKUP).unwrap(), HIT);
+        assert_eq!(res.header(XCACHE).unwrap(), MISS);
         Ok(())
     }
 

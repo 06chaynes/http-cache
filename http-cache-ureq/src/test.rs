@@ -595,7 +595,7 @@ async fn revalidation_500() {
     let temp_dir = TempDir::new().unwrap();
     let manager = CACacheManager::new(temp_dir.path().into(), true);
     let mock_server = MockServer::start().await;
-    let m = build_mock(MUST_REVALIDATE, TEST_BODY, 200, 1);
+    let m = build_mock("public, max-age=0", TEST_BODY, 200, 1);
     let m_500 = Mock::given(method(GET))
         .respond_with(ResponseTemplate::new(500))
         .expect(1);
@@ -620,6 +620,37 @@ async fn revalidation_500() {
     assert_eq!(res.header("x-cache"), Some(HIT));
     assert!(res.header("warning").is_some());
     assert_eq!(res.as_bytes(), TEST_BODY);
+}
+
+#[tokio::test]
+async fn revalidation_500_must_revalidate() {
+    let temp_dir = TempDir::new().unwrap();
+    let manager = CACacheManager::new(temp_dir.path().into(), true);
+    let mock_server = MockServer::start().await;
+    let m = build_mock(MUST_REVALIDATE, TEST_BODY, 200, 1);
+    let m_500 = Mock::given(method(GET))
+        .respond_with(ResponseTemplate::new(500))
+        .expect(1);
+    let mock_guard = mock_server.register_as_scoped(m).await;
+    let url = format!("{}/", mock_server.uri());
+    let agent = CachedAgent::builder()
+        .cache_manager(manager.clone())
+        .cache_mode(CacheMode::Default)
+        .build()
+        .unwrap();
+
+    let _ = agent.get(&url).call().await.unwrap();
+
+    drop(mock_guard);
+    let _mock_guard = mock_server.register_as_scoped(m_500).await;
+
+    // must-revalidate forbids serving the stale response, so the 500 is
+    // passed on
+    let res = agent.get(&url).call().await.unwrap();
+    assert_eq!(res.status(), 500);
+    assert_eq!(res.header("x-cache-lookup"), Some(HIT));
+    assert_eq!(res.header("x-cache"), Some(MISS));
+    assert!(res.header("warning").is_none());
 }
 
 #[tokio::test]

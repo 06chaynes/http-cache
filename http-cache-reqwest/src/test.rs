@@ -366,6 +366,165 @@ async fn ttl_applies_after_revalidating_streaming_responses() -> Result<()> {
     Ok(())
 }
 
+/// What the cache holds after the revalidation of a stored 200.
+#[derive(Clone, Copy, Debug)]
+enum Stored {
+    /// Nothing: the stored 200 was removed.
+    Nothing,
+    /// The stored 200, which is still stale.
+    Old,
+    /// The full response, fresh, so the next request is served from it.
+    Fresh,
+    /// The full response, already stale.
+    Stale,
+}
+
+impl Stored {
+    /// The status and body stored after a full `status` response.
+    fn entry(self, status: u16) -> Option<(u16, &'static [u8])> {
+        match self {
+            Stored::Nothing => None,
+            Stored::Old => Some((200, TEST_BODY)),
+            Stored::Fresh | Stored::Stale => {
+                Some((status, full_response_body(status)))
+            }
+        }
+    }
+}
+
+/// `(status, cache-control, what's stored afterwards)` for a full response to
+/// the revalidation of a stored 200.
+const FULL_RESPONSE_ON_REVALIDATION: [(u16, Option<&str>, Stored); 7] = [
+    // An uncacheable response removes the stored one.
+    (200, Some("no-store"), Stored::Nothing),
+    (204, Some("no-store"), Stored::Nothing),
+    (410, Some("no-store"), Stored::Nothing),
+    // A cacheable response replaces it, whatever its status.
+    (204, Some("max-age=60"), Stored::Fresh),
+    (404, Some(CACHEABLE_PUBLIC), Stored::Fresh),
+    // Including statuses that are cacheable by default without caching headers.
+    (204, None, Stored::Stale),
+    // A server error keeps it.
+    (503, Some("no-store"), Stored::Old),
+];
+
+/// The body of the full response to a revalidation with `status`.
+fn full_response_body(status: u16) -> &'static [u8] {
+    if status == 204 { b"" } else { b"updated" }
+}
+
+/// Stores a stale 200, then revalidates it in `Default` mode and gets a full
+/// `status` response with `cache_control`, which is passed on as is. The 200
+/// has `must-revalidate`, so a server error is passed on too. When
+/// `stored` is fresh, a third request must be served from the cache. Returns
+/// the cache key.
+async fn revalidate_with_full_response(
+    cache: impl client_middleware::Middleware,
+    status: u16,
+    cache_control: Option<&str>,
+    stored: Stored,
+) -> Result<String> {
+    const ETAG: &str = "\"v1\"";
+    let template = ResponseTemplate::new(status)
+        .set_body_bytes(full_response_body(status));
+    let template = match cache_control {
+        Some(value) => template.insert_header("cache-control", value),
+        None => template,
+    };
+    let mock_server = MockServer::start().await;
+    Mock::given(method(GET))
+        .and(header("if-none-match", ETAG))
+        .respond_with(template)
+        .expect(1)
+        .mount(&mock_server)
+        .await;
+    Mock::given(method(GET))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("cache-control", "max-age=0, must-revalidate")
+                .insert_header("etag", ETAG)
+                .set_body_bytes(TEST_BODY),
+        )
+        .expect(1)
+        .mount(&mock_server)
+        .await;
+    let url = format!("{}/", mock_server.uri());
+    let client = ClientBuilder::new(Client::new()).with(cache).build();
+
+    client.get(&url).send().await?;
+    let res = client.get(&url).send().await?;
+    assert_eq!(res.status(), status);
+    assert_eq!(res.headers()[XCACHE], "MISS");
+    assert_eq!(res.bytes().await?, full_response_body(status));
+
+    if let Stored::Fresh = stored {
+        // The mocks' `expect(1)` also rule out another server request.
+        let res = client.get(&url).send().await?;
+        assert_eq!(res.status(), status);
+        assert_eq!(res.headers()[XCACHE], "HIT");
+        assert_eq!(res.bytes().await?, full_response_body(status));
+    }
+    Ok(format!("{}:{}", GET, url_parse(&url)?))
+}
+
+#[tokio::test]
+async fn full_response_on_revalidation_replaces_buffered_entry() -> Result<()> {
+    for (status, cache_control, stored) in FULL_RESPONSE_ON_REVALIDATION {
+        let manager = create_cache_manager();
+        let key = revalidate_with_full_response(
+            Cache(HttpCache {
+                mode: CacheMode::Default,
+                manager: manager.clone(),
+                options: Default::default(),
+            }),
+            status,
+            cache_control,
+            stored,
+        )
+        .await?;
+        let entry = CacheManager::get(&manager, &key).await?;
+        assert_eq!(
+            entry.as_ref().map(|(res, _)| (res.status, &res.body[..])),
+            stored.entry(status),
+            "after a {status} with {cache_control:?}"
+        );
+    }
+    Ok(())
+}
+
+#[cfg(feature = "streaming")]
+#[tokio::test]
+async fn full_response_on_revalidation_replaces_streaming_entry() -> Result<()>
+{
+    use crate::StreamingCache;
+    use http_body_util::BodyExt;
+    use http_cache::StreamingManager;
+
+    for (status, cache_control, stored) in FULL_RESPONSE_ON_REVALIDATION {
+        let manager = StreamingManager::with_temp_dir(100).await?;
+        let key = revalidate_with_full_response(
+            StreamingCache::new(manager.clone(), CacheMode::Default),
+            status,
+            cache_control,
+            stored,
+        )
+        .await?;
+        let entry = match StreamingCacheManager::get(&manager, &key).await? {
+            Some((res, _)) => {
+                let status = res.status().as_u16();
+                Some((status, res.into_body().collect().await?.to_bytes()))
+            }
+            None => None,
+        };
+        assert_eq!(
+            entry.as_ref().map(|(status, body)| (*status, &body[..])),
+            stored.entry(status),
+            "after a {status} with {cache_control:?}"
+        );
+    }
+    Ok(())
+}
+
 #[tokio::test]
 async fn no_cache_mode() -> Result<()> {
     let mock_server = MockServer::start().await;
@@ -1038,42 +1197,97 @@ async fn no_duplicate_headers_on_revalidation() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]
-async fn revalidation_500() -> Result<()> {
+/// `(stored cache-control, status served)` when revalidating a stale 200 gets
+/// a 500.
+/// The stored response's `Cache-Control`, whether it varies on a header that
+/// differs in the second request, and the status of the response to it.
+const SERVER_ERROR_ON_REVALIDATION: [(&str, bool, u16); 6] = [
+    // Served stale, as if the server hadn't responded.
+    ("public, max-age=0", false, 200),
+    // These forbid serving it stale (a shared cache is the default), so the
+    // 500 is passed on.
+    ("public, must-revalidate", false, 500),
+    ("public, no-cache", false, 500),
+    ("public, max-age=0, proxy-revalidate", false, 500),
+    ("public, s-maxage=0", false, 500),
+    // The stored response is for another variant.
+    ("public, max-age=0", true, 500),
+];
+
+/// Stores a stale 200 with `cache_control`, then revalidates it in `Default`
+/// mode and gets a 500. Checks that the response is `status`.
+async fn revalidate_with_server_error(
+    cache: impl client_middleware::Middleware,
+    cache_control: &str,
+    vary: bool,
+    status: u16,
+) -> Result<()> {
     let mock_server = MockServer::start().await;
-    let m = build_mock("public, must-revalidate", TEST_BODY, 200, 1);
+    let m = Mock::given(method(GET))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("cache-control", cache_control)
+                .insert_header("vary", "x-user")
+                .set_body_bytes(TEST_BODY),
+        )
+        .expect(1);
     let m_500 = Mock::given(method(GET))
         .respond_with(ResponseTemplate::new(500))
         .expect(1);
     let mock_guard = mock_server.register_as_scoped(m).await;
     let url = format!("{}/", mock_server.uri());
-    let manager = create_cache_manager();
+    let client = ClientBuilder::new(Client::new()).with(cache).build();
 
-    // Construct reqwest client with cache defaults
-    let client = ClientBuilder::new(Client::new())
-        .with(Cache(HttpCache {
-            mode: CacheMode::Default,
-            manager: manager.clone(),
-            options: Default::default(),
-        }))
-        .build();
-
-    // Cold pass to load cache
-    client.get(url.clone()).send().await?;
-
+    client.get(&url).header("x-user", "a").send().await?;
     drop(mock_guard);
     let _mock_guard = mock_server.register_as_scoped(m_500).await;
 
-    // Try to load cached object
-    let data =
-        CacheManager::get(&manager, &format!("{}:{}", GET, url_parse(&url)?))
-            .await?;
-    assert!(data.is_some());
+    let user = if vary { "b" } else { "a" };
+    let res = client.get(&url).header("x-user", user).send().await?;
+    assert_eq!(res.status(), status, "with {cache_control:?}, vary {vary}");
+    let stale = status == 200;
+    assert_eq!(res.headers().contains_key("warning"), stale);
+    let body: &[u8] = if stale { TEST_BODY } else { b"" };
+    assert_eq!(res.bytes().await?, body);
+    Ok(())
+}
 
-    // Hot pass to make sure revalidation request was sent
-    let res = client.get(url).send().await?;
-    assert!(res.headers().get("warning").is_some());
-    assert_eq!(res.bytes().await?, TEST_BODY);
+#[tokio::test]
+async fn revalidation_500() -> Result<()> {
+    for (cache_control, vary, status) in SERVER_ERROR_ON_REVALIDATION {
+        revalidate_with_server_error(
+            Cache(HttpCache {
+                mode: CacheMode::Default,
+                manager: create_cache_manager(),
+                options: Default::default(),
+            }),
+            cache_control,
+            vary,
+            status,
+        )
+        .await?;
+    }
+    Ok(())
+}
+
+#[cfg(feature = "streaming")]
+#[tokio::test]
+async fn streaming_revalidation_500() -> Result<()> {
+    use crate::StreamingCache;
+    use http_cache::StreamingManager;
+
+    for (cache_control, vary, status) in SERVER_ERROR_ON_REVALIDATION {
+        revalidate_with_server_error(
+            StreamingCache::new(
+                StreamingManager::with_temp_dir(100).await?,
+                CacheMode::Default,
+            ),
+            cache_control,
+            vary,
+            status,
+        )
+        .await?;
+    }
     Ok(())
 }
 

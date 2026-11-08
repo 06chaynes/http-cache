@@ -900,14 +900,10 @@ mod tests {
 
     #[tokio::test]
     async fn revalidation_500() -> Result<()> {
-        let cache_dir = tempfile::tempdir()?;
-        let cache_manager =
-            CACacheManager::new(cache_dir.path().to_path_buf(), false);
-        let cache_layer = HttpCacheLayer::new(cache_manager);
-
         #[derive(Clone)]
         struct RevalidationService {
             call_count: std::sync::Arc<std::sync::Mutex<usize>>,
+            cache_control: &'static str,
         }
 
         impl Service<Request<Full<Bytes>>> for RevalidationService {
@@ -933,6 +929,7 @@ mod tests {
 
             fn call(&mut self, _req: Request<Full<Bytes>>) -> Self::Future {
                 let call_count = self.call_count.clone();
+                let cache_control = self.cache_control;
                 Box::pin(async move {
                     let count = {
                         let mut count = call_count.lock().unwrap();
@@ -941,10 +938,10 @@ mod tests {
                     };
 
                     if count == 1 {
-                        // First request - return cacheable response with must-revalidate
+                        // First request - return cacheable, already stale response
                         Ok(Response::builder()
                             .status(StatusCode::OK)
-                            .header("cache-control", "public, must-revalidate")
+                            .header("cache-control", cache_control)
                             .header("etag", "\"123456\"")
                             .header("content-type", "text/plain")
                             .body(Full::new(Bytes::from(TEST_BODY)))?)
@@ -958,33 +955,50 @@ mod tests {
             }
         }
 
-        let service = RevalidationService {
-            call_count: std::sync::Arc::new(std::sync::Mutex::new(0)),
-        };
+        // `(stored cache-control, status served)` when the origin returns 500
+        // during revalidation.  Per RFC 9111 s4.3.3, the core acts as if the
+        // server hadn't responded and returns the stale cached response (200
+        // OK) with a "111 Revalidation failed" warning header, unless
+        // must-revalidate forbids that and the 5xx is forwarded.
+        for (cache_control, status) in [
+            ("public, max-age=0", StatusCode::OK),
+            ("public, must-revalidate", StatusCode::INTERNAL_SERVER_ERROR),
+        ] {
+            let cache_dir = tempfile::tempdir()?;
+            let cache_manager =
+                CACacheManager::new(cache_dir.path().to_path_buf(), false);
+            let cache_layer = HttpCacheLayer::new(cache_manager);
+            let service = RevalidationService {
+                call_count: std::sync::Arc::new(std::sync::Mutex::new(0)),
+                cache_control,
+            };
 
-        let mut cached_service = cache_layer.layer(service);
+            let mut cached_service = cache_layer.layer(service);
 
-        // First request - should cache
-        let request1 = Request::builder()
-            .uri("https://example.com/revalidate-500")
-            .method("GET")
-            .body(Full::new(Bytes::new()))?;
+            // First request - should cache
+            let request1 = Request::builder()
+                .uri("https://example.com/revalidate-500")
+                .method("GET")
+                .body(Full::new(Bytes::new()))?;
 
-        let response1 = cached_service.ready().await?.call(request1).await?;
-        assert_eq!(response1.status(), StatusCode::OK);
+            let response1 =
+                cached_service.ready().await?.call(request1).await?;
+            assert_eq!(response1.status(), StatusCode::OK);
 
-        // Second request - the origin returns 500 during revalidation of a
-        // must-revalidate response.  Per RFC 7234, the core returns the stale
-        // cached response (200 OK) with a "111 Revalidation failed" warning
-        // header instead of forwarding the 5xx.
-        let request2 = Request::builder()
-            .uri("https://example.com/revalidate-500")
-            .method("GET")
-            .body(Full::new(Bytes::new()))?;
+            // Second request - the origin returns 500 during revalidation
+            let request2 = Request::builder()
+                .uri("https://example.com/revalidate-500")
+                .method("GET")
+                .body(Full::new(Bytes::new()))?;
 
-        let response2 = cached_service.ready().await?.call(request2).await?;
-        assert_eq!(response2.status(), StatusCode::OK);
-        assert!(response2.headers().get("warning").is_some());
+            let response2 =
+                cached_service.ready().await?.call(request2).await?;
+            assert_eq!(response2.status(), status, "with {cache_control:?}");
+            assert_eq!(
+                response2.headers().contains_key("warning"),
+                status == StatusCode::OK
+            );
+        }
 
         Ok(())
     }
