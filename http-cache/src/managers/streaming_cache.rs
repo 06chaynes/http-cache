@@ -559,6 +559,18 @@ impl StreamingManager {
         let _ = tokio::fs::remove_file(body_path).await;
     }
 
+    /// Removes the entry stored under `cache_key`, if there is one, so a
+    /// declined put doesn't leave an older response in place of the new one.
+    /// Skips the redb write when there isn't, since a decline can be routine.
+    async fn remove_stored(&self, cache_key: &str) {
+        let exists = self.metadata.contains_key(cache_key)
+            || !matches!(self.redb_get(cache_key).await, Ok(None));
+        if exists {
+            // `delete` cleans up best-effort and doesn't return errors.
+            let _ = StreamingCacheManager::delete(self, cache_key).await;
+        }
+    }
+
     /// Return the striped shard lock for the given body hash: get() takes
     /// it shared, put/delete/heal take it exclusive. Callers must not
     /// acquire a second shard lock while already holding one.
@@ -1103,6 +1115,7 @@ impl StreamingCacheManager for StreamingManager {
             || (!is_head
                 && content_length.is_some_and(|cl| cl > self.max_body_size))
         {
+            self.remove_stored(&cache_key).await;
             return Ok(Response::from_parts(
                 parts,
                 StreamingBody::streaming(inner),
@@ -1120,6 +1133,7 @@ impl StreamingCacheManager for StreamingManager {
             log::debug!(
                 "put: create body subdir failed; serving uncached: {e}"
             );
+            self.remove_stored(&cache_key).await;
             return Ok(Response::from_parts(
                 parts,
                 StreamingBody::streaming(inner),
@@ -1139,6 +1153,7 @@ impl StreamingCacheManager for StreamingManager {
             Ok(f) => f,
             Err(e) => {
                 log::debug!("put: open tmp failed; serving uncached: {e}");
+                self.remove_stored(&cache_key).await;
                 return Ok(Response::from_parts(
                     parts,
                     StreamingBody::streaming(inner),
@@ -1151,6 +1166,7 @@ impl StreamingCacheManager for StreamingManager {
         if let Err(e) = spool_write(&mut file, &nonce).await {
             log::debug!("put: nonce write failed; serving uncached: {e}");
             drop(file); // close before the guard unlinks
+            self.remove_stored(&cache_key).await;
             return Ok(Response::from_parts(
                 parts,
                 StreamingBody::streaming(inner),
@@ -1178,6 +1194,7 @@ impl StreamingCacheManager for StreamingManager {
                     };
                     if written + data.len() as u64 > self.max_body_size {
                         // Unknown-length overflow: decline, keep serving.
+                        self.remove_stored(&cache_key).await;
                         return serve_uncached_spooled(
                             parts,
                             file,
@@ -1191,6 +1208,7 @@ impl StreamingCacheManager for StreamingManager {
                         log::debug!(
                             "put: spool write failed; serving uncached: {e}"
                         );
+                        self.remove_stored(&cache_key).await;
                         return serve_uncached_spooled(
                             parts,
                             file,
@@ -1215,12 +1233,14 @@ impl StreamingCacheManager for StreamingManager {
                 "put: content-length {cl} != received {written}; \
                  serving uncached (incomplete response)"
             );
+            self.remove_stored(&cache_key).await;
             return serve_uncached_spooled(
                 parts, file, guard, written, None, None,
             );
         }
         if let Err(e) = file.sync_all().await {
             log::debug!("put: fsync failed; serving uncached: {e}");
+            self.remove_stored(&cache_key).await;
             return serve_uncached_spooled(
                 parts, file, guard, written, None, None,
             );
@@ -1246,6 +1266,7 @@ impl StreamingCacheManager for StreamingManager {
                 log::debug!(
                     "put: metadata serialization failed; serving uncached: {e}"
                 );
+                self.remove_stored(&cache_key).await;
                 return serve_uncached_spooled(
                     parts, file, guard, written, None, None,
                 );
@@ -1257,6 +1278,7 @@ impl StreamingCacheManager for StreamingManager {
             let _guard_lock = self.key_lock(&body_hash).write().await;
             if let Err(e) = tokio::fs::rename(&tmp_path, &final_path).await {
                 log::debug!("put: rename failed; serving uncached: {e}");
+                self.self_heal(&cache_key, &final_path).await;
                 return serve_uncached_spooled(
                     parts, file, guard, written, None, None,
                 );
@@ -1312,7 +1334,7 @@ impl StreamingCacheManager for StreamingManager {
                 // opens files with FILE_SHARE_DELETE on Windows, so the
                 // unlink is legal there too).
                 log::debug!("put: redb commit failed; serving uncached: {e}");
-                let _ = tokio::fs::remove_file(&final_path).await;
+                self.self_heal(&cache_key, &final_path).await;
                 return serve_uncached_spooled(
                     parts, file, guard, written, None, None,
                 );
@@ -1524,6 +1546,30 @@ mod tests {
 
     async fn read_body_bytes(resp: Response<ManagerBody>) -> Bytes {
         resp.into_body().collect().await.unwrap().to_bytes()
+    }
+
+    /// Stores an "old" response under `key`, for a declined put to remove.
+    async fn put_old_entry(manager: &StreamingManager, key: &str) {
+        let stored = manager
+            .put(
+                key.into(),
+                response_with_body(Bytes::from("old")),
+                sample_policy(),
+                test_url(),
+                None,
+            )
+            .await
+            .unwrap();
+        assert_eq!(read_body_bytes(stored).await, "old");
+        assert!(manager.get(key).await.unwrap().is_some());
+    }
+
+    /// Asserts nothing is stored under `key`: no metadata, no body file.
+    async fn assert_removed(manager: &StreamingManager, key: &str) {
+        assert!(manager.get(key).await.unwrap().is_none());
+        assert!(manager.redb_get(key).await.unwrap().is_none());
+        let body_path = body_path_for(&manager.body_dir, &body_hash_for(key));
+        assert!(!body_path.exists());
     }
 
     #[tokio::test]
@@ -2812,6 +2858,68 @@ mod tests {
         assert_eq!(tmp_entries, 0);
     }
 
+    /// A declined put removes the entry already stored under its key, so the
+    /// older response isn't served in place of the new one.
+    #[tokio::test]
+    async fn test_put_decline_removes_stored_entry() {
+        let dir = TempDir::new().unwrap();
+        let manager = StreamingManager::with_max_body_size(
+            dir.path().to_path_buf(),
+            100,
+            5,
+        )
+        .await
+        .unwrap();
+        let key = "GET:https://example.com/test";
+
+        // Declined up front by its Content-Length, or while spooling.
+        for content_length in [Some("7"), None] {
+            put_old_entry(&manager, key).await;
+
+            let mut response = response_with_body(Bytes::from("too big"));
+            if let Some(content_length) = content_length {
+                response.headers_mut().insert(
+                    http::header::CONTENT_LENGTH,
+                    http::HeaderValue::from_static(content_length),
+                );
+            }
+            let returned = manager
+                .put(key.into(), response, sample_policy(), test_url(), None)
+                .await
+                .unwrap();
+            assert_eq!(read_body_bytes(returned).await, "too big");
+            assert_removed(&manager, key).await;
+        }
+    }
+
+    /// A put that can't spool, here because the tmp dir is unusable, also
+    /// removes the entry stored under its key.
+    #[tokio::test]
+    async fn test_put_spool_failure_removes_stored_entry() {
+        let dir = TempDir::new().unwrap();
+        let manager =
+            StreamingManager::new(dir.path().to_path_buf(), 100).await.unwrap();
+        let key = "GET:https://example.com/test";
+        put_old_entry(&manager, key).await;
+
+        let tmp_dir = dir.path().join("tmp");
+        std::fs::remove_dir_all(&tmp_dir).unwrap();
+        std::fs::write(&tmp_dir, b"not a directory").unwrap();
+
+        let returned = manager
+            .put(
+                key.into(),
+                response_with_body(Bytes::from("new")),
+                sample_policy(),
+                test_url(),
+                None,
+            )
+            .await
+            .unwrap();
+        assert_eq!(read_body_bytes(returned).await, "new");
+        assert_removed(&manager, key).await;
+    }
+
     /// Exact boundary: body of exactly max_body_size IS cached.
     #[tokio::test]
     async fn test_put_exactly_max_body_size_is_cached() {
@@ -2852,6 +2960,8 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let manager =
             StreamingManager::new(dir.path().to_path_buf(), 100).await.unwrap();
+        // A declined put also removes the entry stored before it.
+        put_old_entry(&manager, "GET:https://example.com/truncated").await;
         let body = Full::new(Bytes::from_static(b"short"));
         let response = Response::builder()
             .status(StatusCode::OK)
@@ -2870,13 +2980,7 @@ mod tests {
             .unwrap();
         let bytes = returned.into_body().collect().await.unwrap().to_bytes();
         assert_eq!(&bytes[..], b"short");
-        assert!(
-            manager
-                .get("GET:https://example.com/truncated")
-                .await
-                .unwrap()
-                .is_none()
-        );
+        assert_removed(&manager, "GET:https://example.com/truncated").await;
     }
 
     /// Upstream body error mid-stream: put() errors (unchanged contract) and

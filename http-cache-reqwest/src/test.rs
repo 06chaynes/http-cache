@@ -1155,6 +1155,55 @@ async fn revalidation_200() -> Result<()> {
     Ok(())
 }
 
+/// A revalidation whose new response is too large for the streaming cache
+/// must not leave the old response in its place.
+#[cfg(feature = "streaming")]
+#[tokio::test]
+async fn oversized_revalidation_removes_streaming_entry() -> Result<()> {
+    use crate::StreamingCache;
+    use http_cache::StreamingManager;
+
+    const ETAG: &str = "\"v1\"";
+    let mock_server = MockServer::start().await;
+    Mock::given(method(GET))
+        .and(header("if-none-match", ETAG))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("cache-control", "max-age=0")
+                .set_body_bytes(&b"updated"[..]),
+        )
+        .expect(1)
+        .mount(&mock_server)
+        .await;
+    Mock::given(method(GET))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("cache-control", "max-age=0")
+                .insert_header("etag", ETAG)
+                .set_body_bytes(TEST_BODY),
+        )
+        .expect(1)
+        .mount(&mock_server)
+        .await;
+    let url = format!("{}/", mock_server.uri());
+    let key = format!("{}:{}", GET, url_parse(&url)?);
+    let dir = tempfile::tempdir()?;
+    // Fits `TEST_BODY`, but not the new response.
+    let manager =
+        StreamingManager::with_max_body_size(dir.path().to_path_buf(), 100, 5)
+            .await?;
+    let client = ClientBuilder::new(Client::new())
+        .with(StreamingCache::new(manager.clone(), CacheMode::Default))
+        .build();
+
+    client.get(&url).send().await?;
+    assert!(StreamingCacheManager::get(&manager, &key).await?.is_some());
+    let res = client.get(&url).send().await?;
+    assert_eq!(res.bytes().await?, &b"updated"[..]);
+    assert!(StreamingCacheManager::get(&manager, &key).await?.is_none());
+    Ok(())
+}
+
 #[tokio::test]
 async fn no_duplicate_headers_on_revalidation() -> Result<()> {
     let mock_server = MockServer::start().await;
