@@ -18,18 +18,19 @@ use serde::{Deserialize, Serialize};
 ///
 /// ```rust,ignore
 /// use http_cache::FoyerManager;
-/// use foyer::HybridCacheBuilder;
-/// use std::path::PathBuf;
+/// use foyer::{
+///     BlockEngineConfig, DeviceBuilder, FsDeviceBuilder, HybridCacheBuilder,
+/// };
 ///
-/// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+/// # async fn example() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 /// // Build a hybrid cache with memory and disk storage
+/// let device = FsDeviceBuilder::new("./cache")
+///     .with_capacity(256 * 1024 * 1024)
+///     .build()?;
 /// let cache = HybridCacheBuilder::new()
 ///     .memory(64)
 ///     .storage()
-///     .with_device_config(
-///         foyer::DirectFsDeviceOptions::new(PathBuf::from("./cache"))
-///             .with_capacity(256 * 1024 * 1024)
-///     )
+///     .with_engine_config(BlockEngineConfig::new(device))
 ///     .build()
 ///     .await?;
 ///

@@ -111,7 +111,7 @@ use reqwest_middleware::ClientBuilder;
 use std::sync::Arc;
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let quota = Quota::per_second(std::num::NonZeroU32::new(5).unwrap());
     let rate_limiter = Arc::new(DomainRateLimiter::new(quota));
     
@@ -147,7 +147,7 @@ use surf::Client;
 use std::sync::Arc;
 
 #[tokio::main(flavor = "current_thread")]
-async fn main() -> surf::Result<()> {
+async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let quota = Quota::per_second(std::num::NonZeroU32::new(5).unwrap());
     let rate_limiter = Arc::new(DomainRateLimiter::new(quota));
 
@@ -179,6 +179,9 @@ use http_cache_tower::{HttpCacheLayer, RedbManager};
 use http_cache::{CacheMode, HttpCache, HttpCacheOptions};
 use http_cache_tower::{DomainRateLimiter, Quota};
 use tower::ServiceBuilder;
+use http::{Request, Response};
+use http_body_util::Full;
+use bytes::Bytes;
 use std::sync::Arc;
 
 #[tokio::main]
@@ -197,7 +200,11 @@ async fn main() {
 
     let service = ServiceBuilder::new()
         .layer(HttpCacheLayer::with_cache(cache))
-        .service_fn(your_service_function);
+        .service_fn(|_req: Request<Full<Bytes>>| async {
+            Ok::<_, std::convert::Infallible>(
+                Response::new(Full::new(Bytes::from("Hello, world!")))
+            )
+        });
 
     // Use the service - rate limiting will be applied on cache misses
 }
@@ -210,7 +217,7 @@ use http_cache_ureq::{CachedAgent, RedbManager, CacheMode, HttpCacheOptions};
 use http_cache_ureq::{DomainRateLimiter, Quota};
 use std::sync::Arc;
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     smol::block_on(async {
         let quota = Quota::per_second(std::num::NonZeroU32::new(5).unwrap());
         let rate_limiter = Arc::new(DomainRateLimiter::new(quota));
@@ -261,7 +268,7 @@ use reqwest_middleware::ClientBuilder;
 use std::sync::Arc;
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let quota = Quota::per_second(std::num::NonZeroU32::new(2).unwrap());
     let rate_limiter = Arc::new(DomainRateLimiter::new(quota));
 
@@ -294,13 +301,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ```rust
 use http_cache_tower::{HttpCacheStreamingLayer};
-use http_cache::{StreamingManager, CacheMode, HttpCacheOptions};
+use http_cache::{StreamingManager, HttpCacheOptions};
 use http_cache_tower::{DomainRateLimiter, Quota};
 use tower::ServiceBuilder;
+use http::{Request, Response};
+use http_body_util::Full;
+use bytes::Bytes;
 use std::sync::Arc;
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let quota = Quota::per_second(std::num::NonZeroU32::new(3).unwrap());
     let rate_limiter = Arc::new(DomainRateLimiter::new(quota));
 
@@ -316,9 +326,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let service = ServiceBuilder::new()
         .layer(layer)
-        .service_fn(your_streaming_service_function);
+        .service_fn(|_req: Request<Full<Bytes>>| async {
+            Ok::<_, std::convert::Infallible>(
+                Response::new(Full::new(Bytes::from("Hello, world!")))
+            )
+        });
 
     // Streaming responses will be rate limited on cache misses only
+    Ok(())
 }
 ```
 

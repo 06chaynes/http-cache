@@ -32,19 +32,20 @@ cargo add http-cache-ureq
 ```rust
 use http_cache_ureq::{RedbManager, CachedAgent};
 
-#[smol_macros::main]
-async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let client = CachedAgent::builder()
-        .cache_manager(RedbManager::new("./http-cache.redb")?)
-        .build()?;
+fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    smol::block_on(async {
+        let client = CachedAgent::builder()
+            .cache_manager(RedbManager::new("./http-cache.redb")?)
+            .build()?;
 
-    let response = client
-        .get("https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching")
-        .call()
-        .await?;
+        let response = client
+            .get("https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching")
+            .call()
+            .await?;
 
-    println!("Status: {}", response.status());
-    Ok(())
+        println!("Status: {}", response.status());
+        Ok(())
+    })
 }
 ```
 

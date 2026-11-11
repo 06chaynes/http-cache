@@ -44,7 +44,6 @@ impl DomainRateLimiter {
     /// # Example
     /// ```rust,ignore
     /// use http_cache::rate_limiting::{DomainRateLimiter, Quota};
-    /// use std::time::Duration;
     /// use std::num::NonZero;
     ///
     /// // Allow 10 requests per minute per domain
@@ -87,7 +86,6 @@ impl DirectRateLimiter {
     /// # Example
     /// ```rust,ignore
     /// use http_cache::rate_limiting::{DirectRateLimiter, Quota};
-    /// use std::time::Duration;
     /// use std::num::NonZero;
     ///
     /// // Allow 10 requests per minute total

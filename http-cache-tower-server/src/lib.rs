@@ -459,8 +459,8 @@ impl HttpBody for ResponseBody {
 
 /// Tower layer for server-side HTTP response caching.
 ///
-/// This layer should be placed AFTER routing to ensure request
-/// extensions (like path parameters) are preserved.
+/// This layer should be placed AFTER routing: a layer applies only to the
+/// routes added before it, so routes added after it are not cached.
 ///
 /// # Shared Cache Behavior
 ///

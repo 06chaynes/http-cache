@@ -2,6 +2,19 @@
 
 The following backend cache manager implementations are provided by this crate:
 
+## Size limits
+
+No manager removes entries because of their age, and `max_ttl` only limits how long a response is fresh. Whether a cache stops growing depends on the manager:
+
+| Manager | Limited by | How |
+|---------|------------|-----|
+| [moka](./moka.md) | entries or bytes | `Cache::new(entries)`, or a [weigher](./moka.md#limiting-the-cache-by-size) |
+| [quick_cache](./quick-cache.md) | entries | `Cache::new(entries)` |
+| [foyer](./foyer.md) | memory and disk capacity | `HybridCacheBuilder::memory` and `FsDeviceBuilder::with_capacity` |
+| [redb](./redb.md) | bytes, when asked | [`RedbManager::from_database_with_max_bytes`](./redb.md#limiting-the-cache-size) |
+| [cacache](./cacache.md) | nothing | Remove entries yourself, for example by the `size` and `time` that `cacache::list_sync` reports |
+| [streaming_cache](./streaming_cache.md) | bytes on disk, when asked | [`StreamingManagerOptions::max_bytes`](./streaming_cache.md#limiting-the-disk-size); `capacity` limits the in-memory metadata only |
+
 ## [cacache](./cacache.md)
 
 [`cacache`](https://github.com/zkat/cacache-rs) is a high-performance, concurrent, content-addressable disk cache, optimized for async APIs. Provides traditional buffered caching. Now **opt-in** (no longer the default); its upstream is dormant/unmaintained.

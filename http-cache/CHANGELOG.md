@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.0.0-alpha.10] - 2026-11-11
+
+### Added
+
+- Added `RedbManager::from_database_with_max_bytes` to limit the size of the stored entries. When a store takes the cache over the limit, the entries written longest ago are removed. A size-limited database must not also be written by `1.0.0-alpha.7` to `1.0.0-alpha.9`: entries those versions store or remove are not tracked by the limit
+- Added `StreamingManager::with_options` and `StreamingManagerOptions`, whose `max_bytes` limits the total size of the body files on disk. When a stored response takes the cache over the limit, the entries written or revalidated longest ago are removed
+
+### Fixed
+
+- A full response to a revalidation now replaces the stored response, or removes it when it cannot be cached. Previously only a `200` did, so an outdated response could stay in the cache
+- A stored response is now served stale after a failed revalidation only when it matches the request's `Vary` headers and has no `no-cache` or `must-revalidate`, nor `proxy-revalidate` or `s-maxage` in shared caches. Otherwise the error is passed on
+- `StreamingManager::put` now removes the stored entry when it declines a response, such as one over `max_body_size`, so the older response is no longer served in its place
+- `CacheMode::NoCache` now sends `Cache-Control: no-cache` on cache misses, not only on hits
+- `StreamingManager` now removes body files left without metadata by a crash when it is opened
+
 ## [1.0.0-alpha.9] - 2026-10-22
 
 ### Added

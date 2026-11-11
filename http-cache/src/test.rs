@@ -1,11 +1,25 @@
+#[cfg(any(
+    feature = "manager-cacache",
+    feature = "manager-redb",
+    feature = "manager-moka",
+    feature = "manager-foyer",
+    feature = "rate-limiting"
+))]
+use crate::url_parse;
 use crate::{
     CacheMode, HitOrMiss, HttpHeaders, HttpResponse, HttpVersion, Result, Url,
-    error, url_parse,
+    error,
 };
 use http::{StatusCode, header::CACHE_CONTROL};
 
 use std::str::FromStr;
 
+#[cfg(any(
+    feature = "manager-cacache",
+    feature = "manager-redb",
+    feature = "manager-moka",
+    feature = "manager-foyer"
+))]
 const GET: &str = "GET";
 const TEST_BODY: &[u8] = b"test";
 
@@ -482,6 +496,8 @@ mod with_redb {
     use crate::{CacheManager, RedbManager};
 
     use http_cache_semantics::CachePolicy;
+    use redb::{Database, ReadableDatabase, ReadableTable, TableHandle};
+    use std::sync::Arc;
 
     fn sample_response(url: &Url) -> HttpResponse {
         HttpResponse {
@@ -494,16 +510,20 @@ mod with_redb {
         }
     }
 
+    fn sample_policy() -> Result<CachePolicy> {
+        let req = http::Request::get("http://example.com").body(())?;
+        let res =
+            http::Response::builder().status(200).body(TEST_BODY.to_vec())?;
+        Ok(CachePolicy::new(&req, &res))
+    }
+
     #[tokio::test]
     async fn redb() -> Result<()> {
         let url = url_parse("http://example.com")?;
         let cache_dir = tempfile::tempdir().unwrap();
         let manager = RedbManager::new(cache_dir.path().join("cache.redb"))?;
         let http_res = sample_response(&url);
-        let req = http::Request::get("http://example.com").body(())?;
-        let res =
-            http::Response::builder().status(200).body(TEST_BODY.to_vec())?;
-        let policy = CachePolicy::new(&req, &res);
+        let policy = sample_policy()?;
         manager
             .put(format!("{}:{}", GET, url), http_res.clone(), policy.clone())
             .await?;
@@ -539,10 +559,7 @@ mod with_redb {
         let cache_dir = tempfile::tempdir().unwrap();
         let db_path = cache_dir.path().join("cache.redb");
         let key = format!("{}:{}", GET, url);
-        let req = http::Request::get("http://example.com/persist").body(())?;
-        let res =
-            http::Response::builder().status(200).body(TEST_BODY.to_vec())?;
-        let policy = CachePolicy::new(&req, &res);
+        let policy = sample_policy()?;
 
         {
             let manager = RedbManager::new(&db_path)?;
@@ -564,10 +581,7 @@ mod with_redb {
         let url = url_parse("http://example.com/flush")?;
         let cache_dir = tempfile::tempdir().unwrap();
         let db_path = cache_dir.path().join("cache.redb");
-        let req = http::Request::get("http://example.com/flush").body(())?;
-        let res =
-            http::Response::builder().status(200).body(TEST_BODY.to_vec())?;
-        let policy = CachePolicy::new(&req, &res);
+        let policy = sample_policy()?;
 
         {
             let manager = RedbManager::new(&db_path)?;
@@ -596,8 +610,6 @@ mod with_redb {
     // error (mirrors the corrupt-data tests of the other managers).
     #[tokio::test]
     async fn redb_corrupt_data_returns_none() -> Result<()> {
-        use redb::Database;
-
         let cache_dir = tempfile::tempdir().unwrap();
         let db_path = cache_dir.path().join("cache.redb");
         let key = "GET:http://example.com/corrupt";
@@ -625,6 +637,298 @@ mod with_redb {
         Ok(())
     }
 
+    // A database in a directory that lasts as long as the returned guard.
+    fn temp_db() -> Result<(tempfile::TempDir, Arc<Database>)> {
+        let cache_dir = tempfile::tempdir().unwrap();
+        let db = Database::create(cache_dir.path().join("cache.redb"))?;
+        Ok((cache_dir, Arc::new(db)))
+    }
+
+    fn limited(db: &Arc<Database>, max_bytes: u64) -> Result<RedbManager> {
+        RedbManager::from_database_with_max_bytes(db.clone(), 64, max_bytes)
+    }
+
+    async fn put_sample(
+        manager: &RedbManager,
+        key: &str,
+        policy: &CachePolicy,
+    ) -> Result<()> {
+        let url = url_parse("http://example.com")?;
+        manager.put(key.into(), sample_response(&url), policy.clone()).await?;
+        Ok(())
+    }
+
+    // The keys of the entry table, of the index and in write order, and the
+    // recorded total, read straight from the tables.
+    struct LimitState {
+        entries: Vec<String>,
+        index: Vec<String>,
+        order: Vec<String>,
+        total: u64,
+    }
+
+    fn limit_state(db: &Database) -> Result<LimitState> {
+        use crate::managers::redb::TABLES;
+
+        let txn = db.begin_write()?;
+        let mut entries = Vec::new();
+        for entry in txn.open_table(TABLES.entries)?.iter()? {
+            entries.push(entry?.0.value().to_string());
+        }
+        let mut index = Vec::new();
+        for entry in txn.open_table(TABLES.index)?.iter()? {
+            index.push(entry?.0.value().to_string());
+        }
+        let mut order = Vec::new();
+        for entry in txn.open_table(TABLES.order)?.iter()? {
+            order.push(entry?.1.value().to_string());
+        }
+        let total = txn
+            .open_table(TABLES.bytes)?
+            .get(())?
+            .map_or(0, |total| total.value());
+        Ok(LimitState { entries, index, order, total })
+    }
+
+    // Asserts that the entry and index tables hold exactly the keys in
+    // `written`, listed oldest first, and that `total` bytes are recorded.
+    fn assert_limited(
+        db: &Database,
+        written: &[&str],
+        total: u64,
+    ) -> Result<()> {
+        let mut state = limit_state(db)?;
+        assert_eq!(state.order, written);
+        state.order.sort();
+        assert_eq!(state.entries, state.order);
+        assert_eq!(state.index, state.order);
+        assert_eq!(state.total, total);
+        Ok(())
+    }
+
+    // Changes the entry table only, as a version without size limits would:
+    // removes `key`, or stores a copy of the entry `from` under it.
+    fn change_unindexed(
+        db: &Database,
+        key: &str,
+        from: Option<&str>,
+    ) -> Result<()> {
+        let txn = db.begin_write()?;
+        {
+            let mut table = txn.open_table(crate::managers::redb::TABLE)?;
+            match from {
+                Some(from) => {
+                    let entry = table.get(from)?.unwrap().value().to_vec();
+                    table.insert(key, entry.as_slice())?;
+                }
+                None => {
+                    table.remove(key)?;
+                }
+            }
+        }
+        txn.commit()?;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn redb_max_bytes_evicts_oldest_written() -> Result<()> {
+        let (cache_dir, db) = temp_db()?;
+        let policy = sample_policy()?;
+
+        let manager = limited(&db, u64::MAX)?;
+        put_sample(&manager, "a", &policy).await?;
+        let size = limit_state(&db)?.total;
+        put_sample(&manager, "b", &policy).await?;
+        put_sample(&manager, "c", &policy).await?;
+        drop(manager);
+
+        // A lower limit applies to the entries already stored.
+        let manager = limited(&db, 2 * size)?;
+        assert_limited(&db, &["b", "c"], 2 * size)?;
+
+        // Storing a key again makes it the newest entry.
+        put_sample(&manager, "b", &policy).await?;
+        assert_limited(&db, &["c", "b"], 2 * size)?;
+        put_sample(&manager, "d", &policy).await?;
+        assert_limited(&db, &["b", "d"], 2 * size)?;
+        assert!(manager.get("c").await?.is_none());
+
+        manager.delete("b").await?;
+        assert_limited(&db, &["d"], size)?;
+        drop(manager);
+        drop(db);
+
+        let db =
+            Arc::new(Database::create(cache_dir.path().join("cache.redb"))?);
+        let manager = limited(&db, 2 * size)?;
+        assert_limited(&db, &["d"], size)?;
+        assert!(manager.get("d").await?.is_some());
+
+        // An entry over the limit is not stored and the entry it would have
+        // replaced is removed.
+        let mut large = sample_response(&url_parse("http://example.com")?);
+        large.body = vec![0; 2 * size as usize];
+        manager.put("d".into(), large, policy.clone()).await?;
+        assert_limited(&db, &[], 0)?;
+        assert!(manager.get("d").await?.is_none());
+
+        put_sample(&manager, "e", &policy).await?;
+        manager.clear().await?;
+        put_sample(&manager, "f", &policy).await?;
+        assert_limited(&db, &["f"], size)?;
+        Ok(())
+    }
+
+    // Entries stored without a limit are not indexed, so the index is
+    // dropped by an unlimited manager and rebuilt by the next limited one.
+    #[tokio::test]
+    async fn redb_max_bytes_can_be_switched_on_and_off() -> Result<()> {
+        fn table_names(db: &Database) -> Result<Vec<String>> {
+            let txn = db.begin_read()?;
+            Ok(txn.list_tables()?.map(|t| t.name().to_string()).collect())
+        }
+
+        let (_cache_dir, db) = temp_db()?;
+        let policy = sample_policy()?;
+
+        let manager = RedbManager::from_database(db.clone())?;
+        put_sample(&manager, "a", &policy).await?;
+        put_sample(&manager, "b", &policy).await?;
+        drop(manager);
+        assert_eq!(table_names(&db)?, ["http_cache_v1"]);
+
+        let manager = limited(&db, u64::MAX)?;
+        let size = limit_state(&db)?.total / 2;
+        assert_limited(&db, &["a", "b"], 2 * size)?;
+        put_sample(&manager, "c", &policy).await?;
+        drop(manager);
+
+        let manager = RedbManager::from_database(db.clone())?;
+        assert_eq!(table_names(&db)?, ["http_cache_v1"]);
+        put_sample(&manager, "d", &policy).await?;
+        drop(manager);
+
+        // Write order is unknown after a rebuild, so entries go in key order.
+        drop(limited(&db, 2 * size)?);
+        assert_limited(&db, &["c", "d"], 2 * size)?;
+        Ok(())
+    }
+
+    // Entries changed without the index while a limited manager is open are
+    // not counted, and the limit still holds for the indexed ones.
+    #[tokio::test]
+    async fn redb_max_bytes_holds_when_entries_change_unindexed() -> Result<()>
+    {
+        let (_cache_dir, db) = temp_db()?;
+        let policy = sample_policy()?;
+
+        let manager = limited(&db, u64::MAX)?;
+        put_sample(&manager, "a", &policy).await?;
+        let size = limit_state(&db)?.total;
+        drop(manager);
+        let manager = limited(&db, 2 * size)?;
+        put_sample(&manager, "b", &policy).await?;
+        change_unindexed(&db, "a", None)?;
+        change_unindexed(&db, "x", Some("b"))?;
+
+        // The row of the missing entry "a" is the oldest: evicting it frees
+        // the size recorded for it and leaves "b" in place.
+        put_sample(&manager, "c", &policy).await?;
+        let state = limit_state(&db)?;
+        assert_eq!(state.entries, ["b", "c", "x"]);
+        assert_eq!(state.index, ["b", "c"]);
+        assert_eq!(state.order, ["b", "c"]);
+        assert_eq!(state.total, 2 * size);
+
+        // Storing the unindexed "x" indexes it without counting it twice.
+        put_sample(&manager, "x", &policy).await?;
+        assert_limited(&db, &["c", "x"], 2 * size)?;
+
+        // Deleting a key whose entry is already gone removes its row.
+        change_unindexed(&db, "c", None)?;
+        change_unindexed(&db, "y", Some("x"))?;
+        manager.delete("c").await?;
+        manager.delete("y").await?;
+        assert_limited(&db, &["x"], size)?;
+        Ok(())
+    }
+
+    // Entries stored or removed without the index while no limited manager
+    // was open are indexed again, in key order, by the next one.
+    #[tokio::test]
+    async fn redb_max_bytes_reindexes_changed_entries_on_open() -> Result<()> {
+        let (_cache_dir, db) = temp_db()?;
+        let policy = sample_policy()?;
+
+        let manager = limited(&db, u64::MAX)?;
+        put_sample(&manager, "c", &policy).await?;
+        let size = limit_state(&db)?.total;
+        put_sample(&manager, "b", &policy).await?;
+        drop(manager);
+
+        // One entry fewer than the index has rows.
+        change_unindexed(&db, "c", None)?;
+        drop(limited(&db, u64::MAX)?);
+        assert_limited(&db, &["b"], size)?;
+
+        // Two entries more, which takes the cache over the limit.
+        change_unindexed(&db, "a", Some("b"))?;
+        change_unindexed(&db, "d", Some("b"))?;
+        drop(limited(&db, 2 * size)?);
+        assert_limited(&db, &["b", "d"], 2 * size)?;
+        Ok(())
+    }
+
+    // An entry larger than the limit that is already stored is removed at
+    // open, and the entries written before it are kept.
+    #[tokio::test]
+    async fn redb_max_bytes_removes_only_oversized_entries_on_open()
+    -> Result<()> {
+        let url = url_parse("http://example.com")?;
+        let policy = sample_policy()?;
+        let keys = ["a", "b", "c", "d"];
+        for indexed in [true, false] {
+            for oversized in keys {
+                let (_cache_dir, db) = temp_db()?;
+                let manager = limited(&db, u64::MAX)?;
+                put_sample(&manager, "size", &policy).await?;
+                let size = limit_state(&db)?.total;
+                manager.delete("size").await?;
+                drop(manager);
+
+                let manager = if indexed {
+                    limited(&db, u64::MAX)?
+                } else {
+                    RedbManager::from_database(db.clone())?
+                };
+                for key in keys {
+                    let mut response = sample_response(&url);
+                    if key == oversized {
+                        response.body = vec![0; 4 * size as usize];
+                    }
+                    manager.put(key.into(), response, policy.clone()).await?;
+                }
+                drop(manager);
+
+                drop(limited(&db, 3 * size)?);
+                let kept: Vec<&str> =
+                    keys.into_iter().filter(|key| *key != oversized).collect();
+                assert_limited(&db, &kept, 3 * size)?;
+            }
+        }
+
+        // An entry of exactly the limit is not oversized.
+        let (_cache_dir, db) = temp_db()?;
+        let manager = limited(&db, u64::MAX)?;
+        put_sample(&manager, "a", &policy).await?;
+        let size = limit_state(&db)?.total;
+        put_sample(&manager, "b", &policy).await?;
+        drop(manager);
+        drop(limited(&db, size)?);
+        assert_limited(&db, &["b"], size)?;
+        Ok(())
+    }
+
     // The manager needs no tokio reactor: drive it on a non-tokio executor
     // (smol, as used by http-cache-ureq / Bevy) with no tokio runtime present.
     #[test]
@@ -635,11 +939,7 @@ mod with_redb {
             let manager =
                 RedbManager::new(cache_dir.path().join("cache.redb"))?;
             let key = format!("{}:{}", GET, url);
-            let req = http::Request::get("http://example.com/smol").body(())?;
-            let res = http::Response::builder()
-                .status(200)
-                .body(TEST_BODY.to_vec())?;
-            let policy = CachePolicy::new(&req, &res);
+            let policy = sample_policy()?;
             manager.put(key.clone(), sample_response(&url), policy).await?;
             let data = manager.get(&key).await?;
             assert!(data.is_some());

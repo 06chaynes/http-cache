@@ -99,7 +99,7 @@ The default features are `url-standard`, `parking_lot`, and `custom-hasher`.
 To disable both QuickCache features while keeping the standard URL backend:
 
 ```toml
-http-cache-quickcache = { version = "1.0.0-alpha.9", default-features = false, features = ["url-standard"] }
+http-cache-quickcache = { version = "1.0.0-alpha.10", default-features = false, features = ["url-standard"] }
 ```
 
 A URL backend (`url-standard` or `url-ada`) must be enabled. You can opt back into

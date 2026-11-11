@@ -7,7 +7,7 @@ The [`http-cache-tower-server`](https://github.com/06chaynes/http-cache/tree/mai
 **Client-Side (`http-cache-tower`)**: Caches responses from external APIs you're calling
 **Server-Side (`http-cache-tower-server`)**: Caches responses your application generates
 
-**Critical:** Server-side cache middleware must be placed **AFTER** routing in your middleware stack to preserve request extensions like path parameters (see [Issue #121](https://github.com/06chaynes/http-cache/issues/121)).
+**Critical:** Server-side cache middleware must be placed **AFTER** routing in your middleware stack: an Axum layer applies only to the routes added before it, so routes added after the cache layer are not cached. Do not use the client-side `http-cache-tower` layers on a server, as they break path parameters (see [Issue #121](https://github.com/06chaynes/http-cache/issues/121)).
 
 ## Getting Started
 
@@ -28,12 +28,16 @@ cargo add http-cache-tower-server
 
 ```rust
 use axum::{
-    routing::get,
-    Router,
+    BoxError, Router,
+    error_handling::HandleErrorLayer,
     extract::Path,
+    http::StatusCode,
+    response::{IntoResponse, Response},
+    routing::get,
 };
 use http_cache_tower_server::ServerCacheLayer;
 use http_cache::RedbManager;
+use tower::ServiceBuilder;
 
 #[tokio::main]
 async fn main() {
@@ -45,16 +49,26 @@ async fn main() {
 
     // Build your Axum app
     let app = Router::new()
-        .route("/users/:id", get(get_user))
-        .route("/posts/:id", get(get_post))
+        .route("/users/{id}", get(get_user))
+        .route("/posts/{id}", get(get_post))
         // IMPORTANT: Place cache layer AFTER routing
-        .layer(cache_layer);
+        .layer(
+            ServiceBuilder::new()
+                // Axum needs the cache layer's errors turned into responses
+                .layer(HandleErrorLayer::new(handle_cache_error))
+                .layer(cache_layer),
+        );
 
     // Run the server
     let listener = tokio::net::TcpListener::bind("127.0.0.1:3000")
         .await
         .unwrap();
     axum::serve(listener, app).await.unwrap();
+}
+
+async fn handle_cache_error(err: BoxError) -> Response {
+    (StatusCode::INTERNAL_SERVER_ERROR, format!("Cache error: {err}"))
+        .into_response()
 }
 
 async fn get_user(Path(id): Path<u32>) -> String {
@@ -312,15 +326,17 @@ metrics.reset();
 
 ```rust
 use axum::{
-    routing::get,
-    Router,
+    BoxError, Router,
+    error_handling::HandleErrorLayer,
     extract::Path,
+    http::{StatusCode, header},
     response::{IntoResponse, Response},
-    http::header,
+    routing::get,
 };
 use http_cache_tower_server::{ServerCacheLayer, ServerCacheOptions, QueryKeyer};
 use http_cache::RedbManager;
 use std::time::Duration;
+use tower::ServiceBuilder;
 
 #[tokio::main]
 async fn main() {
@@ -341,15 +357,25 @@ async fn main() {
 
     // Build app
     let app = Router::new()
-        .route("/users/:id", get(get_user))
+        .route("/users/{id}", get(get_user))
         .route("/search", get(search))
         .route("/admin/stats", get(admin_stats))
-        .layer(cache_layer); // AFTER routing
+        // AFTER routing
+        .layer(
+            ServiceBuilder::new()
+                .layer(HandleErrorLayer::new(handle_cache_error))
+                .layer(cache_layer),
+        );
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:3000")
         .await
         .unwrap();
     axum::serve(listener, app).await.unwrap();
+}
+
+async fn handle_cache_error(err: BoxError) -> Response {
+    (StatusCode::INTERNAL_SERVER_ERROR, format!("Cache error: {err}"))
+        .into_response()
 }
 
 // Cacheable for 5 minutes
@@ -379,7 +405,7 @@ async fn admin_stats() -> Response {
 
 ## Best Practices
 
-1. **Place middleware after routing** to preserve request extensions
+1. **Place middleware after routing** so that it applies to your routes
 2. **Set appropriate Cache-Control headers** in your handlers
 3. **Use `private` directive** for user-specific responses
 4. **Monitor cache hit rates** using X-Cache headers
@@ -389,22 +415,26 @@ async fn admin_stats() -> Response {
 
 ## Troubleshooting
 
-### Path parameters not working
+### Cache layer not applied to a route
 
-**Problem:** Axum path extractors fail with cached responses
+**Problem:** Requests succeed but are never cached and carry no `x-cache` header
 
-**Solution:** Ensure cache layer is placed AFTER routing:
+**Solution:** An Axum layer applies only to the routes added before it. Ensure the cache layer is placed AFTER routing:
 
 ```rust
+let cache_stack = ServiceBuilder::new()
+    .layer(HandleErrorLayer::new(handle_cache_error))
+    .layer(cache_layer);
+
 // ❌ Wrong - cache layer before routing
 let app = Router::new()
-    .layer(cache_layer)  // Too early!
-    .route("/users/:id", get(handler));
+    .layer(cache_stack.clone())  // Too early, the route below is not cached
+    .route("/users/{id}", get(handler));
 
 // ✅ Correct - cache layer after routing
 let app = Router::new()
-    .route("/users/:id", get(handler))
-    .layer(cache_layer);  // After routing
+    .route("/users/{id}", get(handler))
+    .layer(cache_stack);  // After routing
 ```
 
 ### Responses not being cached

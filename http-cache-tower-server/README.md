@@ -49,9 +49,16 @@ By default, `manager-redb` is enabled.
 ### Basic Example (Axum)
 
 ```rust
-use axum::{Router, routing::get, response::IntoResponse};
+use axum::{
+    BoxError, Router,
+    error_handling::HandleErrorLayer,
+    http::StatusCode,
+    response::{IntoResponse, Response},
+    routing::get,
+};
 use http_cache_tower_server::ServerCacheLayer;
 use http_cache::RedbManager;
+use tower::ServiceBuilder;
 
 async fn expensive_handler() -> impl IntoResponse {
     // Simulate expensive operation
@@ -64,6 +71,11 @@ async fn expensive_handler() -> impl IntoResponse {
     )
 }
 
+async fn handle_cache_error(err: BoxError) -> Response {
+    (StatusCode::INTERNAL_SERVER_ERROR, format!("Cache error: {err}"))
+        .into_response()
+}
+
 #[tokio::main]
 async fn main() {
     // Create cache manager
@@ -72,7 +84,12 @@ async fn main() {
     // Create router with cache layer
     let app = Router::new()
         .route("/expensive", get(expensive_handler))
-        .layer(ServerCacheLayer::new(manager));
+        .layer(
+            ServiceBuilder::new()
+                // Axum needs the cache layer's errors turned into responses
+                .layer(HandleErrorLayer::new(handle_cache_error))
+                .layer(ServerCacheLayer::new(manager)),
+        );
 
     // Run server
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000")

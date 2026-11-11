@@ -45,8 +45,13 @@ Cache responses your application generates:
 ```rust
 // Example: Caching your own endpoint responses
 let app = Router::new()
-    .route("/users/:id", get(get_user))
-    .layer(ServerCacheLayer::new(cache_manager)); // Cache your responses
+    .route("/users/{id}", get(get_user))
+    .layer(
+        ServiceBuilder::new()
+            // Turns cache errors into responses, which Axum requires
+            .layer(HandleErrorLayer::new(handle_cache_error))
+            .layer(ServerCacheLayer::new(cache_manager)), // Cache your responses
+    );
 ```
 
 **Use cases:**

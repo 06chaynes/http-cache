@@ -40,6 +40,20 @@ You can also specify other configuration options. This uses the `new` methods on
 let manager = Arc::new(MokaManager::new(moka::future::Cache::new(100)));
 ```
 
+### Limiting the cache by size
+
+To limit the cache by the size of the stored responses instead of their number, give the cache a weigher. `max_capacity` is then a total weight, here in bytes:
+
+```rust
+let cache = moka::future::Cache::builder()
+    .weigher(|_key: &String, value: &Arc<Vec<u8>>| {
+        value.len().try_into().unwrap_or(u32::MAX)
+    })
+    .max_capacity(64 * 1024 * 1024)
+    .build();
+let manager = Arc::new(MokaManager::new(cache));
+```
+
 You can attempt to retrieve a record from the cache using the `get` method. This method accepts a `&str` as the cache key and returns an `Result<Option<(HttpResponse, CachePolicy)>, BoxError>`.
 
 ```rust

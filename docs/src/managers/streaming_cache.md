@@ -40,7 +40,7 @@ use http_cache::StreamingManager;
 use std::path::PathBuf;
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Create a streaming cache manager with disk storage
     let manager = StreamingManager::new(
         PathBuf::from("./cache"),  // Cache directory
@@ -60,6 +60,37 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 ```
+
+## Limiting the disk size
+
+Body files are kept until their entry is invalidated or replaced, so the cache directory grows without bound by default. `capacity` limits only the metadata held in memory. `StreamingManagerOptions::max_bytes` limits the total size of the body files:
+
+```rust
+use http_cache::{StreamingManager, StreamingManagerOptions};
+use std::path::PathBuf;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let manager = StreamingManager::with_options(
+        PathBuf::from("./cache"),
+        StreamingManagerOptions {
+            capacity: 10_000,
+            max_body_size: 100 * 1024 * 1024,
+            max_bytes: Some(10 * 1024 * 1024 * 1024),
+        },
+    ).await?;
+
+    Ok(())
+}
+```
+
+When a stored response takes the cache over the limit, the entries written or revalidated longest ago are removed. Reading an entry does not make it newer.
+
+- The limit is applied after a response is stored, so the cache can exceed it for a moment.
+- A response already being read when its entry is removed is still read to the end.
+- A body file is the body plus a 16-byte header. A body whose file would be larger than the limit is not cached, like one over `max_body_size`.
+- Entries already in the directory count towards the limit. When a limit is first set on an existing cache their write order is unknown, so they are removed in key order.
+- The metadata database is not counted.
 
 ## Architecture
 
@@ -115,7 +146,7 @@ Put ordering is strictly:
 If a crash occurs mid-sequence:
 
 - Before step 3: `.tmp` file is swept on next startup
-- After step 3 but before step 4: for a new key, metadata is absent so `get` returns `None` (body is orphaned, reclaimable by a future GC); for an overwrite, the body file has been replaced but redb holds old metadata — the nonce mismatch on the next `get` triggers self-heal
+- After step 3 but before step 4: for a new key, metadata is absent so `get` returns `None`, and the orphaned body file is removed on next startup; for an overwrite, the body file has been replaced but redb holds old metadata — the nonce mismatch on the next `get` triggers self-heal
 - After step 4: disk state is consistent
 
 The 16-byte nonce written as the file header is regenerated per-put and compared to the nonce stored in `CacheMetadata` on every `get`. A mismatch (indicating the body file was replaced without the metadata commit landing) causes `get` to remove the redb row, invalidate moka, and return `Ok(None)`.
@@ -144,14 +175,14 @@ This is a local-filesystem guarantee. Advisory file locks are unreliable on NFS,
 ```rust
 use http_cache::StreamingManager;
 use http_cache_tower::HttpCacheStreamingLayer;
-use tower::{Service, ServiceExt};
+use tower::{Layer, ServiceExt};
 use http::{Request, Response, StatusCode};
 use http_body_util::Full;
 use bytes::Bytes;
 use std::path::PathBuf;
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let manager = StreamingManager::new(
         PathBuf::from("./cache"),
         10_000,
@@ -160,12 +191,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cache_layer = HttpCacheStreamingLayer::new(manager);
 
     let service = tower::service_fn(|_req: Request<Full<Bytes>>| async {
-        Ok::<_, std::convert::Infallible>(
-            Response::builder()
-                .status(StatusCode::OK)
-                .header("cache-control", "max-age=3600")
-                .body(Full::new(Bytes::from("Response data...")))?
-        )
+        Response::builder()
+            .status(StatusCode::OK)
+            .header("cache-control", "max-age=3600")
+            .body(Full::new(Bytes::from("Response data...")))
     });
 
     let cached_service = cache_layer.layer(service);
@@ -191,7 +220,7 @@ use reqwest_middleware::ClientBuilder;
 use std::path::PathBuf;
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let manager = StreamingManager::new(
         PathBuf::from("./cache"),
         10_000,
@@ -334,5 +363,6 @@ Unlike the previous cacache-based implementation, this design stores a separate 
 | **Hot-cache eviction** | None | TinyLFU (moka) for metadata only; disk state unaffected |
 | **Content dedup** | Yes (cacache) | No (per-key body files) |
 | **Body size limit** | None | Configurable (default 100MB); over-limit responses decline to cache, not an error |
+| **Disk size limit** | None | Optional (`StreamingManagerOptions::max_bytes`); oldest-written entries are removed |
 | **Multi-process** | Supported via cacache | Single-instance per cache_dir (redb lock) |
 | **Use case** | Small responses, dedup-heavy workloads | Large responses, long-lived caches |

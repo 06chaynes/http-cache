@@ -61,13 +61,14 @@
 //! use http_cache::StreamingManager;
 //! use std::path::PathBuf;
 //!
-//! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+//! # async fn example() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 //! let manager = StreamingManager::new(PathBuf::from("./cache"), 10_000).await?;
 //! # Ok(())
 //! # }
 //! ```
 
 use std::{
+    collections::HashSet,
     fmt,
     path::{Path, PathBuf},
     sync::{Arc, Weak},
@@ -85,12 +86,16 @@ use http_body_util::{BodyExt, combinators::UnsyncBoxBody};
 use http_cache_semantics::CachePolicy;
 use moka::future::Cache;
 use rand::RngExt;
-use redb::{Database, ReadableDatabase, TableDefinition};
+use redb::{
+    Database, ReadableDatabase, ReadableTable, TableDefinition,
+    WriteTransaction,
+};
 use serde::{Deserialize, Serialize};
 use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
 use tokio::sync::RwLock;
 
 use crate::CachedUserMetadata;
+use crate::managers::limit::{Limited, Tables};
 
 /// Default maximum body size for cached responses (100MB).
 ///
@@ -116,6 +121,39 @@ const KEY_LOCK_SHARDS: usize = 64;
 /// redb table holding `cache_key -> postcard(CacheMetadata)` mappings.
 const METADATA_TABLE: TableDefinition<&str, &[u8]> =
     TableDefinition::new("http_streaming_metadata_v1");
+
+/// The metadata table with the index a disk limit keeps of its rows.
+const TABLES: Tables = Tables {
+    entries: METADATA_TABLE,
+    index: TableDefinition::new("http_streaming_metadata_v1_index"),
+    order: TableDefinition::new("http_streaming_metadata_v1_order"),
+    bytes: TableDefinition::new("http_streaming_metadata_v1_bytes"),
+};
+
+/// Settings for [`StreamingManager::with_options`].
+#[cfg_attr(docsrs, doc(cfg(feature = "streaming")))]
+#[derive(Debug, Clone, Copy)]
+pub struct StreamingManagerOptions {
+    /// Maximum number of metadata entries in the in-memory hot cache.
+    pub capacity: u64,
+    /// Maximum body size in bytes. Larger responses are not cached and
+    /// still stream through to the caller.
+    pub max_body_size: u64,
+    /// Maximum total size in bytes of the body files, or `None` for no
+    /// limit.
+    ///
+    /// When a stored response takes the cache over the limit, the entries
+    /// written or revalidated longest ago are removed. This happens after
+    /// the response is stored, so the cache can exceed the limit for a
+    /// moment. A response already being read when its entry is removed is
+    /// still read to the end.
+    ///
+    /// A body file is the body plus a 16-byte header. A body whose file
+    /// would be larger than the limit is treated like one over
+    /// `max_body_size`. Entries already in the cache directory count
+    /// towards the limit. The metadata database is not counted.
+    pub max_bytes: Option<u64>,
+}
 
 /// Metadata stored alongside each cached response.
 ///
@@ -198,10 +236,13 @@ fn body_path_for(body_dir: &Path, body_hash: &str) -> PathBuf {
 ///
 /// Only one [`StreamingManager`] may point at a given `cache_dir` at a time
 /// (enforced by redb's internal file lock on `metadata.redb`). Cloning an
-/// existing `StreamingManager` is fine — construction via [`new`], [`with_max_body_size`],
-/// or [`with_temp_dir`] against a directory already in use will fail. This
-/// guarantee is reliable on local filesystems; on NFS or container overlay
-/// filesystems it is best-effort. Do not share a cache directory across hosts.
+/// existing `StreamingManager` is fine — construction via [`new`](Self::new),
+/// [`with_max_body_size`](Self::with_max_body_size),
+/// [`with_options`](Self::with_options) or
+/// [`with_temp_dir`](Self::with_temp_dir) against a directory already in use
+/// will fail. This guarantee is reliable on local filesystems; on NFS or
+/// container overlay filesystems it is best-effort. Do not share a cache
+/// directory across hosts.
 ///
 /// # Example
 ///
@@ -209,7 +250,7 @@ fn body_path_for(body_dir: &Path, body_hash: &str) -> PathBuf {
 /// use http_cache::StreamingManager;
 /// use std::path::PathBuf;
 ///
-/// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+/// # async fn example() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 /// let manager = StreamingManager::new(PathBuf::from("./cache"), 10_000).await?;
 /// # Ok(())
 /// # }
@@ -229,6 +270,8 @@ pub struct StreamingManager {
     metadata: Cache<String, CacheMetadata>,
     /// Maximum body size for cached responses.
     max_body_size: u64,
+    /// Maximum total size of the body files, if limited.
+    max_bytes: Option<u64>,
     /// Striped per-key locks serializing put/get-validate/delete for a key.
     /// redb's file lock makes cross-process access impossible, so
     /// intra-process striping is sufficient.
@@ -241,6 +284,7 @@ impl fmt::Debug for StreamingManager {
             .field("cache_dir", &self.cache_dir)
             .field("entry_count", &self.metadata.entry_count())
             .field("max_body_size", &self.max_body_size)
+            .field("max_bytes", &self.max_bytes)
             .finish()
     }
 }
@@ -268,7 +312,7 @@ impl StreamingManager {
     /// use http_cache::StreamingManager;
     /// use std::path::PathBuf;
     ///
-    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     /// let manager = StreamingManager::new(PathBuf::from("./cache"), 10_000).await?;
     /// # Ok(())
     /// # }
@@ -296,7 +340,7 @@ impl StreamingManager {
     /// use http_cache::StreamingManager;
     /// use std::path::PathBuf;
     ///
-    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     /// let manager = StreamingManager::with_max_body_size(
     ///     PathBuf::from("./cache"),
     ///     10_000,
@@ -310,35 +354,63 @@ impl StreamingManager {
         capacity: u64,
         max_body_size: u64,
     ) -> Result<Self> {
+        Self::with_options(
+            cache_dir,
+            StreamingManagerOptions {
+                capacity,
+                max_body_size,
+                max_bytes: None,
+            },
+        )
+        .await
+    }
+
+    /// Creates a new [`StreamingManager`] from [`StreamingManagerOptions`],
+    /// which can limit the total size of the body files.
+    ///
+    /// See [`StreamingManager::new`] for details on the single-instance
+    /// invariant.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// use http_cache::{StreamingManager, StreamingManagerOptions};
+    /// use std::path::PathBuf;
+    ///
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    /// let manager = StreamingManager::with_options(
+    ///     PathBuf::from("./cache"),
+    ///     StreamingManagerOptions {
+    ///         capacity: 10_000,
+    ///         max_body_size: 100 * 1024 * 1024,
+    ///         max_bytes: Some(10 * 1024 * 1024 * 1024),
+    ///     },
+    /// ).await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn with_options(
+        cache_dir: PathBuf,
+        options: StreamingManagerOptions,
+    ) -> Result<Self> {
+        let StreamingManagerOptions { capacity, max_body_size, max_bytes } =
+            options;
+        let max_body_size = max_bytes.map_or(max_body_size, |max_bytes| {
+            max_body_size.min(max_bytes.saturating_sub(NONCE_LEN as u64))
+        });
+
         // Ensure cache directory and subdirectories exist
-        tokio::fs::create_dir_all(&cache_dir).await.map_err(|e| {
-            crate::HttpCacheError::cache(format!(
-                "Failed to create cache directory: {e}"
-            ))
-        })?;
+        tokio::fs::create_dir_all(&cache_dir).await?;
         let body_dir = cache_dir.join("bodies");
         let tmp_dir = cache_dir.join("tmp");
-        tokio::fs::create_dir_all(&body_dir).await.map_err(|e| {
-            crate::HttpCacheError::cache(format!(
-                "Failed to create body directory: {e}"
-            ))
-        })?;
-        tokio::fs::create_dir_all(&tmp_dir).await.map_err(|e| {
-            crate::HttpCacheError::cache(format!(
-                "Failed to create tmp directory: {e}"
-            ))
-        })?;
+        tokio::fs::create_dir_all(&body_dir).await?;
+        tokio::fs::create_dir_all(&tmp_dir).await?;
 
         // Open redb — acquires an exclusive file lock on metadata.redb.
         // Must happen before the tmp sweep so we know we're the only instance.
         let db_path = cache_dir.join("metadata.redb");
         let db = tokio::task::spawn_blocking(move || Database::create(db_path))
-            .await
-            .map_err(|e| {
-                crate::HttpCacheError::cache(format!(
-                    "redb open join failed: {e}"
-                ))
-            })?
+            .await?
             .map_err(|e| {
                 crate::HttpCacheError::cache(format!(
                     "Failed to open redb database (another StreamingManager \
@@ -348,37 +420,34 @@ impl StreamingManager {
         let db = Arc::new(db);
 
         // Ensure the table exists so subsequent read transactions won't fail
-        // with "table does not exist" on a brand-new database.
-        {
+        // with "table does not exist" on a brand-new database. Rows stored
+        // without a limit are not indexed, so the index is built for a
+        // limit and deleted without one.
+        let oversized = {
             let db_init = db.clone();
-            tokio::task::spawn_blocking(move || -> Result<()> {
-                let write_txn = db_init.begin_write().map_err(|e| {
-                    crate::HttpCacheError::cache(format!(
-                        "redb begin_write failed during init: {e}"
-                    ))
-                })?;
-                {
-                    let _table =
-                        write_txn.open_table(METADATA_TABLE).map_err(|e| {
-                            crate::HttpCacheError::cache(format!(
-                                "redb open_table failed during init: {e}"
-                            ))
-                        })?;
+            let body_dir = body_dir.clone();
+            tokio::task::spawn_blocking(move || -> Result<Vec<String>> {
+                let write_txn = db_init.begin_write()?;
+                let oversized = match max_bytes {
+                    Some(max_bytes) => {
+                        let mut limited = Limited::open(&write_txn, &TABLES)?;
+                        limited.index(body_file_size)?;
+                        limited.oversized(max_bytes)?
+                    }
+                    None => {
+                        write_txn.open_table(METADATA_TABLE)?;
+                        TABLES.delete_index(&write_txn)?;
+                        Vec::new()
+                    }
+                };
+                if let Err(e) = sweep_orphan_bodies(&write_txn, &body_dir) {
+                    log::debug!("orphan body sweep failed: {e}");
                 }
-                write_txn.commit().map_err(|e| {
-                    crate::HttpCacheError::cache(format!(
-                        "redb commit failed during init: {e}"
-                    ))
-                })?;
-                Ok(())
+                write_txn.commit()?;
+                Ok(oversized)
             })
-            .await
-            .map_err(|e| {
-                crate::HttpCacheError::cache(format!(
-                    "redb init join failed: {e}"
-                ))
-            })??;
-        }
+            .await??
+        };
 
         // Sweep tmp/: delete any stale files from prior crashed puts. Safe
         // because we hold the redb lock — no other instance can be writing
@@ -394,15 +463,25 @@ impl StreamingManager {
         let key_locks =
             Arc::new((0..KEY_LOCK_SHARDS).map(|_| RwLock::new(())).collect());
 
-        Ok(Self {
+        let manager = Self {
             cache_dir,
             body_dir,
             tmp_dir,
             db,
             metadata,
             max_body_size,
+            max_bytes,
             key_locks,
-        })
+        };
+        // A body `put` would have declined goes first, so that evicting by
+        // age does not take the older entries with it.
+        for key in oversized {
+            StreamingCacheManager::delete(&manager, &key).await?;
+        }
+        if let Some(max_bytes) = max_bytes {
+            manager.evict(max_bytes).await?;
+        }
+        Ok(manager)
     }
 
     /// Creates a new [`StreamingManager`] using a temporary directory.
@@ -442,7 +521,7 @@ impl StreamingManager {
     /// ```rust,ignore
     /// use http_cache::StreamingManager;
     ///
-    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     /// let manager = StreamingManager::with_temp_dir(1000).await?;
     /// # Ok(())
     /// # }
@@ -485,49 +564,20 @@ impl StreamingManager {
         // Drop the redb table; it will be recreated lazily on next open_table.
         let db = self.db.clone();
         tokio::task::spawn_blocking(move || -> Result<()> {
-            let write_txn = db.begin_write().map_err(|e| {
-                crate::HttpCacheError::cache(format!(
-                    "redb begin_write (clear) failed: {e}"
-                ))
-            })?;
-            write_txn.delete_table(METADATA_TABLE).map_err(|e| {
-                crate::HttpCacheError::cache(format!(
-                    "redb delete_table failed: {e}"
-                ))
-            })?;
+            let write_txn = db.begin_write()?;
+            write_txn.delete_table(METADATA_TABLE)?;
+            TABLES.delete_index(&write_txn)?;
             // Recreate the table so subsequent reads don't fail with
             // "table does not exist".
-            {
-                let _table =
-                    write_txn.open_table(METADATA_TABLE).map_err(|e| {
-                        crate::HttpCacheError::cache(format!(
-                            "redb open_table (clear recreate) failed: {e}"
-                        ))
-                    })?;
-            }
-            write_txn.commit().map_err(|e| {
-                crate::HttpCacheError::cache(format!(
-                    "redb commit (clear) failed: {e}"
-                ))
-            })?;
+            write_txn.open_table(METADATA_TABLE)?;
+            write_txn.commit()?;
             Ok(())
         })
-        .await
-        .map_err(|e| {
-            crate::HttpCacheError::cache(format!("clear join failed: {e}"))
-        })??;
+        .await??;
 
         // Wipe body files and tmp files.
-        recreate_dir(&self.body_dir).await.map_err(|e| {
-            crate::HttpCacheError::cache(format!(
-                "Failed to recreate body directory: {e}"
-            ))
-        })?;
-        recreate_dir(&self.tmp_dir).await.map_err(|e| {
-            crate::HttpCacheError::cache(format!(
-                "Failed to recreate tmp directory: {e}"
-            ))
-        })?;
+        recreate_dir(&self.body_dir).await?;
+        recreate_dir(&self.tmp_dir).await?;
 
         // Invalidate moka last so in-flight gets don't resurrect metadata
         // pointing at now-deleted files.
@@ -548,7 +598,55 @@ impl StreamingManager {
     /// Remove a key from redb. Swallows errors at debug level; used by
     /// self-heal paths.
     async fn redb_remove(&self, cache_key: &str) {
-        redb_remove_row(self.db.clone(), cache_key.to_string()).await;
+        redb_remove_row(
+            self.db.clone(),
+            cache_key.to_string(),
+            self.max_bytes.is_some(),
+        )
+        .await;
+    }
+
+    /// Removes the row of the entry written longest ago and returns its
+    /// key, if the body files exceed `max_bytes`. The removal is kept only
+    /// when the key is `expected`.
+    async fn pop_oldest(
+        &self,
+        max_bytes: u64,
+        expected: Option<String>,
+    ) -> Result<Option<String>> {
+        let db = self.db.clone();
+        tokio::task::spawn_blocking(move || {
+            let write_txn = db.begin_write()?;
+            let oldest =
+                Limited::open(&write_txn, &TABLES)?.pop_oldest(max_bytes)?;
+            if oldest.is_some() && oldest == expected {
+                write_txn.commit()?;
+            }
+            Ok(oldest)
+        })
+        .await?
+    }
+
+    /// Removes the entries written longest ago until the body files fit in
+    /// `max_bytes`. Takes the shard lock of each entry it removes, so the
+    /// caller must hold none.
+    async fn evict(&self, max_bytes: u64) -> Result<()> {
+        while let Some(key) = self.pop_oldest(max_bytes, None).await? {
+            let body_hash = body_hash_for(&key);
+            let _guard = self.key_lock(&body_hash).write().await;
+            // A put may have made the entry the newest while the lock was
+            // awaited.
+            let oldest = self.pop_oldest(max_bytes, Some(key.clone())).await?;
+            if oldest.as_ref() == Some(&key) {
+                self.metadata.invalidate(&key).await;
+                let _ = tokio::fs::remove_file(body_path_for(
+                    &self.body_dir,
+                    &body_hash,
+                ))
+                .await;
+            }
+        }
+        Ok(())
     }
 
     /// Drop an entry from all three tiers (moka, redb, body file). Used by
@@ -584,32 +682,14 @@ impl StreamingManager {
         let key = cache_key.to_string();
         let bytes =
             tokio::task::spawn_blocking(move || -> Result<Option<Vec<u8>>> {
-                let read_txn = db.begin_read().map_err(|e| {
-                    crate::HttpCacheError::cache(format!(
-                        "redb begin_read failed: {e}"
-                    ))
-                })?;
-                let table =
-                    read_txn.open_table(METADATA_TABLE).map_err(|e| {
-                        crate::HttpCacheError::cache(format!(
-                            "redb open_table failed: {e}"
-                        ))
-                    })?;
-                match table.get(key.as_str()).map_err(|e| {
-                    crate::HttpCacheError::cache(format!(
-                        "redb get failed: {e}"
-                    ))
-                })? {
+                let read_txn = db.begin_read()?;
+                let table = read_txn.open_table(METADATA_TABLE)?;
+                match table.get(key.as_str())? {
                     Some(g) => Ok(Some(g.value().to_vec())),
                     None => Ok(None),
                 }
             })
-            .await
-            .map_err(|e| {
-                crate::HttpCacheError::cache(format!(
-                    "redb_get join failed: {e}"
-                ))
-            })??;
+            .await??;
 
         match bytes {
             None => Ok(None),
@@ -646,6 +726,7 @@ impl StreamingManager {
         }
         let heal = CorruptHeal {
             db: Arc::downgrade(&self.db),
+            limited: self.max_bytes.is_some(),
             metadata: self.metadata.clone(),
             key_locks: self.key_locks.clone(),
             key: cache_key.to_string(),
@@ -661,11 +742,7 @@ impl StreamingManager {
                 tokio::spawn(heal.run());
             },
         );
-        let mut response = response_builder.body(body).map_err(|e| {
-            crate::HttpCacheError::cache(format!(
-                "Failed to build response: {e}"
-            ))
-        })?;
+        let mut response = response_builder.body(body)?;
         // Preserve user metadata via extensions for the orchestrator to pick
         // up on 304 re-cache.
         response
@@ -776,28 +853,39 @@ fn shard_index(body_hash: &str) -> usize {
     usize::from_str_radix(&body_hash[..2], 16).unwrap_or(0) % KEY_LOCK_SHARDS
 }
 
-/// Remove a metadata row. Errors are swallowed; used by self-heal paths.
-async fn redb_remove_row(db: Arc<Database>, key: String) {
+/// Size of the body file of the entry in a metadata row, as counted by a
+/// disk limit. A row that cannot be decoded counts as an empty body.
+fn body_file_size(row: &[u8]) -> u64 {
+    postcard::from_bytes::<CacheMetadata>(row).map_or(0, |m| m.body_size)
+        + NONCE_LEN as u64
+}
+
+/// Writes the metadata row of `key`, as the newest entry when `limited`.
+fn insert_row(
+    txn: &WriteTransaction,
+    limited: bool,
+    key: &str,
+    row: &[u8],
+) -> Result<()> {
+    if limited {
+        Limited::open(txn, &TABLES)?.insert(key, row, body_file_size(row))
+    } else {
+        txn.open_table(METADATA_TABLE)?.insert(key, row)?;
+        Ok(())
+    }
+}
+
+/// Remove a metadata row, with its index row when `limited`. Errors are
+/// swallowed; used by self-heal paths.
+async fn redb_remove_row(db: Arc<Database>, key: String, limited: bool) {
     let _ = tokio::task::spawn_blocking(move || -> Result<()> {
-        let write_txn = db.begin_write().map_err(|e| {
-            crate::HttpCacheError::cache(format!(
-                "redb begin_write (remove) failed: {e}"
-            ))
-        })?;
-        {
-            let mut table =
-                write_txn.open_table(METADATA_TABLE).map_err(|e| {
-                    crate::HttpCacheError::cache(format!(
-                        "redb open_table (remove) failed: {e}"
-                    ))
-                })?;
-            let _ = table.remove(key.as_str());
+        let write_txn = db.begin_write()?;
+        if limited {
+            Limited::open(&write_txn, &TABLES)?.remove(&key)?;
+        } else {
+            write_txn.open_table(METADATA_TABLE)?.remove(key.as_str())?;
         }
-        write_txn.commit().map_err(|e| {
-            crate::HttpCacheError::cache(format!(
-                "redb commit (remove) failed: {e}"
-            ))
-        })?;
+        write_txn.commit()?;
         Ok(())
     })
     .await;
@@ -828,6 +916,7 @@ async fn redb_read_nonce(
 /// the corrupt read.
 struct CorruptHeal {
     db: Weak<Database>,
+    limited: bool,
     metadata: Cache<String, CacheMetadata>,
     key_locks: Arc<Vec<RwLock<()>>>,
     key: String,
@@ -850,7 +939,7 @@ impl CorruptHeal {
             return;
         }
         self.metadata.invalidate(&self.key).await;
-        redb_remove_row(db, self.key).await;
+        redb_remove_row(db, self.key, self.limited).await;
         let _ = tokio::fs::remove_file(&self.body_path).await;
     }
 }
@@ -863,6 +952,39 @@ async fn recreate_dir(dir: &Path) -> std::io::Result<()> {
         Err(e) if e.kind() != std::io::ErrorKind::AlreadyExists => Err(e),
         _ => Ok(()),
     }
+}
+
+/// Removes the `.bin` files in `body_dir` that no metadata row refers to,
+/// as a crash between storing a body and its row leaves them. Called on
+/// startup inside the transaction that holds the redb lock, so no put is
+/// in flight.
+fn sweep_orphan_bodies(txn: &WriteTransaction, body_dir: &Path) -> Result<()> {
+    let mut stored = HashSet::new();
+    for row in txn.open_table(METADATA_TABLE)?.iter()? {
+        stored.insert(body_hash_for(row?.0.value()));
+    }
+    for prefix in std::fs::read_dir(body_dir)? {
+        let Ok(files) = std::fs::read_dir(prefix?.path()) else {
+            continue;
+        };
+        for file in files {
+            let path = file?.path();
+            let is_stored = path
+                .file_stem()
+                .and_then(|stem| stem.to_str())
+                .is_some_and(|stem| stored.contains(stem));
+            if !is_stored
+                && path.extension().is_some_and(|ext| ext == "bin")
+                && let Err(e) = std::fs::remove_file(&path)
+            {
+                log::debug!(
+                    "orphan body sweep: remove_file {} failed: {e}",
+                    path.display()
+                );
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Delete every entry in `tmp_dir`. Called on startup after we hold the redb
@@ -1287,46 +1409,21 @@ impl StreamingCacheManager for StreamingManager {
 
             let db = self.db.clone();
             let key_for_redb = cache_key.clone();
+            let limited = self.max_bytes.is_some();
             let commit_result: Result<()> =
-                match tokio::task::spawn_blocking(move || -> Result<()> {
-                    let write_txn = db.begin_write().map_err(|e| {
-                        crate::HttpCacheError::cache(format!(
-                            "redb begin_write (put) failed: {e}"
-                        ))
-                    })?;
-                    {
-                        let mut table = write_txn
-                            .open_table(METADATA_TABLE)
-                            .map_err(|e| {
-                                crate::HttpCacheError::cache(format!(
-                                    "redb open_table (put) failed: {e}"
-                                ))
-                            })?;
-                        table
-                            .insert(
-                                key_for_redb.as_str(),
-                                serialized.as_slice(),
-                            )
-                            .map_err(|e| {
-                                crate::HttpCacheError::cache(format!(
-                                    "redb insert (put) failed: {e}"
-                                ))
-                            })?;
-                    }
-                    write_txn.commit().map_err(|e| {
-                        crate::HttpCacheError::cache(format!(
-                            "redb commit (put) failed: {e}"
-                        ))
-                    })?;
+                tokio::task::spawn_blocking(move || -> Result<()> {
+                    let write_txn = db.begin_write()?;
+                    insert_row(
+                        &write_txn,
+                        limited,
+                        &key_for_redb,
+                        &serialized,
+                    )?;
+                    write_txn.commit()?;
                     Ok(())
                 })
                 .await
-                {
-                    Ok(inner_result) => inner_result,
-                    Err(e) => Err(Box::new(crate::HttpCacheError::cache(
-                        format!("put join failed: {e}"),
-                    ))),
-                };
+                .unwrap_or_else(|e| Err(e.into()));
             if let Err(e) = commit_result {
                 // Roll back the rename (unlink final) so we don't leak an
                 // orphaned body, then keep serving from the open handle —
@@ -1340,6 +1437,11 @@ impl StreamingCacheManager for StreamingManager {
                 );
             }
             self.metadata.insert(cache_key.clone(), metadata).await;
+        }
+        if let Some(max_bytes) = self.max_bytes
+            && let Err(e) = self.evict(max_bytes).await
+        {
+            log::debug!("put: eviction failed: {e}");
         }
 
         // Serve from the same handle we just wrote: no reopen race with a
@@ -1363,6 +1465,7 @@ impl StreamingCacheManager for StreamingManager {
         }
         let heal = CorruptHeal {
             db: Arc::downgrade(&self.db),
+            limited: self.max_bytes.is_some(),
             metadata: self.metadata.clone(),
             key_locks: self.key_locks.clone(),
             key: cache_key,
@@ -1413,47 +1516,17 @@ impl StreamingCacheManager for StreamingManager {
         // nonce/checksum/body_size stay as-is, which also keeps CorruptHeal
         // correct for a corrupt read already in flight.
 
-        let serialized = postcard::to_allocvec(&metadata).map_err(|e| {
-            crate::HttpCacheError::cache(format!(
-                "Failed to serialize metadata: {e}"
-            ))
-        })?;
+        let serialized = postcard::to_allocvec(&metadata)?;
         let db = self.db.clone();
         let key_for_redb = cache_key.to_string();
+        let limited = self.max_bytes.is_some();
         tokio::task::spawn_blocking(move || -> Result<()> {
-            let write_txn = db.begin_write().map_err(|e| {
-                crate::HttpCacheError::cache(format!(
-                    "redb begin_write (update_metadata) failed: {e}"
-                ))
-            })?;
-            {
-                let mut table =
-                    write_txn.open_table(METADATA_TABLE).map_err(|e| {
-                        crate::HttpCacheError::cache(format!(
-                            "redb open_table (update_metadata) failed: {e}"
-                        ))
-                    })?;
-                table
-                    .insert(key_for_redb.as_str(), serialized.as_slice())
-                    .map_err(|e| {
-                        crate::HttpCacheError::cache(format!(
-                            "redb insert (update_metadata) failed: {e}"
-                        ))
-                    })?;
-            }
-            write_txn.commit().map_err(|e| {
-                crate::HttpCacheError::cache(format!(
-                    "redb commit (update_metadata) failed: {e}"
-                ))
-            })?;
+            let write_txn = db.begin_write()?;
+            insert_row(&write_txn, limited, &key_for_redb, &serialized)?;
+            write_txn.commit()?;
             Ok(())
         })
-        .await
-        .map_err(|e| {
-            crate::HttpCacheError::cache(format!(
-                "update_metadata join failed: {e}"
-            ))
-        })??;
+        .await??;
 
         self.metadata.insert(cache_key.to_string(), metadata).await;
         Ok(true)
@@ -1570,6 +1643,433 @@ mod tests {
         assert!(manager.redb_get(key).await.unwrap().is_none());
         let body_path = body_path_for(&manager.body_dir, &body_hash_for(key));
         assert!(!body_path.exists());
+    }
+
+    /// A manager in `dir` whose body files are limited to `max_bytes`.
+    async fn limited(dir: &TempDir, max_bytes: u64) -> StreamingManager {
+        StreamingManager::with_options(
+            dir.path().to_path_buf(),
+            StreamingManagerOptions {
+                capacity: 100,
+                max_body_size: DEFAULT_MAX_BODY_SIZE,
+                max_bytes: Some(max_bytes),
+            },
+        )
+        .await
+        .unwrap()
+    }
+
+    /// Stores a body under `key` whose body file is `file_len` bytes.
+    async fn put_sized(manager: &StreamingManager, key: &str, file_len: usize) {
+        let body = Bytes::from(vec![b'x'; file_len - NONCE_LEN]);
+        let stored = manager
+            .put(
+                key.into(),
+                response_with_body(body.clone()),
+                sample_policy(),
+                test_url(),
+                None,
+            )
+            .await
+            .unwrap();
+        assert_eq!(read_body_bytes(stored).await, body);
+    }
+
+    /// Asserts the limit index matches the metadata rows and body files:
+    /// the entries are `written`, oldest first, and total `total` bytes.
+    async fn assert_limited(
+        manager: &StreamingManager,
+        written: &[&str],
+        total: u64,
+    ) {
+        let txn = manager.db.begin_read().unwrap();
+        let rows: Vec<String> = txn
+            .open_table(TABLES.entries)
+            .unwrap()
+            .iter()
+            .unwrap()
+            .map(|row| row.unwrap().0.value().to_string())
+            .collect();
+        let index = txn.open_table(TABLES.index).unwrap();
+        let order: Vec<(u64, String)> = txn
+            .open_table(TABLES.order)
+            .unwrap()
+            .iter()
+            .unwrap()
+            .map(|row| {
+                let (seq, key) = row.unwrap();
+                (seq.value(), key.value().to_string())
+            })
+            .collect();
+
+        let mut sorted = written.to_vec();
+        sorted.sort_unstable();
+        assert_eq!(rows, sorted);
+        assert_eq!(
+            order.iter().map(|(_, key)| key.as_str()).collect::<Vec<_>>(),
+            written
+        );
+        let mut sum = 0;
+        for (seq, key) in &order {
+            let (indexed_seq, size) =
+                index.get(key.as_str()).unwrap().unwrap().value();
+            assert_eq!(indexed_seq, *seq);
+            let body_path =
+                body_path_for(&manager.body_dir, &body_hash_for(key));
+            assert_eq!(size, std::fs::metadata(body_path).unwrap().len());
+            sum += size;
+        }
+        assert_eq!(index.iter().unwrap().count(), order.len());
+        assert_eq!(sum, total);
+        let recorded = txn
+            .open_table(TABLES.bytes)
+            .unwrap()
+            .get(())
+            .unwrap()
+            .map_or(0, |total| total.value());
+        assert_eq!(recorded, total);
+    }
+
+    /// Number of body files on disk.
+    fn body_file_count(manager: &StreamingManager) -> usize {
+        std::fs::read_dir(&manager.body_dir)
+            .unwrap()
+            .map(|prefix| {
+                std::fs::read_dir(prefix.unwrap().path()).unwrap().count()
+            })
+            .sum()
+    }
+
+    /// Changes the metadata row of `key` without the limit index, as a
+    /// manager without a limit would: `None` removes it.
+    fn change_unindexed(
+        manager: &StreamingManager,
+        key: &str,
+        row: Option<&[u8]>,
+    ) {
+        let txn = manager.db.begin_write().unwrap();
+        {
+            let mut table = txn.open_table(METADATA_TABLE).unwrap();
+            match row {
+                Some(row) => table.insert(key, row).unwrap(),
+                None => table.remove(key).unwrap(),
+            };
+        }
+        txn.commit().unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_open_removes_orphan_body_files() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().to_path_buf();
+        let body_dir = path.join("bodies");
+        let orphans = [
+            body_path_for(&body_dir, &body_hash_for("never stored")),
+            body_path_for(&body_dir, &body_hash_for("row removed")),
+        ];
+        let kept = [
+            body_dir.join("stray"),
+            orphans[0].with_extension("txt"),
+            body_path_for(&body_dir, &body_hash_for("stored")),
+        ];
+        {
+            let manager =
+                StreamingManager::new(path.clone(), 100).await.unwrap();
+            put_sized(&manager, "stored", 100).await;
+            put_sized(&manager, "row removed", 100).await;
+            change_unindexed(&manager, "row removed", None);
+            std::fs::create_dir_all(orphans[0].parent().unwrap()).unwrap();
+            for file in [&orphans[0], &kept[0], &kept[1]] {
+                std::fs::write(file, b"not a stored body").unwrap();
+            }
+        }
+
+        // With and without a limit.
+        {
+            let manager = limited(&dir, 300).await;
+            for file in &orphans {
+                assert!(!file.exists(), "{} must be removed", file.display());
+            }
+            for file in &kept {
+                assert!(file.exists(), "{} must be kept", file.display());
+            }
+            assert_limited(&manager, &["stored"], 100).await;
+            std::fs::write(&orphans[0], b"not a stored body").unwrap();
+        }
+        let manager = StreamingManager::new(path, 100).await.unwrap();
+        assert!(!orphans[0].exists());
+        let (resp, _) = manager.get("stored").await.unwrap().unwrap();
+        assert_eq!(read_body_bytes(resp).await.len(), 100 - NONCE_LEN);
+    }
+
+    #[tokio::test]
+    async fn test_max_bytes_evicts_oldest_written() {
+        let dir = TempDir::new().unwrap();
+        let manager = limited(&dir, 300).await;
+        for key in ["a", "b", "c"] {
+            put_sized(&manager, key, 100).await;
+        }
+        assert_limited(&manager, &["a", "b", "c"], 300).await;
+
+        put_sized(&manager, "d", 100).await;
+        assert!(!manager.metadata.contains_key("a"));
+        assert_removed(&manager, "a").await;
+        assert_limited(&manager, &["b", "c", "d"], 300).await;
+
+        // A store and a revalidation both make an entry the newest.
+        put_sized(&manager, "b", 60).await;
+        assert_limited(&manager, &["c", "d", "b"], 260).await;
+        let updated = manager
+            .update_metadata(
+                "c",
+                &http::HeaderMap::new(),
+                sample_policy(),
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        assert!(updated);
+        assert_limited(&manager, &["d", "b", "c"], 260).await;
+
+        // One store can evict several entries.
+        put_sized(&manager, "e", 200).await;
+        assert_removed(&manager, "d").await;
+        assert_removed(&manager, "b").await;
+        assert_limited(&manager, &["c", "e"], 300).await;
+        assert_eq!(body_file_count(&manager), 2);
+    }
+
+    #[tokio::test]
+    async fn test_max_bytes_declines_body_over_limit() {
+        let dir = TempDir::new().unwrap();
+        let manager = limited(&dir, 300).await;
+        put_sized(&manager, "a", 100).await;
+        put_old_entry(&manager, "k").await;
+
+        put_sized(&manager, "k", 301).await;
+        assert_removed(&manager, "k").await;
+        assert_limited(&manager, &["a"], 100).await;
+
+        put_sized(&manager, "k", 300).await;
+        assert_removed(&manager, "a").await;
+        assert_limited(&manager, &["k"], 300).await;
+    }
+
+    #[tokio::test]
+    async fn test_max_bytes_tracks_removed_entries() {
+        let dir = TempDir::new().unwrap();
+        let manager = limited(&dir, 400).await;
+        for key in ["a", "b", "c", "d"] {
+            put_sized(&manager, key, 100).await;
+        }
+
+        manager.delete("a").await.unwrap();
+        assert_limited(&manager, &["b", "c", "d"], 300).await;
+
+        // Read-path heal of a missing body.
+        let body_path = body_path_for(&manager.body_dir, &body_hash_for("b"));
+        std::fs::remove_file(body_path).unwrap();
+        assert!(manager.get("b").await.unwrap().is_none());
+        assert_limited(&manager, &["c", "d"], 200).await;
+
+        // Deferred heal of a corrupt body.
+        let body_path = body_path_for(&manager.body_dir, &body_hash_for("c"));
+        let mut contents = std::fs::read(&body_path).unwrap();
+        *contents.last_mut().unwrap() ^= 0xFF;
+        std::fs::write(&body_path, &contents).unwrap();
+        let (resp, _) = manager.get("c").await.unwrap().unwrap();
+        assert!(resp.into_body().collect().await.is_err());
+        for _ in 0..1000 {
+            if manager.redb_get("c").await.unwrap().is_none() {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+        assert_limited(&manager, &["d"], 100).await;
+
+        // A declined store removes the entry it would have replaced.
+        put_sized(&manager, "d", 401).await;
+        assert_limited(&manager, &[], 0).await;
+
+        put_sized(&manager, "e", 100).await;
+        manager.clear().await.unwrap();
+        put_sized(&manager, "f", 100).await;
+        assert_limited(&manager, &["f"], 100).await;
+        assert_eq!(body_file_count(&manager), 1);
+    }
+
+    #[tokio::test]
+    async fn test_max_bytes_can_be_switched_on_and_off() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().to_path_buf();
+        {
+            let manager =
+                StreamingManager::new(path.clone(), 100).await.unwrap();
+            for key in ["d", "c", "b", "a"] {
+                put_sized(&manager, key, 100).await;
+            }
+            let txn = manager.db.begin_read().unwrap();
+            assert!(txn.open_table(TABLES.index).is_err());
+        }
+
+        // The write order of existing entries is unknown, so they are
+        // ordered by key.
+        {
+            let manager = limited(&dir, 300).await;
+            assert_removed(&manager, "a").await;
+            assert_limited(&manager, &["b", "c", "d"], 300).await;
+            put_sized(&manager, "b", 100).await;
+        }
+
+        // The order is kept across a reopen.
+        {
+            let manager = limited(&dir, 300).await;
+            assert_limited(&manager, &["c", "d", "b"], 300).await;
+        }
+
+        // A lower limit evicts at open.
+        {
+            let manager = limited(&dir, 150).await;
+            assert_limited(&manager, &["b"], 100).await;
+            assert_eq!(body_file_count(&manager), 1);
+        }
+
+        {
+            let manager = StreamingManager::new(path, 100).await.unwrap();
+            let txn = manager.db.begin_read().unwrap();
+            assert!(txn.open_table(TABLES.index).is_err());
+            assert!(txn.open_table(TABLES.order).is_err());
+            assert!(txn.open_table(TABLES.bytes).is_err());
+            drop(txn);
+            put_sized(&manager, "e", 100).await;
+        }
+
+        // Entries stored without the limit are indexed at the next open.
+        let manager = limited(&dir, 300).await;
+        assert_limited(&manager, &["b", "e"], 200).await;
+    }
+
+    #[tokio::test]
+    async fn test_max_bytes_removes_only_oversized_entries_on_open() {
+        let dir = TempDir::new().unwrap();
+        {
+            let manager = StreamingManager::new(dir.path().to_path_buf(), 100)
+                .await
+                .unwrap();
+            put_sized(&manager, "a", 100).await;
+            put_sized(&manager, "b", 250).await;
+            put_sized(&manager, "c", 100).await;
+        }
+        let manager = limited(&dir, 200).await;
+        assert_removed(&manager, "b").await;
+        assert_limited(&manager, &["a", "c"], 200).await;
+        assert_eq!(manager.max_body_size(), 200 - NONCE_LEN as u64);
+    }
+
+    #[tokio::test]
+    async fn test_max_bytes_evicted_body_being_read_finishes() {
+        let dir = TempDir::new().unwrap();
+        let manager = limited(&dir, 300_000).await;
+        put_sized(&manager, "a", 200_000).await;
+        let (reading, _) = manager.get("a").await.unwrap().unwrap();
+
+        put_sized(&manager, "b", 200_000).await;
+        assert_removed(&manager, "a").await;
+        assert_eq!(read_body_bytes(reading).await.len(), 200_000 - NONCE_LEN);
+        assert_limited(&manager, &["b"], 200_000).await;
+    }
+
+    #[tokio::test]
+    async fn test_max_bytes_holds_when_rows_change_unindexed() {
+        let dir = TempDir::new().unwrap();
+        let manager = limited(&dir, 300).await;
+        for key in ["a", "b", "c"] {
+            put_sized(&manager, key, 100).await;
+        }
+
+        // The oldest row is gone but still indexed: its eviction frees what
+        // was counted for it and removes its body file.
+        change_unindexed(&manager, "a", None);
+        put_sized(&manager, "d", 100).await;
+        assert_limited(&manager, &["b", "c", "d"], 300).await;
+        assert_eq!(body_file_count(&manager), 3);
+
+        // A row that cannot be decoded is removed by the read path.
+        change_unindexed(&manager, "b", Some(&[0xFF; 8]));
+        manager.metadata.invalidate("b").await;
+        assert!(manager.get("b").await.unwrap().is_none());
+        assert_limited(&manager, &["c", "d"], 200).await;
+    }
+
+    #[tokio::test]
+    async fn test_max_bytes_eviction_spares_entry_no_longer_oldest() {
+        let dir = TempDir::new().unwrap();
+        let manager = limited(&dir, 300).await;
+        for key in ["a", "b", "c"] {
+            put_sized(&manager, key, 100).await;
+        }
+
+        // The oldest entry is "a", so an eviction that expected "b" backs
+        // off, and nothing is popped within the limit.
+        let oldest = manager.pop_oldest(200, Some("b".into())).await.unwrap();
+        assert_eq!(oldest.as_deref(), Some("a"));
+        assert!(manager.pop_oldest(300, None).await.unwrap().is_none());
+        assert_limited(&manager, &["a", "b", "c"], 300).await;
+
+        manager.evict(100).await.unwrap();
+        assert_removed(&manager, "a").await;
+        assert_removed(&manager, "b").await;
+        assert_limited(&manager, &["c"], 100).await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn test_max_bytes_concurrent_puts_stay_consistent() {
+        let dir = TempDir::new().unwrap();
+        let manager = limited(&dir, 500).await;
+        let tasks: Vec<_> = (0..8)
+            .map(|task| {
+                let manager = manager.clone();
+                tokio::spawn(async move {
+                    for round in 0..40 {
+                        let key = format!("k{}", (task + round) % 12);
+                        put_sized(&manager, &key, 60 + 10 * (round % 5)).await;
+                        let _ = manager.get(&key).await.unwrap();
+                    }
+                })
+            })
+            .collect();
+        for task in tasks {
+            task.await.unwrap();
+        }
+
+        // Every row left has its index row and body file, nothing else is
+        // on disk, and the entries fit in the limit.
+        let txn = manager.db.begin_read().unwrap();
+        let order: Vec<String> = txn
+            .open_table(TABLES.order)
+            .unwrap()
+            .iter()
+            .unwrap()
+            .map(|row| row.unwrap().1.value().to_string())
+            .collect();
+        let total = txn
+            .open_table(TABLES.bytes)
+            .unwrap()
+            .get(())
+            .unwrap()
+            .unwrap()
+            .value();
+        drop(txn);
+        assert!(total <= 500, "total {total} exceeds the limit");
+        let written: Vec<&str> = order.iter().map(String::as_str).collect();
+        assert_limited(&manager, &written, total).await;
+        assert_eq!(body_file_count(&manager), written.len());
+        for key in written {
+            let (resp, _) = manager.get(key).await.unwrap().unwrap();
+            let size = (read_body_bytes(resp).await.len() + NONCE_LEN) as u64;
+            assert!((60..=100).contains(&size));
+        }
     }
 
     #[tokio::test]

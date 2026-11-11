@@ -119,7 +119,8 @@
 //! ## Default and Maximum TTL
 //!
 //! Set a time-to-live for responses that don't specify their own expiration, and cap how long
-//! any response is considered fresh:
+//! any response is considered fresh. Neither removes entries from the cache: a response that is
+//! no longer fresh is revalidated, and limiting the cache's size is up to the cache manager.
 //!
 //! ```rust
 //! # #[cfg(feature = "manager-cacache")]
@@ -466,7 +467,9 @@ pub use error::{
 pub use managers::cacache::CACacheManager;
 
 #[cfg(feature = "streaming")]
-pub use managers::streaming_cache::StreamingManager;
+pub use managers::streaming_cache::{
+    StreamingManager, StreamingManagerOptions,
+};
 
 #[cfg(any(feature = "manager-moka", feature = "manager-moka-bincode"))]
 pub use managers::moka::MokaManager;

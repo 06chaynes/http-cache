@@ -28,7 +28,7 @@ Use the `CachedAgent` builder to create a cached HTTP client.
 ```rust
 use http_cache_ureq::{CachedAgent, RedbManager, CacheMode};
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     smol::block_on(async {
         let agent = CachedAgent::builder()
             .cache_manager(RedbManager::new("./http-cache.redb")?)
@@ -65,7 +65,7 @@ http-cache-ureq = { version = "1.0", features = ["json"] }
 use http_cache_ureq::{CachedAgent, RedbManager, CacheMode};
 use serde_json::json;
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     smol::block_on(async {
         let agent = CachedAgent::builder()
             .cache_manager(RedbManager::new("./http-cache.redb")?)
@@ -93,7 +93,7 @@ Control caching behavior with different modes:
 ```rust
 use http_cache_ureq::{CachedAgent, RedbManager, CacheMode};
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     smol::block_on(async {
         let agent = CachedAgent::builder()
             .cache_manager(RedbManager::new("./http-cache.redb")?)
@@ -117,7 +117,7 @@ Preserve your ureq agent configuration while adding caching:
 use http_cache_ureq::{CachedAgent, RedbManager, CacheMode};
 use std::time::Duration;
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     smol::block_on(async {
         // Create custom ureq configuration
         let config = ureq::config::Config::builder()
@@ -151,7 +151,7 @@ http-cache-ureq = { version = "1.0", features = ["manager-moka"] }
 ```rust
 use http_cache_ureq::{CachedAgent, MokaManager, MokaCache, CacheMode};
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     smol::block_on(async {
         let agent = CachedAgent::builder()
             .cache_manager(MokaManager::new(MokaCache::new(1000))) // Max 1000 entries
@@ -174,7 +174,7 @@ Control cache expiration times when the server's headers don't suit your needs:
 use http_cache_ureq::{CachedAgent, RedbManager, CacheMode, HttpCacheOptions};
 use std::time::Duration;
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     smol::block_on(async {
         let agent = CachedAgent::builder()
             .cache_manager(RedbManager::new("./http-cache.redb")?)

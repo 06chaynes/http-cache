@@ -116,6 +116,8 @@ This ensures that your application continues to work seamlessly even when using 
 
 ### Example with Multipart Forms
 
+This example needs the `multipart` feature of both `reqwest` and `reqwest-middleware`.
+
 ```rust
 use reqwest::Client;
 use reqwest_middleware::ClientBuilder;

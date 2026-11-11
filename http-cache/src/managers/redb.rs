@@ -21,11 +21,16 @@
 //! sharing a [`Database`] via [`RedbManager::from_database`], do not drop
 //! the last manager clone while holding an open `WriteTransaction` on that
 //! database — the drop-time flush must acquire the writer lock.
+//!
+//! The cache grows without bound unless it is created with
+//! [`RedbManager::from_database_with_max_bytes`], which removes the entries
+//! written longest ago once the stored entries exceed a byte limit.
 
 use std::path::Path;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
+use crate::managers::limit::{Limited, Tables};
 use crate::{CacheManager, HttpResponse, Result};
 
 use http_cache_semantics::CachePolicy;
@@ -34,6 +39,14 @@ use serde::{Deserialize, Serialize};
 
 pub(crate) const TABLE: TableDefinition<&str, &[u8]> =
     TableDefinition::new("http_cache_v1");
+
+/// The entry table with the index a size limit keeps of its entries.
+pub(crate) const TABLES: Tables = Tables {
+    entries: TABLE,
+    index: TableDefinition::new("http_cache_v1_index"),
+    order: TableDefinition::new("http_cache_v1_order"),
+    bytes: TableDefinition::new("http_cache_v1_bytes"),
+};
 
 /// Implements [`CacheManager`] with [`redb`](https://github.com/cberner/redb)
 /// as the backend — a pure-Rust, embedded, persistent key/value store.
@@ -45,6 +58,7 @@ pub(crate) const TABLE: TableDefinition<&str, &[u8]> =
 #[derive(Clone)]
 pub struct RedbManager {
     flush: Arc<FlushState>,
+    max_bytes: Option<u64>,
 }
 
 impl std::fmt::Debug for RedbManager {
@@ -110,6 +124,13 @@ impl Drop for FlushState {
     }
 }
 
+/// Removes the entries written longest ago until the indexed entries fit in
+/// `max_bytes`.
+fn evict(limited: &mut Limited, max_bytes: u64) -> Result<()> {
+    while limited.pop_oldest(max_bytes)?.is_some() {}
+    Ok(())
+}
+
 impl RedbManager {
     /// Creates a new [`RedbManager`], creating or opening the redb database
     /// file at `path`.
@@ -134,11 +155,56 @@ impl RedbManager {
         db: Arc<Database>,
         flush_interval: u64,
     ) -> Result<Self> {
+        Self::open(db, flush_interval, None)
+    }
+
+    /// Wraps an already-open redb [`Database`], flushing every
+    /// `flush_interval` writes and keeping the stored entries within
+    /// `max_bytes`. When a store takes the cache over the limit, the entries
+    /// written longest ago are removed in the same transaction. A response
+    /// that is larger than `max_bytes` on its own is not cached, and is
+    /// removed if it is already in the database.
+    ///
+    /// The limit counts the serialized entries, not the database file, which
+    /// is larger and does not shrink right away when entries are removed.
+    /// Entries already in the database count towards the limit. Do not open
+    /// one database with and without a limit at the same time, or let a
+    /// version of this crate without size limits write to it in between:
+    /// entries stored that way are not counted or removed until the manager
+    /// is opened again.
+    pub fn from_database_with_max_bytes(
+        db: Arc<Database>,
+        flush_interval: u64,
+        max_bytes: u64,
+    ) -> Result<Self> {
+        Self::open(db, flush_interval, Some(max_bytes))
+    }
+
+    fn open(
+        db: Arc<Database>,
+        flush_interval: u64,
+        max_bytes: Option<u64>,
+    ) -> Result<Self> {
         // Ensure the table exists up front so reads never fail with
         // "table does not exist".
         let write_txn = db.begin_write()?;
-        {
-            let _table = write_txn.open_table(TABLE)?;
+        match max_bytes {
+            Some(max_bytes) => {
+                let mut limited = Limited::open(&write_txn, &TABLES)?;
+                limited.index(|entry| entry.len() as u64)?;
+                // An entry `put` would not have stored goes first, so that
+                // evicting by age does not take the older entries with it.
+                for key in limited.oversized(max_bytes)? {
+                    limited.remove(&key)?;
+                }
+                evict(&mut limited, max_bytes)?;
+            }
+            // Entries stored without a limit are not indexed, so an index
+            // left by an earlier limited manager would go stale.
+            None => {
+                write_txn.open_table(TABLE)?;
+                TABLES.delete_index(&write_txn)?;
+            }
         }
         write_txn.commit()?;
         Ok(Self {
@@ -147,6 +213,7 @@ impl RedbManager {
                 unflushed: AtomicU64::new(0),
                 interval: flush_interval.max(1),
             }),
+            max_bytes,
         })
     }
 
@@ -154,6 +221,7 @@ impl RedbManager {
     pub async fn clear(&self) -> Result<()> {
         let write_txn = self.flush.db.begin_write()?;
         write_txn.delete_table(TABLE)?;
+        TABLES.delete_index(&write_txn)?;
         // Recreate the (now empty) table so subsequent reads still succeed.
         {
             let _table = write_txn.open_table(TABLE)?;
@@ -215,9 +283,23 @@ impl CacheManager for RedbManager {
         let bytes = postcard::to_allocvec(&data)?;
         let mut write_txn = self.flush.db.begin_write()?;
         write_txn.set_durability(Durability::None)?;
-        {
-            let mut table = write_txn.open_table(TABLE)?;
-            table.insert(cache_key.as_str(), bytes.as_slice())?;
+        match self.max_bytes {
+            Some(max_bytes) => {
+                let mut limited = Limited::open(&write_txn, &TABLES)?;
+                let size = bytes.len() as u64;
+                // An entry over the limit is not stored, and must not leave
+                // an older response in its place.
+                if size > max_bytes {
+                    limited.remove(&cache_key)?;
+                } else {
+                    limited.insert(&cache_key, &bytes, size)?;
+                    evict(&mut limited, max_bytes)?;
+                }
+            }
+            None => {
+                let mut table = write_txn.open_table(TABLE)?;
+                table.insert(cache_key.as_str(), bytes.as_slice())?;
+            }
         }
         write_txn.commit()?;
         self.flush.record_write();
@@ -228,7 +310,9 @@ impl CacheManager for RedbManager {
         // Deletes commit durably: an invalidation rolled back by a crash
         // would resurrect an entry the origin already replaced.
         let write_txn = self.flush.db.begin_write()?;
-        {
+        if self.max_bytes.is_some() {
+            Limited::open(&write_txn, &TABLES)?.remove(cache_key)?;
+        } else {
             let mut table = write_txn.open_table(TABLE)?;
             table.remove(cache_key)?;
         }

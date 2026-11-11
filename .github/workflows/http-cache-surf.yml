@@ -42,7 +42,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - run: |
-          cargo test --all-targets --no-default-features --features manager-cacache,manager-moka,manager-foyer,rate-limiting,http-headers-compat,url-standard
+          cargo test --all-targets --no-default-features --features manager-cacache,manager-moka,manager-foyer,manager-redb,rate-limiting,http-headers-compat,url-standard
           cargo test --all-targets --no-default-features --features manager-cacache,url-ada
 
   clippy:
@@ -55,7 +55,7 @@ jobs:
         with:
           components: "clippy"
       - run: |
-          cargo clippy --lib --tests --all-targets --no-default-features --features manager-cacache,manager-moka,manager-foyer,rate-limiting,http-headers-compat,url-standard -- -D warnings
+          cargo clippy --lib --tests --all-targets --no-default-features --features manager-cacache,manager-moka,manager-foyer,manager-redb,rate-limiting,http-headers-compat,url-standard -- -D warnings
           cargo clippy --lib --tests --all-targets --no-default-features --features manager-cacache,url-ada -- -D warnings
 
   docs:

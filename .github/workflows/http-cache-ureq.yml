@@ -43,7 +43,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - run: |
           cargo test --all-targets --no-default-features --features manager-cacache,url-standard
-          cargo test --all-targets --no-default-features --features manager-cacache,manager-moka,manager-foyer,json,rate-limiting,http-headers-compat,url-standard
+          cargo test --all-targets --no-default-features --features manager-cacache,manager-moka,manager-foyer,manager-redb,json,rate-limiting,http-headers-compat,url-standard
           cargo test --all-targets --no-default-features --features manager-cacache,url-ada
 
   clippy:
@@ -57,7 +57,7 @@ jobs:
           components: "clippy"
       - run: |
           cargo clippy --lib --tests --all-targets --no-default-features --features manager-cacache,url-standard -- -D warnings
-          cargo clippy --lib --tests --all-targets --no-default-features --features manager-cacache,manager-moka,manager-foyer,json,rate-limiting,http-headers-compat,url-standard -- -D warnings
+          cargo clippy --lib --tests --all-targets --no-default-features --features manager-cacache,manager-moka,manager-foyer,manager-redb,json,rate-limiting,http-headers-compat,url-standard -- -D warnings
           cargo clippy --lib --tests --all-targets --no-default-features --features manager-cacache,url-ada -- -D warnings
 
   docs:

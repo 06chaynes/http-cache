@@ -21,7 +21,7 @@ For a simple memory-only cache:
 use http_cache::FoyerManager;
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Create an in-memory cache with capacity for 1000 entries
     let manager = FoyerManager::in_memory(1000).await?;
 
@@ -35,20 +35,18 @@ For a hybrid cache with both memory and disk storage:
 
 ```rust
 use http_cache::FoyerManager;
-use foyer::{HybridCacheBuilder, Engine};
-use std::path::PathBuf;
+use foyer::{BlockEngineConfig, DeviceBuilder, FsDeviceBuilder, HybridCacheBuilder};
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Build a hybrid cache with memory and disk storage
+    let device = FsDeviceBuilder::new("./cache")
+        .with_capacity(256 * 1024 * 1024)  // 256 MB disk capacity
+        .build()?;
     let cache = HybridCacheBuilder::new()
         .memory(64)  // Memory capacity in entries
-        .storage(Engine::Large)
-        .with_device_options(
-            foyer::DirectFsDeviceOptionsBuilder::new(PathBuf::from("./cache"))
-                .with_capacity(256 * 1024 * 1024)  // 256 MB disk capacity
-                .build()
-        )
+        .storage()
+        .with_engine_config(BlockEngineConfig::new(device))
         .build()
         .await?;
 
@@ -79,7 +77,7 @@ let manager = FoyerManager::in_memory(1000).await?;
 // Or with custom configuration
 let cache = HybridCacheBuilder::new()
     .memory(100)
-    .storage(foyer::Engine::Large)
+    .storage()
     .build()
     .await?;
 let manager = FoyerManager::new(cache);

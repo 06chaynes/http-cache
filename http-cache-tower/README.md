@@ -51,7 +51,7 @@ use http_body_util::Full;
 use bytes::Bytes;
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Create a cache manager
     let cache_manager = RedbManager::new("./http-cache.redb")?;
 
@@ -100,7 +100,7 @@ use bytes::Bytes;
 
 # #[cfg(feature = "streaming")]
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // StreamingManager uses redb (metadata) + raw files on disk (bodies), fronted by moka as a hot cache
     let streaming_manager = StreamingManager::with_temp_dir(1000).await?;
 
@@ -149,14 +149,16 @@ use http_cache_tower::HttpCacheLayer;
 use http_cache::RedbManager;
 use hyper_util::client::legacy::Client;
 use hyper_util::rt::TokioExecutor;
-use tower::{ServiceBuilder, ServiceExt};
+use tower::ServiceBuilder;
+use http_body_util::Full;
+use bytes::Bytes;
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let cache_manager = RedbManager::new("./http-cache.redb")?;
     let cache_layer = HttpCacheLayer::new(cache_manager);
 
-    let client = Client::builder(TokioExecutor::new()).build_http();
+    let client = Client::builder(TokioExecutor::new()).build_http::<Full<Bytes>>();
 
     let cached_client = ServiceBuilder::new()
         .layer(cache_layer)

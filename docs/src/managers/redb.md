@@ -22,7 +22,7 @@ http-cache = { version = "1.0", features = ["manager-redb"] }
 ```rust
 use http_cache::RedbManager;
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Creates or opens the database file at the given path.
     let manager = RedbManager::new("./http-cache.redb")?;
 
@@ -75,6 +75,44 @@ manager.delete("my-cache-key").await?;
 // Clear the entire cache
 manager.clear().await?;
 ```
+
+## Limiting the cache size
+
+By default the cache keeps every entry until it is invalidated. To limit it, open the database yourself and pass a maximum size in bytes:
+
+```rust
+use http_cache::RedbManager;
+use redb::Database;
+use std::sync::Arc;
+
+let db = Arc::new(Database::create("./http-cache.redb")?);
+// Flush every 64 stores (the default) and keep at most 256 MB of entries.
+let manager =
+    RedbManager::from_database_with_max_bytes(db, 64, 256 * 1024 * 1024)?;
+```
+
+When a store takes the cache over the limit, the entries written longest ago are removed in the same transaction. Reading an entry does not count as a use; storing it again, as happens after a revalidation, does. A response larger than the limit on its own is not cached, and is removed if it is already in the database when it is opened.
+
+- The limit counts the serialized entries, not the database file. The file is larger, for three reasons:
+  - `redb` stores an entry that does not fit in one page in a power-of-two number of pages, so it can take up to twice its size.
+  - Space freed by removing entries that were already flushed can be reused only after the next flush, so the space of up to `flush_interval` stores is held back.
+  - While the file is smaller than 4 GiB it at least doubles each time it runs out of space. It shrinks only when at least half of it is free at its end, and then by half of that free space.
+
+  Under steady eviction in our tests the file stopped growing at:
+
+  | Limit | Entry size | Flush interval | File size |
+  |-------|-----------|----------------|-----------|
+  | 100 MB | 1 to 200 KB | 64, 8 or 1 | 2.57 times the limit |
+  | 100 MB | 0.5 to 4 MB | 64 | 5.76 times the limit |
+  | 100 MB | 0.5 to 4 MB | 8 | 2.88 times the limit |
+  | 100 MB | 0.5 to 4 MB | 1 | 2.16 times the limit |
+  | 1 GB | 1 to 200 KB | 64 | 2.01 times the limit |
+  | 1 GB | 0.5 to 4 MB | 64 | 2.25 times the limit |
+
+  A lower flush interval reduces the file when entries are large compared to the limit.
+- A store that goes over the limit also pays for removing the oldest entries.
+- Entries already in the database count towards the limit. The first time a database is opened with a limit they are read once to measure them, and their order is by cache key, as the order they were written in is not known.
+- Do not use one database with and without a limit at the same time, and do not let a version of `http-cache` without size limits write to it in between. Entries stored that way are not counted or removed until the manager is opened again, which indexes them in the same way.
 
 ## Single-instance invariant
 

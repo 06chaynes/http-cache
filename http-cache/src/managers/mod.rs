@@ -4,6 +4,9 @@ pub mod cacache;
 #[cfg(feature = "manager-foyer")]
 pub mod foyer;
 
+#[cfg(any(feature = "manager-redb", feature = "streaming"))]
+mod limit;
+
 #[cfg(any(feature = "manager-moka", feature = "manager-moka-bincode"))]
 pub mod moka;
 
