@@ -48,6 +48,7 @@ smol = "2.0.2"
 http-cache-semantics = "3.0.0"
 tokio = { version = "1.43.0", features = [ "macros", "rt", "rt-multi-thread", "time" ] }
 tempfile = "3.13.0"
+http-body-util = "0.1.2"
 
 [features]
 default = ["manager-redb", "url-standard"]
