@@ -2080,13 +2080,9 @@ mod tests {
                 let (parts, body) = req.into_parts();
                 Box::pin(async move {
                     // Process the body (in a real scenario this could be a large streaming body)
-                    let body_bytes = BodyExt::collect(body)
-                        .await
-                        .map_err(|e| {
-                            Box::new(e)
-                                as Box<dyn std::error::Error + Send + Sync>
-                        })?
-                        .to_bytes();
+                    // `Full`'s error type is `Infallible`, so this can't fail.
+                    let Ok(collected) = BodyExt::collect(body).await;
+                    let body_bytes = collected.to_bytes();
                     let body_size = body_bytes.len();
 
                     // Return response with information about the processed body
